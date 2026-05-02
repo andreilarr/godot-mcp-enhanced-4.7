@@ -10,7 +10,7 @@
 
 import { spawn } from 'child_process';
 import { writeFileSync, mkdirSync, rmSync, readdirSync, statSync, mkdtempSync } from 'fs';
-import { join, sep } from 'path';
+import { join } from 'path';
 import { tmpdir } from 'os';
 import { analyzeOutput, type ParsedError } from './error-analyzer.js';
 
@@ -278,11 +278,13 @@ export async function executeGdscript(
   if (loadAutoloads) {
     // Autoload mode: create a loader scene that initializes all autoloads first
     try {
-      const loaderScene = createAutoloadLoaderScene(tempFile);
-      const loaderScenePath = writeSessionFile(loaderScene, '.tscn', sessionDir);
-      tempFiles.push(loaderScenePath);
+      // Write loader script first to get its absolute path
       const loaderScriptPath = writeSessionFile(createAutoloadLoaderScript(tempFile), '.gd', sessionDir);
       tempFiles.push(loaderScriptPath);
+      // Create scene referencing loader script by absolute path (not res://)
+      const loaderScene = createAutoloadLoaderScene(loaderScriptPath);
+      const loaderScenePath = writeSessionFile(loaderScene, '.tscn', sessionDir);
+      tempFiles.push(loaderScenePath);
       godotArgs.push('--scene', loaderScenePath);
     } catch (err) {
       try { rmSync(sessionDir, { recursive: true, force: true }); } catch { /* ignore */ }
@@ -408,15 +410,14 @@ function extractCompileError(raw: string): string {
  * Create a minimal .tscn scene that loads with autoload context.
  * The scene runs the user's script from _ready().
  */
-function createAutoloadLoaderScene(scriptPath: string): string {
-  const scriptPathRes = scriptPath.replace(/\\/g, '/');
+function createAutoloadLoaderScene(loaderScriptPath: string): string {
+  const loaderPathRes = loaderScriptPath.replace(/\\/g, '/');
   return `[gd_scene load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://__mcp_loader__.gd" id="1"]
+[ext_resource type="Script" path="${loaderPathRes}" id="1"]
 
 [node name="MCPLoader" type="Node"]
 script = ExtResource("1")
-_metadata/mcp_script_path = "${scriptPathRes}"
 `;
 }
 
@@ -424,29 +425,21 @@ _metadata/mcp_script_path = "${scriptPathRes}"
  * Create the loader GDScript that loads with autoload context.
  * In _ready(), all autoloads are available. It then loads and runs the user script.
  */
-function createAutoloadLoaderScript(_scriptPath: string): string {
+function createAutoloadLoaderScript(userScriptPath: string): string {
+  const pathRes = userScriptPath.replace(/\\/g, '/');
   return `extends Node
-
-var _mcp_outputs: Array = []
-
-func _mcp_output(key: String, value: Variant) -> void:
-\t_mcp_outputs.append({"key": key, "value": str(value)})
 
 func _ready() -> void:
 \t# Autoloads are fully initialized at this point
-\t# Load and execute user code dynamically
-\tvar script_path: String = get_meta("mcp_script_path")
-\tvar user_script: GDScript = load(script_path) as GDScript
+\tvar user_script: GDScript = load("${pathRes}") as GDScript
 \tif user_script == null:
-\t\tprint("___MCP_ERROR___" + JSON.stringify({"success": false, "error": "Failed to load user script: " + script_path}))
+\t\tprint("___MCP_ERROR___" + JSON.stringify({"success": false, "error": "Failed to load user script"}))
 \t\tget_tree().quit()
 \t\treturn
 \t# Execute user code by creating instance and calling _initialize if available
 \tvar instance: Variant = user_script.new()
-\tif instance has_method("_initialize"):
+\tif instance.has_method("_initialize"):
 \t\tinstance._initialize()
-\telif instance has_method("_ready"):
-\t\tpass  # SceneTree _initialize already ran
 \tget_tree().quit()
 `;
 }
