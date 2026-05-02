@@ -59,6 +59,95 @@ function opsSuccess(data: unknown, warnings: string[] = []) {
   return { success: true, data, warnings };
 }
 
+// ─── GDScript Generators: Signals ──────────────────────────────────────────
+
+export function genSignalConnectScript(
+  sourcePath: string, signalName: string,
+  targetPath: string, methodName: string, flags?: number
+): string {
+  const flagsArg = flags !== undefined ? `, ${flags}` : '';
+  return `extends SceneTree
+
+func _initialize():
+\tvar source = get_node("${gdEscape(sourcePath)}")
+\tvar target = get_node("${gdEscape(targetPath)}")
+\tif source == null:
+\t\t_mcp_output("error", "Node not found: ${gdEscape(sourcePath)}")
+\t\tquit()
+\t\treturn
+\tif target == null:
+\t\t_mcp_output("error", "Node not found: ${gdEscape(targetPath)}")
+\t\tquit()
+\t\treturn
+\tsource.connect("${gdEscape(signalName)}", Callable(target, "${gdEscape(methodName)}")${flagsArg})
+\t_mcp_output("connected", {"source": "${gdEscape(sourcePath)}", "signal": "${gdEscape(signalName)}", "target": "${gdEscape(targetPath)}", "method": "${gdEscape(methodName)}"})
+\tquit()
+`;
+}
+
+export function genSignalDisconnectScript(
+  sourcePath: string, signalName: string,
+  targetPath: string, methodName: string
+): string {
+  return `extends SceneTree
+
+func _initialize():
+\tvar source = get_node("${gdEscape(sourcePath)}")
+\tvar target = get_node("${gdEscape(targetPath)}")
+\tif source == null or target == null:
+\t\t_mcp_output("error", "Node not found")
+\t\tquit()
+\t\treturn
+\tsource.disconnect("${gdEscape(signalName)}", Callable(target, "${gdEscape(methodName)}"))
+\t_mcp_output("disconnected", {"source": "${gdEscape(sourcePath)}", "signal": "${gdEscape(signalName)}"})
+\tquit()
+`;
+}
+
+export function genSignalEmitScript(
+  sourcePath: string, signalName: string, args?: unknown[]
+): string {
+  let argsStr = '';
+  if (args && args.length > 0) {
+    const serialized: string[] = [];
+    for (const arg of args) {
+      if (arg === null || arg === undefined) { serialized.push('null'); }
+      else if (typeof arg === 'number') { serialized.push(String(arg)); }
+      else if (typeof arg === 'boolean') { serialized.push(String(arg)); }
+      else if (typeof arg === 'string') { serialized.push(`"${gdEscape(arg)}"`); }
+      else { throw new Error('signal_emit args only support basic types (string/number/bool/null)'); }
+    }
+    argsStr = ', ' + serialized.join(', ');
+  }
+  return `extends SceneTree
+
+func _initialize():
+\tvar source = get_node("${gdEscape(sourcePath)}")
+\tif source == null:
+\t\t_mcp_output("error", "Node not found: ${gdEscape(sourcePath)}")
+\t\tquit()
+\t\treturn
+\tsource.emit_signal("${gdEscape(signalName)}"${argsStr})
+\t_mcp_output("emitted", {"source": "${gdEscape(sourcePath)}", "signal": "${gdEscape(signalName)}"})
+\tquit()
+`;
+}
+
+export function genSignalListScript(nodePath: string): string {
+  return `extends SceneTree
+
+func _initialize():
+\tvar node = get_node("${gdEscape(nodePath)}")
+\tif node == null:
+\t\t_mcp_output("error", "Node not found: ${gdEscape(nodePath)}")
+\t\tquit()
+\t\treturn
+\tvar signals = node.get_signal_list()
+\t_mcp_output("signals", signals)
+\tquit()
+`;
+}
+
 // Placeholder exports for build — will be filled in later tasks
 export function getToolDefinitions(): Tool[] { return []; }
 export async function handleTool(_name: string, _args: Record<string, unknown>, _ctx: ToolContext): Promise<ToolResult | null> { return null; }

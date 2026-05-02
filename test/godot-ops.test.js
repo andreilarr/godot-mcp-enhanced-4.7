@@ -2,7 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizeNodePath, gdEscape, validateVector3,
-  TYPE_WHITELIST, ERROR_CODES
+  TYPE_WHITELIST, ERROR_CODES,
+  genSignalConnectScript, genSignalDisconnectScript, genSignalEmitScript, genSignalListScript
 } from '../build/tools/godot-ops.js';
 
 describe('normalizeNodePath', () => {
@@ -86,4 +87,49 @@ describe('ERROR_CODES', () => {
   it('has INVALID_TYPE', () => { assert.ok('INVALID_TYPE' in ERROR_CODES); });
   it('has INVALID_SIGNAL', () => { assert.ok('INVALID_SIGNAL' in ERROR_CODES); });
   it('has SCRIPT_EXEC_FAILED', () => { assert.ok('SCRIPT_EXEC_FAILED' in ERROR_CODES); });
+});
+
+describe('genSignalConnectScript', () => {
+  it('contains get_node and connect', () => {
+    const script = genSignalConnectScript('/root/Player', 'health_changed', '/root/UI', 'on_health_changed');
+    assert.ok(script.includes('get_node("/root/Player")'));
+    assert.ok(script.includes('connect("health_changed"'));
+    assert.ok(script.includes('Callable'));
+    assert.ok(script.includes('get_node("/root/UI")'));
+    assert.ok(script.includes('"on_health_changed"'));
+  });
+});
+
+describe('genSignalDisconnectScript', () => {
+  it('contains disconnect call', () => {
+    const script = genSignalDisconnectScript('/root/Player', 'health_changed', '/root/UI', 'on_health_changed');
+    assert.ok(script.includes('disconnect("health_changed"'));
+    assert.ok(script.includes('Callable'));
+  });
+});
+
+describe('genSignalEmitScript', () => {
+  it('contains emit_signal without args', () => {
+    const script = genSignalEmitScript('/root/Player', 'died');
+    assert.ok(script.includes('emit_signal("died")'));
+  });
+  it('serializes number args', () => {
+    const script = genSignalEmitScript('/root/Player', 'health_changed', [100, 50]);
+    assert.ok(script.includes('emit_signal("health_changed", 100, 50)'));
+  });
+  it('serializes string args with quotes', () => {
+    const script = genSignalEmitScript('/root/Player', 'msg', ['hello']);
+    assert.ok(script.includes('"hello"'));
+  });
+  it('rejects object args', () => {
+    assert.throws(() => genSignalEmitScript('/root/Player', 'msg', [{ foo: 1 }]), { message: /basic types/ });
+  });
+});
+
+describe('genSignalListScript', () => {
+  it('contains get_signal_list', () => {
+    const script = genSignalListScript('/root/Player');
+    assert.ok(script.includes('get_signal_list()'));
+    assert.ok(script.includes('_mcp_output'));
+  });
 });
