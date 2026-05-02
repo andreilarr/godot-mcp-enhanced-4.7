@@ -281,8 +281,11 @@ async function batchValidateScripts(
 
   // Filter out false positives from load() in isolated --script mode
   const isErrorFalsePositive = (line: string): boolean => {
-    // "Identifier not found" for autoload classes not loaded in --script mode
+    // "Identifier not found" / "not declared" for autoload classes not loaded in --script mode
     if (line.includes('Identifier not found')) return true;
+    if (line.includes('not declared in the current scope')) return true;
+    // "Function ... not found in base self" for methods on autoload singletons
+    if (line.includes('not found in base self')) return true;
     // "Condition '...' is true" warnings are not real errors
     if (line.includes('Condition') && line.includes('is true')) return true;
     return false;
