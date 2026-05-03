@@ -147,7 +147,6 @@ func create_scene(params):
 		quit(1)
 
 	scene_root.name = "root"
-	scene_root.owner = scene_root
 
 	var packed_scene = PackedScene.new()
 	var result = packed_scene.pack(scene_root)
@@ -176,8 +175,10 @@ func create_scene(params):
 	if save_error == OK:
 		print("Scene created successfully at: " + params.scene_path)
 	else:
+		scene_root.free()
 		log_error("Failed to save scene. Error: " + str(save_error))
 		quit(1)
+	scene_root.free()
 
 
 func add_node(params):
@@ -205,8 +206,15 @@ func add_node(params):
 		parent_path = params.parent_node_path
 
 	var parent = scene_root
-	if parent_path != "root":
-		parent = scene_root.get_node(parent_path.replace("root/", ""))
+	if parent_path == "root" or parent_path == scene_root.name:
+		parent = scene_root
+	elif parent_path.begins_with("root/"):
+		parent = scene_root.get_node(parent_path.substr(5))
+		if not parent:
+			log_error("Parent node not found: " + parent_path)
+			quit(1)
+	else:
+		parent = scene_root.get_node(parent_path)
 		if not parent:
 			log_error("Parent node not found: " + parent_path)
 			quit(1)
@@ -233,9 +241,11 @@ func add_node(params):
 		if save_error == OK:
 			print("Node '%s' of type '%s' added successfully" % [params.node_name, params.node_type])
 		else:
+			scene_root.free()
 			log_error("Failed to save scene: " + str(save_error))
 	else:
 		log_error("Failed to pack scene: " + str(result))
+	scene_root.free()
 
 
 func batch_add_nodes(params):
@@ -267,8 +277,16 @@ func batch_add_nodes(params):
 			parent_path = node_def.parent_node_path
 
 		var parent = scene_root
-		if parent_path != "root":
-			parent = scene_root.get_node(parent_path.replace("root/", ""))
+		if parent_path == "root" or parent_path == scene_root.name:
+			parent = scene_root
+		elif parent_path.begins_with("root/"):
+			parent = scene_root.get_node(parent_path.substr(5))
+			if not parent:
+				log_error("Parent node not found: " + parent_path + " for node: " + node_def.node_name)
+				failed_count += 1
+				continue
+		else:
+			parent = scene_root.get_node(parent_path)
 			if not parent:
 				log_error("Parent node not found: " + parent_path + " for node: " + node_def.node_name)
 				failed_count += 1
@@ -301,9 +319,11 @@ func batch_add_nodes(params):
 			if failed_count > 0:
 				log_error("Failed to add %d nodes" % failed_count)
 		else:
+			scene_root.free()
 			log_error("Failed to save scene: " + str(save_error))
 	else:
 		log_error("Failed to pack scene: " + str(result))
+	scene_root.free()
 
 
 func load_sprite(params):
@@ -348,7 +368,12 @@ func load_sprite(params):
 
 	var texture = load(full_texture_path)
 	if not texture:
-		log_error("Failed to load texture: " + full_texture_path)
+		scene_root.free()
+		if not FileAccess.file_exists(full_texture_path):
+			log_error("Texture file not found: " + full_texture_path)
+		else:
+			log_error("Failed to load texture: " + full_texture_path)
+			log_error("Headless mode cannot import textures. Run the editor first to generate .import cache.")
 		quit(1)
 
 	if sprite_node is Sprite2D or sprite_node is Sprite3D:
@@ -364,9 +389,11 @@ func load_sprite(params):
 		if error == OK:
 			print("Sprite loaded successfully with texture: " + full_texture_path)
 		else:
+			scene_root.free()
 			log_error("Failed to save scene: " + str(error))
 	else:
 		log_error("Failed to pack scene: " + str(result))
+	scene_root.free()
 
 
 func export_mesh_library(params):
@@ -445,6 +472,7 @@ func export_mesh_library(params):
 			log_error("Failed to save MeshLibrary: " + str(error))
 	else:
 		log_error("No valid meshes found in the scene")
+	scene_root.free()
 
 
 func save_scene(params):
@@ -494,6 +522,7 @@ func save_scene(params):
 			log_error("Failed to save scene: " + str(error))
 	else:
 		log_error("Failed to pack scene: " + str(result))
+	scene_root.free()
 
 
 # ─── File helpers ─────────────────────────────────────────────────────────────
