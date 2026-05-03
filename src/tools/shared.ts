@@ -7,7 +7,12 @@ export const MARKER_RESULT = '___MCP_RESULT___';
 export const SCENE_TREE_HEADER = `extends SceneTree
 
 func get_node(path: NodePath) -> Node:
-\treturn root.get_node(path)
+\tvar _p: String = str(path)
+\tif _p == "/root" or _p == "root":
+\t\treturn root
+\tif _p.begins_with("/root/"):
+\t\t_p = _p.substr(6)
+\treturn root.get_node(_p)
 
 func _mcp_load_main_scene() -> void:
 \tvar _sp: Variant = ProjectSettings.get_setting("application/run/main_scene")
