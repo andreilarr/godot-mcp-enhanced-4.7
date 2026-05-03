@@ -27,8 +27,9 @@ import * as validation from './tools/validation.js';
 import * as docs from './tools/docs.js';
 import * as godotOps from './tools/godot-ops.js';
 import * as tilemapOps from './tools/tilemap-ops.js';
+import * as materialOps from './tools/material-ops.js';
 
-const toolModules = [runtime, screenshot, project, scene, script, validation, docs, godotOps, tilemapOps];
+const toolModules = [runtime, screenshot, project, scene, script, validation, docs, godotOps, tilemapOps, materialOps];
 
 // ─── Godot binary detection ──────────────────────────────────────────────────
 
@@ -165,7 +166,7 @@ export class GodotServer {
   constructor(opsScript: string) {
     this.opsScript = opsScript;
     this.server = new Server(
-      { name: 'godot-mcp-enhanced', version: '0.6.0' },
+      { name: 'godot-mcp-enhanced', version: '0.7.0' },
       { capabilities: { tools: {}, resources: {} } }
     );
     this.setupHandlers();
