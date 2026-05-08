@@ -7,8 +7,14 @@ import { promisify } from 'util';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { validatePath, resolveWithinRoot, parseMcpScriptOutput, normalizeUserProjectPath } from '../helpers.js';
-import { analyzeOutput } from '../error-analyzer.js';
+import { validatePath, resolveWithinRoot, parseMcpScriptOutput, normalizeUserProjectPath, checkVersionMismatch } from '../helpers.js';
+import { analyzeOutput, type AnalysisResult } from '../error-analyzer.js';
+
+interface ExtendedAnalysisResult extends AnalysisResult {
+  version_warning?: string;
+  precheck_errors?: Array<{ file: string; errors: string[] }>;
+  scene_tree?: unknown;
+}
 
 const execFileAsync = promisify(execFile);
 
@@ -19,32 +25,6 @@ const TOOL_NAMES = [
   'validate_scripts',
   'import_resources',
 ] as const;
-
-// ─── Version mismatch detection ────────────────────────────────────────────
-
-async function checkVersionMismatch(projectPath: string, godotBin: string): Promise<string | null> {
-  try {
-    const configPath = join(projectPath, 'project.godot');
-    if (!existsSync(configPath)) return null;
-    const config = readFileSync(configPath, 'utf-8');
-    const featuresMatch = config.match(/config\/features=PackedStringArray\("([^"]+)"\)/);
-    if (!featuresMatch) return null;
-    const projectVersion = featuresMatch[1];
-
-    const { stdout, stderr } = await execFileAsync(godotBin, ['--version'], { timeout: 5000 });
-    const binVersion = (stdout || stderr || '').trim();
-    const binMatch = binVersion.match(/^(\d+\.\d+)/);
-    if (!binMatch) return null;
-    const binMajorMinor = binMatch[1];
-
-    if (projectVersion !== binMajorMinor) {
-      return `⚠ Version mismatch: project.godot expects Godot ${projectVersion}, but binary is ${binVersion} (${binMajorMinor}). Errors may be inaccurate.`;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 // ─── Script file collection ────────────────────────────────────────────────
 
@@ -441,8 +421,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         const allOutput = [...(stdout || '').split('\n'), ...(stderr || '').split('\n')];
         const analysis = analyzeOutput(allOutput);
 
-        if (versionWarning) (analysis as any).version_warning = versionWarning;
-        if (precheckErrors.length > 0) (analysis as any).precheck_errors = precheckErrors;
+        if (versionWarning) (analysis as ExtendedAnalysisResult).version_warning = versionWarning;
+        if (precheckErrors.length > 0) (analysis as ExtendedAnalysisResult).precheck_errors = precheckErrors;
 
         if (captureTree && scene) {
           try {
@@ -462,22 +442,23 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
                 setTimeout(() => { if (!proc.killed) proc.kill('SIGTERM'); resolve(''); }, 30000);
               });
               if (treeResult) {
-                (analysis as any).scene_tree = parseMcpScriptOutput(treeResult, 0);
+                (analysis as ExtendedAnalysisResult).scene_tree = parseMcpScriptOutput(treeResult, 0);
               }
             }
           } catch { /* tree capture is optional */ }
         }
 
         return textResult(JSON.stringify(analysis, null, 2));
-      } catch (e: any) {
-        const allOutput = [...(e.stdout || '').split('\n'), ...(e.stderr || '').split('\n')];
+      } catch (e: unknown) {
+        const errObj = e as Record<string, unknown>;
+        const allOutput = [...String(errObj.stdout || '').split('\n'), ...String(errObj.stderr || '').split('\n')];
         const analysis = analyzeOutput(allOutput);
-        if (versionWarning) (analysis as any).version_warning = versionWarning;
-        if (precheckErrors.length > 0) (analysis as any).precheck_errors = precheckErrors;
-        if (e.killed) {
-          (analysis as any).summary += '\nNote: Process timed out after ' + timeout + 's (this is normal for interactive projects)';
+        if (versionWarning) (analysis as ExtendedAnalysisResult).version_warning = versionWarning;
+        if (precheckErrors.length > 0) (analysis as ExtendedAnalysisResult).precheck_errors = precheckErrors;
+        if (errObj.killed) {
+          (analysis as ExtendedAnalysisResult).summary += '\nNote: Process timed out after ' + timeout + 's (this is normal for interactive projects)';
         } else {
-          (analysis as any).summary += '\nNote: Process exited with code ' + (e.code || 'unknown');
+          (analysis as ExtendedAnalysisResult).summary += '\nNote: Process exited with code ' + (errObj.code || 'unknown');
         }
         return textResult(JSON.stringify(analysis, null, 2));
       }

@@ -29,9 +29,25 @@ function findSectionEnd(lines: string[], startLine: number): number {
   return lines.length;
 }
 
+/** Escape special characters in .tscn quoted attribute values */
+function escapeTscnAttr(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+/** Escape property values for safe embedding in .tscn files */
+function escapeTscnValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\]/g, '\\]');
+}
+
+/** Escape string for safe use in RegExp constructor */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** Parse a quoted attribute from a bracket header like `[node name="X" type="Y"]` */
 function getBracketAttr(header: string, attr: string): string | null {
-  const re = new RegExp(`(?:^|\\s)${attr}="([^"]*)"`);
+  const safeAttr = escapeRegExp(attr);
+  const re = new RegExp(`(?:^|\\s)${safeAttr}="([^"]*)"`);
   const m = header.match(re);
   return m ? m[1] : null;
 }
@@ -120,7 +136,7 @@ export function editNodeProperty(
   for (let i = nodeLine + 1; i <= end; i++) {
     const trimmed = lines[i].trim();
     if (trimmed.startsWith(propPrefix)) {
-      lines[i] = `${property} = ${value}`;
+      lines[i] = `${property} = ${escapeTscnValue(value)}`;
       return { success: true, message: `Updated ${property} on ${nodePath}`, scene: lines.join('\n') };
     }
     // Also handle property:type = value format
@@ -128,7 +144,7 @@ export function editNodeProperty(
       const rest = trimmed.slice(trimmed.indexOf(':') + 1);
       const typeMatch = rest.match(/^(\w+)\s*=/);
       if (typeMatch) {
-        lines[i] = `${property}:${typeMatch[1]} = ${value}`;
+        lines[i] = `${property}:${typeMatch[1]} = ${escapeTscnValue(value)}`;
         return { success: true, message: `Updated ${property} on ${nodePath}`, scene: lines.join('\n') };
       }
     }
@@ -141,7 +157,7 @@ export function editNodeProperty(
       insertAt = i + 1;
     }
   }
-  lines.splice(insertAt, 0, `${property} = ${value}`);
+  lines.splice(insertAt, 0, `${property} = ${escapeTscnValue(value)}`);
 
   return { success: true, message: `Added ${property} = ${value} to ${nodePath}`, scene: lines.join('\n') };
 }
@@ -220,7 +236,7 @@ export function addConnection(
 ): SceneEditResult {
   const lines = normalizeLines(tscnContent);
 
-  const connLine = `[connection signal="${signal}" from="${fromNode}" to="${toNode}" method="${method}"]`;
+  const connLine = `[connection signal="${escapeTscnAttr(signal)}" from="${escapeTscnAttr(fromNode)}" to="${escapeTscnAttr(toNode)}" method="${escapeTscnAttr(method)}"]`;
 
   // Append before any trailing empty lines
   while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
@@ -391,7 +407,7 @@ export function changeNodeType(
   }
 
   const oldType = typeMatch[0].match(/type="([^"]*)"/)![1];
-  lines[nodeLine] = header.replace(/type="[^"]*"/, `type="${newType}"`);
+  lines[nodeLine] = header.replace(/type="[^"]*"/, `type="${escapeTscnAttr(newType)}"`);
 
   return {
     success: true,

@@ -359,7 +359,7 @@ export function getToolDefinitions(): Tool[] {
   return [
     {
       name: 'tilemap_read',
-      description: `读取 TileMap/TileMapLayer 节点的图块数据。${NON_PERSIST}`,
+      description: `Read tile data from TileMap/TileMapLayer. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -384,7 +384,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'tilemap_set_cell',
-      description: `设置 TileMap/TileMapLayer 单个图块。${NON_PERSIST}`,
+      description: `Set a single tile on TileMap/TileMapLayer. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -412,7 +412,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'tilemap_erase_cell',
-      description: `擦除 TileMap/TileMapLayer 单个图块。${NON_PERSIST}`,
+      description: `Erase a single tile on TileMap/TileMapLayer. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -432,7 +432,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'tilemap_fill_rect',
-      description: `用指定图块填充矩形区域。${NON_PERSIST}`,
+      description: `Fill a rectangular region with a tile. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -465,7 +465,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'tilemap_clear',
-      description: `清除 TileMap/TileMapLayer 所有图块。${NON_PERSIST}`,
+      description: `Clear all tiles on TileMap/TileMapLayer. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -479,7 +479,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'tilemap_copy',
-      description: `复制 TileMap/TileMapLayer 矩形区域的图块数据。${NON_PERSIST}`,
+      description: `Copy tile data from a rectangular region on TileMap/TileMapLayer. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -504,7 +504,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'tilemap_paste',
-      description: `将图块图案粘贴到 TileMap/TileMapLayer 指定位置。${NON_PERSIST}`,
+      description: `Paste a tile pattern at target position on TileMap/TileMapLayer. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -546,7 +546,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'tilemap_set_transform',
-      description: `设置图块的翻转/旋转变换。${NON_PERSIST}`,
+      description: `Set tile flip/rotation transform. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {

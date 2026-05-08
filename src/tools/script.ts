@@ -369,7 +369,14 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         );
       }
 
-      const testTarget = className || (scriptPath.includes('/') ? scriptPath.split('/').pop()?.replace('.gd', '') || 'Target' : scriptPath.replace('.gd', ''));
+      let testTarget: string;
+      if (className) {
+        testTarget = className;
+      } else if (scriptPath.includes('/')) {
+        testTarget = scriptPath.split('/').pop()?.replace('.gd', '') || 'Target';
+      } else {
+        testTarget = scriptPath.replace('.gd', '');
+      }
       const scriptResPath = scriptPath.startsWith('res://') ? scriptPath : `res://${scriptPath}`;
 
       let testCode = 'extends GutTest\n\n';

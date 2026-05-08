@@ -133,7 +133,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       countFiles(p, 0);
 
       return textResult(JSON.stringify({
-        name: (config.application as any)?.name || basename(p),
+        name: (config.application as Record<string, unknown> | undefined)?.name as string || basename(p),
         config,
         file_stats: stats,
       }, null, 2));

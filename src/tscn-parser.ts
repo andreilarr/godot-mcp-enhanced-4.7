@@ -396,11 +396,12 @@ export function parseTscn(content: string): ParsedScene {
     result.connections.push(currentConnection as Connection);
   }
 
-  // Build node tree
+  // Build node tree using unique paths as keys (avoids collisions when nodes share the same name)
   const nodeMap = new Map<string, ParsedNode>();
   for (const node of result.nodes) {
     node.children = [];
-    nodeMap.set(node.name, node);
+    const uniquePath = node.parent ? `${node.parent}/${node.name}` : node.name;
+    nodeMap.set(uniquePath, node);
   }
 
   for (const node of result.nodes) {

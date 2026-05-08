@@ -16,6 +16,7 @@ import {
   listResourceTemplates as listMcpResourceTemplates,
   readResource as readMcpResource,
 } from './resources.js';
+import { parseGodotConfig } from './helpers.js';
 
 // ─── Import modular tool handlers ───────────────────────────────────────────
 import * as runtime from './tools/runtime.js';
@@ -117,49 +118,6 @@ function log(...args: unknown[]): void {
   if (DEBUG) console.error('[godot-mcp]', ...args);
 }
 
-// ─── Godot config parser ────────────────────────────────────────────────────
-
-function parseGodotConfig(content: string): Record<string, unknown> {
-  const lines = content.split('\n');
-  const sectioned: Record<string, unknown> = {};
-  let currentSection = '';
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith(';') || trimmed.startsWith('#')) continue;
-
-    const sectionMatch = trimmed.match(/^\[(.+)\]$/);
-    if (sectionMatch) {
-      currentSection = sectionMatch[1];
-      if (!sectioned[currentSection]) sectioned[currentSection] = {};
-      continue;
-    }
-
-    const kvMatch = trimmed.match(/^(\S+)\s*=\s*(.+)$/);
-    if (kvMatch) {
-      const container = currentSection
-        ? (sectioned[currentSection] as Record<string, unknown>)
-        : sectioned;
-      container[kvMatch[1]] = parseConfigValue(kvMatch[2].trim());
-    }
-  }
-
-  return sectioned;
-}
-
-function parseConfigValue(raw: string): unknown {
-  if (raw.startsWith('"') && raw.endsWith('"')) return raw.slice(1, -1);
-  if (raw === 'true') return true;
-  if (raw === 'false') return false;
-  if (raw === 'null') return null;
-  const num = Number(raw);
-  if (!isNaN(num) && raw !== '') return num;
-  if (raw.startsWith('[') && raw.endsWith(']')) {
-    return raw.slice(1, -1).split(',').map(s => parseConfigValue(s.trim())).filter(s => s !== '');
-  }
-  return raw;
-}
-
 // ─── GodotServer class ───────────────────────────────────────────────────────
 
 // ─── Write tools (filtered in READ_ONLY_MODE) ─────────────────────────────────
@@ -254,7 +212,7 @@ export class GodotServer {
       const { name, arguments: rawArgs } = request.params;
       const startTime = Date.now();
       // Normalize camelCase -> snake_case
-      const args: Record<string, any> = {};
+      const args: Record<string, unknown> = {};
       if (rawArgs) {
         for (const [key, value] of Object.entries(rawArgs)) {
           const snake = key.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase());

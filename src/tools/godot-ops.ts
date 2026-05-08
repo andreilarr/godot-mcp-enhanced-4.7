@@ -442,7 +442,7 @@ export function getToolDefinitions(): Tool[] {
   return [
     {
       name: 'signal_connect',
-      description: `连接两个节点的信号。${NON_PERSIST}`,
+      description: `Connect a signal between two nodes. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -459,7 +459,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'signal_disconnect',
-      description: `断开两个节点之间的信号连接。${NON_PERSIST}`,
+      description: `Disconnect a signal between two nodes. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -475,7 +475,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'signal_emit',
-      description: `发射节点信号。args 仅支持基础类型（string/number/bool/null）。${NON_PERSIST}`,
+      description: `Emit a node signal. Args only support basic types (string/number/bool/null). ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -490,7 +490,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'signal_list',
-      description: `列出节点上可用的信号。${NON_PERSIST}`,
+      description: `List available signals on a node. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -503,7 +503,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'physics_raycast',
-      description: `执行 3D 射线检测。${NON_PERSIST}`,
+      description: `Perform 3D raycast. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -529,7 +529,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'physics_body_info',
-      description: `获取物理体的碰撞信息。${NON_PERSIST}`,
+      description: `Get physics body collision info. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -542,7 +542,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'node_create_3d',
-      description: `运行时创建 3D 节点。headless 创建的节点不持久化，持久化请用 add_node + save_scene。${NON_PERSIST}`,
+      description: `Create 3D node at runtime. Headless-created nodes are not persisted — use add_node + save_scene for persistence. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -576,7 +576,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'nav_query_path',
-      description: `查询 3D 导航路径。${NON_PERSIST}`,
+      description: `Query 3D navigation path. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -601,7 +601,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'audio_play',
-      description: `播放音频。支持 AudioStreamPlayer/AudioStreamPlayer2D/AudioStreamPlayer3D 节点。${NON_PERSIST}`,
+      description: `Play audio. Supports AudioStreamPlayer/AudioStreamPlayer2D/AudioStreamPlayer3D nodes. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -619,7 +619,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'audio_stop',
-      description: `停止音频播放。${NON_PERSIST}`,
+      description: `Stop audio playback. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -632,7 +632,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'audio_set_param',
-      description: `设置音频参数（音量/音调/总线）。${NON_PERSIST}`,
+      description: `Set audio parameters (volume/pitch/bus). ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -647,7 +647,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'audio_query',
-      description: `查询音频播放状态。${NON_PERSIST}`,
+      description: `Query audio playback status. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {

@@ -20,18 +20,14 @@ interface BridgeResponse {
   error?: { code: number; message: string };
 }
 
-let _bridgeSecret: string | null = null;
+let _nextRequestId = 1;
 
 function sendToBridge(method: string, params: Record<string, unknown> = {}, timeout = DEFAULT_TIMEOUT): Promise<BridgeResponse> {
   return new Promise((resolve, reject) => {
-    const id = Date.now();
+    const id = _nextRequestId++;
     const message = JSON.stringify({ id, method, params }) + '\n';
 
     const socket = createConnection({ port: BRIDGE_PORT, host: BRIDGE_HOST }, () => {
-      // C1: Send auth handshake if we have a secret
-      if (_bridgeSecret) {
-        socket.write(JSON.stringify({ id: 0, method: 'auth', secret: _bridgeSecret }) + '\n');
-      }
       socket.write(message);
     });
 

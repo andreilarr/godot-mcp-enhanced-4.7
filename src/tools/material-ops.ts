@@ -561,7 +561,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'material_write',
-      description: `写参数 / 创建材质 / 附加 / 保存 .tres。${NON_PERSIST}`,
+      description: `Write params / create material / attach / save .tres. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -590,7 +590,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'shader_edit',
-      description: `读写 shader code / 加载 .gdshader / 模板 / 编译诊断。${NON_PERSIST}`,
+      description: `Read/write shader code / load .gdshader / templates / compile diagnostics. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -742,9 +742,6 @@ export async function handleTool(
             if (code === undefined || code === null) return opsErrorResult('SCRIPT_EXEC_FAILED', 'code is required for save_file action');
             script = genShaderSaveFileScript(filePath, code);
             break;
-          }
-          case 'list_templates': {
-            return null as never;
           }
           case 'apply_template': {
             const nodePath = requireNodePath(args.node_path);

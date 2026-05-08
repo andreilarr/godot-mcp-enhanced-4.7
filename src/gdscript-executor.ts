@@ -12,6 +12,7 @@ import { spawn } from 'child_process';
 import { writeFileSync, mkdirSync, rmSync, readdirSync, statSync, mkdtempSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { randomUUID } from 'crypto';
 import { analyzeOutput, type ParsedError } from './error-analyzer.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -76,14 +77,14 @@ function cleanupOldSessions(): void {
 }
 
 function writeTempScript(code: string, sessionDir: string): string {
-  const id = Math.random().toString(36).substring(2, 10);
+  const id = randomUUID().replace(/-/g, '').substring(0, 8);
   const filePath = join(sessionDir, `${id}.gd`);
   writeFileSync(filePath, code, 'utf-8');
   return filePath;
 }
 
 function writeSessionFile(content: string, ext: string, sessionDir: string): string {
-  const id = Math.random().toString(36).substring(2, 10);
+  const id = randomUUID().replace(/-/g, '').substring(0, 8);
   const filePath = join(sessionDir, `${id}${ext}`);
   writeFileSync(filePath, content, 'utf-8');
   return filePath;

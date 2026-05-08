@@ -3,12 +3,8 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { join } from 'path';
-import { existsSync, readFileSync } from 'fs';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import { validatePath } from '../helpers.js';
-
-const execFileAsync = promisify(execFile);
+import { existsSync } from 'fs';
+import { validatePath, checkVersionMismatch } from '../helpers.js';
 
 const TOOL_NAMES = [
   'launch_editor',
@@ -42,30 +38,6 @@ function classifyOutput(lines: string[]): {
   }
 
   return { errors, warnings, prints };
-}
-
-async function checkVersionMismatch(projectPath: string, godotBin: string): Promise<string | null> {
-  try {
-    const configPath = join(projectPath, 'project.godot');
-    if (!existsSync(configPath)) return null;
-    const config = readFileSync(configPath, 'utf-8');
-    const featuresMatch = config.match(/config\/features=PackedStringArray\("([^"]+)"\)/);
-    if (!featuresMatch) return null;
-    const projectVersion = featuresMatch[1];
-
-    const { stdout, stderr } = await execFileAsync(godotBin, ['--version'], { timeout: 5000 });
-    const binVersion = (stdout || stderr || '').trim();
-    const binMatch = binVersion.match(/^(\d+\.\d+)/);
-    if (!binMatch) return null;
-    const binMajorMinor = binMatch[1];
-
-    if (projectVersion !== binMajorMinor) {
-      return `⚠ Version mismatch: project.godot expects Godot ${projectVersion}, but binary is ${binVersion} (${binMajorMinor}). Errors may be inaccurate.`;
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
@@ -161,12 +133,14 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       proc.stdout?.on('data', (data: Buffer) => {
         const str = data.toString();
-        const buf = [...ctx.outputBuffer, ...str.split('\n')];
+        const buf = [...ctx.outputBuffer];
+        buf.push(...str.split('\n'));
         ctx.setOutputBuffer(buf);
       });
       proc.stderr?.on('data', (data: Buffer) => {
         const str = data.toString();
-        const buf = [...ctx.outputBuffer, ...str.split('\n')];
+        const buf = [...ctx.outputBuffer];
+        buf.push(...str.split('\n'));
         ctx.setOutputBuffer(buf);
       });
 
@@ -178,12 +152,13 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       // Auto-stop after timeout
       if (timeout > 0) {
-        setTimeout(() => {
+        const autoStopTimer = setTimeout(() => {
           if (ctx.runningProcess === proc) {
             proc.kill('SIGTERM');
             ctx.setRunningProcess(null);
           }
         }, timeout * 1000);
+        proc.on('close', () => { clearTimeout(autoStopTimer); });
       }
 
       return textResult(warnPrefix + `Running project at ${p} (timeout: ${timeout}s). Use get_debug_output or stop_project to check.`);
@@ -242,7 +217,12 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
         proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
 
+        const timer = setTimeout(() => {
+          if (!proc.killed) proc.kill('SIGTERM');
+        }, 120000);
+
         proc.on('close', (code) => {
+          clearTimeout(timer);
           const passed = (out.match(/Tests: (\d+)/g) || []).map(m => m.replace('Tests: ', ''));
           const failed = (out.match(/Failed: (\d+)/g) || []).map(m => m.replace('Failed: ', ''));
           resolve({
@@ -258,9 +238,10 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           });
         });
 
-        setTimeout(() => {
-          if (!proc.killed) proc.kill('SIGTERM');
-        }, 120000);
+        proc.on('error', (err) => {
+          clearTimeout(timer);
+          resolve({ content: [{ type: 'text', text: `Error: ${err.message}` }] });
+        });
       });
     }
 

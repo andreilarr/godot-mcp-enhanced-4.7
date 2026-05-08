@@ -6,6 +6,7 @@
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { resolve, join, extname, sep } from 'path';
 import { parseTscnSummary } from './tscn-parser.js';
+import { parseConfigValue } from './helpers.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -462,19 +463,6 @@ export function readResource(uri: string, projectPath: string | undefined): McpR
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function parseConfigValue(raw: string): unknown {
-  if (raw.startsWith('"') && raw.endsWith('"')) return raw.slice(1, -1);
-  if (raw === 'true') return true;
-  if (raw === 'false') return false;
-  if (raw === 'null') return null;
-  const num = Number(raw);
-  if (!isNaN(num) && raw !== '') return num;
-  if (raw.startsWith('[') && raw.endsWith(']')) {
-    return raw.slice(1, -1).split(',').map(s => parseConfigValue(s.trim())).filter(s => s !== '');
-  }
-  return raw;
-}
 
 function countFiles(projectPath: string): Record<string, number> {
   const counts: Record<string, number> = {};
