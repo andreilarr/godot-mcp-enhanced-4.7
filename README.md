@@ -448,6 +448,23 @@ MIT
 
 ## 更新日志
 
+### v0.7.0（2026-05-08）
+
+全面代码审查修复 — 安全加固、资源泄漏、代码质量和类型安全：
+
+| 类别 | 修复内容 |
+|------|----------|
+| **CRITICAL: 输入转义** | `.tscn` 文件写入时对用户输入进行转义（`"`、`\`、`]`），防止注入损坏场景文件 |
+| **超时泄漏修复** | `spawn` + `setTimeout` 模式在进程退出/error 时正确 `clearTimeout`，防止内存泄漏 |
+| **代码去重** | 提取 `parseConfigValue`、`parseGodotConfig`、`checkVersionMismatch` 到 `helpers.ts`，消除 5 处重复实现 |
+| **类型安全** | `any` → `unknown` / 具体接口（`ExtendedAnalysisResult`），消除所有 `as any` 强转 |
+| **安全 ID 生成** | 临时文件名从 `Math.random()` 改为 `crypto.randomUUID()` |
+| **Game Bridge** | 移除未使用的认证代码，请求 ID 从 `Date.now()` 改为原子计数器 |
+| **tscn-parser** | 修复 nodeMap 键冲突（同名兄弟节点），改用唯一路径作为键 |
+| **工具描述国际化** | 28 个运行时工具描述从中文改为英文，保持 MCP 协议一致性 |
+
+涉及文件：`tscn-editor.ts`、`helpers.ts`、`scene.ts`、`runtime.ts`、`game-bridge.ts`、`GodotServer.ts`、`validation.ts`、`gdscript-executor.ts`、`resources.ts`、`project.ts`、`tscn-parser.ts`、`script.ts`、`material-ops.ts`、`godot-ops.ts`、`tilemap-ops.ts`。
+
 ### v0.6.0（2026-05-03）
 
 新增 12 个运行时操作工具（4 个音频播放控制 + 8 个 TileMap 编辑）：
