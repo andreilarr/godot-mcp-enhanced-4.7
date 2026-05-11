@@ -324,6 +324,7 @@ func _initialize():
 \t\t_mcp_done()
 \t\treturn
 \tvar space_state = world.direct_space_state
+\tvar center_v = Vector3(${center.x}, ${center.y}, ${center.z})
 \tvar sphere = SphereShape3D.new()
 \tsphere.radius = ${radius}
 \tvar query = PhysicsShapeQueryParameters3D.new()
