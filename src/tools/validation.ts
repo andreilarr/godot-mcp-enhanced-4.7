@@ -51,7 +51,7 @@ function collectFilesByExt(projectPath: string, extensions: string[], excludeDir
 
 // ─── Batch script validation ────────────────────────────────────────────────
 
-async function batchValidateScripts(
+export async function batchValidateScripts(
   godotPath: string,
   projectPath: string,
   scriptFiles: string[],

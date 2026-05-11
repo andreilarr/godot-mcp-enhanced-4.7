@@ -14,7 +14,6 @@ const pendingTokens = new Map<string, PendingToken>();
 export const GUARDED_TOOLS = new Set([
   'remove_node',
   'write_script',
-  'edit_script',
   'execute_gdscript',
 ]);
 

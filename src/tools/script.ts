@@ -5,6 +5,7 @@ import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { validatePath, resolveWithinRoot, ensureDir } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
+import { batchValidateScripts } from './validation.js';
 
 function detectDuplicateLines(lines: string[]): string[] {
   const warnings: string[] = [];
@@ -27,6 +28,40 @@ function detectDuplicateLines(lines: string[]): string[] {
 function formatDuplicateWarnings(warnings: string[]): string {
   if (warnings.length === 0) return '';
   return `\n\n⚠ Warning: ${warnings.length} duplicate line(s) detected (possible copy-paste error):\n${warnings.map(w => `  ${w}`).join('\n')}`;
+}
+
+function joinWithLineEnding(content: string, hasCRLF: boolean): string {
+  if (!hasCRLF) return content;
+  return content.split('\n').join('\r\n');
+}
+
+async function validateAndRevert(
+  fullPath: string,
+  rawFile: string,
+  godotPath: string,
+  projectPath: string,
+  contextInfo?: string
+): Promise<string | null> {
+  try {
+    const valResult = await batchValidateScripts(godotPath, projectPath, [fullPath], 15000);
+    if (valResult.length > 0 && valResult[0].errors.length > 0) {
+      try {
+        writeFileSync(fullPath, rawFile, 'utf-8');
+      } catch (rollbackErr) {
+        return `⚠️ CRITICAL: Parse error detected AND rollback failed!\n` +
+          `Parse errors:\n  ${valResult[0].errors.join('\n  ')}\n` +
+          `Rollback error: ${rollbackErr}\n` +
+          `File may be in a corrupted state: ${fullPath}`;
+      }
+      return `⚠️ Edit REVERTED due to GDScript parse error:\n` +
+        valResult[0].errors.map(e => `  ${e}`).join('\n') +
+        `\n\nOriginal file restored. Please fix the edit content and retry.` +
+        (contextInfo ? `\n\n--- Attempted change ---\n${contextInfo}` : '');
+    }
+  } catch (e) {
+    return `⚠️ Validation skipped (Godot unavailable): ${(e as Error).message}\nEdit was applied but not validated.`;
+  }
+  return null;
 }
 
 const TOOL_NAMES = [
@@ -70,10 +105,17 @@ export function getToolDefinitions(): Tool[] {
     {
       name: 'edit_script',
       description: 'Edit an existing GDScript file by replacing a range of lines. '
-        + 'Preserves CRLF line endings. By default inserts content as-is (raw mode). '
-        + 'Safer than write_script for incremental edits. '
-        + 'IMPORTANT: Prefer this tool over Claude\'s built-in Edit for .gd files to preserve line endings. '
-        + 'Use search_and_replace mode for content-based editing that is resilient to line number shifts.',
+        + 'Preserves CRLF line endings and auto-validates GDScript syntax after edit.\n'
+        + 'Two editing modes:\n'
+        + '1. search_and_replace (RECOMMENDED): Search for exact text and replace it. '
+        + 'Resilient to line number shifts. CRLF is normalized for matching. '
+        + 'Best for targeted, precise edits.\n'
+        + '2. start_line/end_line: Replace by line range. Use "smart" indent_mode '
+        + 'to auto-adjust indentation to match the target location. '
+        + 'Only use "raw" indent_mode if you are certain the indentation is correct.\n'
+        + 'IMPORTANT: Always prefer search_and_replace over line-number mode for GDScript. '
+        + 'GDScript is indentation-sensitive — wrong indentation causes parse errors. '
+        + 'The tool auto-validates and reverts on parse failure.',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -89,6 +131,11 @@ export function getToolDefinitions(): Tool[] {
             default: 'raw',
           },
           verify_content: { type: 'string', description: 'Optional: expected content at the replacement range. Edit is aborted if it does not match, preventing stale line-number edits.' },
+          auto_validate: {
+            type: 'boolean',
+            description: 'Auto-validate GDScript syntax after edit and revert on failure (default: true)',
+            default: true,
+          },
           search_and_replace: {
             type: 'object',
             description: 'Content-based editing mode: search for a string and replace it. More resilient than line-number editing. '
@@ -193,7 +240,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
     case 'edit_script': {
       const scriptPath = args.script_path as string;
-      const fullPath = resolveWithinRoot(validatePath(args.project_path as string), scriptPath);
+      const projectPath = validatePath(args.project_path as string);
+      const fullPath = resolveWithinRoot(projectPath, scriptPath);
 
       if (!existsSync(fullPath)) {
         return textResult(`Error: File not found: ${fullPath}`);
@@ -202,6 +250,16 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const rawFile = readFileSync(fullPath, 'utf-8');
       const hasCRLF = rawFile.includes('\r\n');
       const lines = rawFile.split(/\r?\n/);
+      const autoValidate = args.auto_validate !== false;
+
+      let godotPath: string | null = null;
+      if (autoValidate && fullPath.endsWith('.gd')) {
+        try {
+          godotPath = await ctx.findGodot();
+        } catch {
+          godotPath = null;
+        }
+      }
 
       // search_and_replace mode
       if (args.search_and_replace && typeof args.search_and_replace === 'object') {
@@ -222,8 +280,14 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             return textResult(`Error: search_and_replace: search text not found in ${fullPath}`);
           }
           const newFileContent = normalizedContent.split(normalizedSearch).join(normalizedReplace);
-          const finalContent = hasCRLF ? newFileContent.replace(/\n/g, '\r\n') : newFileContent;
+          const finalContent = joinWithLineEnding(newFileContent, hasCRLF);
           writeFileSync(fullPath, finalContent, 'utf-8');
+
+          if (godotPath) {
+            const revertMsg = await validateAndRevert(fullPath, rawFile, godotPath, projectPath);
+            if (revertMsg) return textResult(revertMsg);
+          }
+
           const count = normalizedContent.split(normalizedSearch).length - 1;
 
           const dupWarns = detectDuplicateLines(finalContent.split(/\r?\n/));
@@ -251,8 +315,13 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         const before = normalizedContent.substring(0, searchIndex);
         const after = normalizedContent.substring(searchIndex + normalizedSearch.length);
         const newFileContent = before + normalizedReplace + after;
-        const finalContent = hasCRLF ? newFileContent.replace(/\n/g, '\r\n') : newFileContent;
+        const finalContent = joinWithLineEnding(newFileContent, hasCRLF);
         writeFileSync(fullPath, finalContent, 'utf-8');
+
+        if (godotPath) {
+          const revertMsg = await validateAndRevert(fullPath, rawFile, godotPath, projectPath);
+          if (revertMsg) return textResult(revertMsg);
+        }
 
         const dupWarns = detectDuplicateLines(finalContent.split(/\r?\n/));
         const dw = formatDuplicateWarnings(dupWarns);
@@ -294,22 +363,30 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       if (indentMode === 'smart') {
         const originalLine = lines[startLine - 1] || '';
-        const baseIndent = (originalLine.match(/^(\t*)/) || ['',''])[1];
-        let minIndent = Infinity;
-        for (const nl of newLines) {
-          if (nl.trim() === '') continue;
+        const originalBaseIndent = (originalLine.match(/^(\t*)/) || ['',''])[1].length;
+
+        const newNonEmptyLines = newLines.filter(l => l !== '');
+        let newMinIndent = Infinity;
+        for (const nl of newNonEmptyLines) {
           const tabs = (nl.match(/^(\t*)/) || ['',''])[1].length;
-          if (tabs < minIndent) minIndent = tabs;
+          if (tabs < newMinIndent) newMinIndent = tabs;
         }
-        if (minIndent === Infinity) minIndent = 0;
-        const stripPrefix = '\t'.repeat(minIndent);
+        if (newMinIndent === Infinity) newMinIndent = 0;
+
+        const indentDelta = originalBaseIndent - newMinIndent;
 
         adjustedLines = newLines.map((line: string) => {
-          if (line.trim() === '') return line;
-          const stripped = line.startsWith(stripPrefix)
-            ? line.substring(stripPrefix.length)
-            : line;
-          return baseIndent + stripped;
+          if (line === '') return line;
+
+          const currentTabs = (line.match(/^(\t*)/) || ['',''])[1].length;
+
+          if (indentDelta > 0) {
+            return '\t'.repeat(indentDelta) + line;
+          } else if (indentDelta < 0) {
+            const tabsToRemove = Math.min(-indentDelta, currentTabs);
+            return line.substring(tabsToRemove);
+          }
+          return line;
         });
       } else {
         adjustedLines = newLines;
@@ -317,16 +394,28 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       lines.splice(startLine - 1, endLine - startLine + 1, ...adjustedLines);
 
-      const result = lines.join(hasCRLF ? '\r\n' : '\n');
+      const result = joinWithLineEnding(lines.join('\n'), hasCRLF);
       writeFileSync(fullPath, result, 'utf-8');
+
+      if (godotPath) {
+        const ctxInfo = `Lines ${startLine}-${endLine}:\n${beforeLines.join('\n')}\n→\n${adjustedLines.join('\n')}`;
+        const revertMsg = await validateAndRevert(fullPath, rawFile, godotPath, projectPath, ctxInfo);
+        if (revertMsg) return textResult(revertMsg);
+      }
 
       const afterLines = adjustedLines;
       const diffHeader = `Edited ${fullPath}: replaced lines ${startLine}-${endLine} (${beforeLines.length} lines → ${afterLines.length} lines)`;
       const diffBody = `--- Before ---\n${beforeLines.join('\n')}\n--- After ---\n${afterLines.join('\n')}`;
 
+      const contextBefore = lines.slice(Math.max(0, startLine - 3), startLine - 1);
+      const contextAfterStart = startLine - 1 + adjustedLines.length;
+      const contextAfter = lines.slice(contextAfterStart, contextAfterStart + 2);
+      const ctxBefore = contextBefore.length > 0 ? `\n--- Context (before) ---\n${contextBefore.join('\n')}` : '';
+      const ctxAfter = contextAfter.length > 0 ? `\n--- Context (after) ---\n${contextAfter.join('\n')}` : '';
+
       const warnings = formatDuplicateWarnings(detectDuplicateLines(lines));
 
-      return textResult(`${diffHeader}\n${diffBody}${warnings}`);
+      return textResult(`${diffHeader}\n${diffBody}${ctxBefore}${ctxAfter}${warnings}`);
     }
 
     case 'generate_test': {
