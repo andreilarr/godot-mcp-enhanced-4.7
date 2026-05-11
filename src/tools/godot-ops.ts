@@ -236,17 +236,23 @@ func _initialize():
 \t\treturn
 \t# Basic info
 \t_mcp_output("node_type", body.get_class())
+\tif not body is Node3D:
+\t\t_mcp_output("error", "Node is not a Node3D: " + body.get_class())
+\t\t_mcp_done()
+\t\treturn
 \t_mcp_output("position", {"x": body.position.x, "y": body.position.y, "z": body.position.z})
-\tvar vel = Vector3.ZERO
-\tif body is CharacterBody3D:
-\t\tvel = body.velocity
-\telif body is RigidBody3D:
-\t\tvel = body.linear_velocity
-\t_mcp_output("velocity", {"x": vel.x, "y": vel.y, "z": vel.z})
-\tvar speed = Vector2(vel.x, vel.z).length()
-\t_mcp_output("horizontal_speed", speed)
-\t_mcp_output("collision_layer", body.collision_layer)
-\t_mcp_output("collision_mask", body.collision_mask)
+\tif body is PhysicsBody3D:
+\t\t_mcp_output("collision_layer", body.collision_layer)
+\t\t_mcp_output("collision_mask", body.collision_mask)
+\t\tvar vel = Vector3.ZERO
+\t\tif body is CharacterBody3D:
+\t\t\tvel = body.velocity
+\t\telif body is RigidBody3D:
+\t\t\tvel = body.linear_velocity
+\t\t_mcp_output("velocity", {"x": vel.x, "y": vel.y, "z": vel.z})
+\t\t_mcp_output("horizontal_speed", Vector2(vel.x, vel.z).length())
+\telse:
+\t\t_mcp_output("warning", "Node is not a PhysicsBody3D (" + body.get_class() + ") — velocity and collision diagnostics skipped")
 \t# Collision shapes
 \tvar shapes = []
 \tvar has_concave = false
@@ -269,7 +275,9 @@ func _initialize():
 \tif has_concave:
 \t\t_mcp_output("warning", "ConcavePolygonShape3D detected — may cause ball trapping at internal faces. Consider using convex shapes (BoxShape3D, SphereShape3D) instead.")
 \t# Collision contacts via move_and_collide
-\tvar collision = body.move_and_collide(Vector3.ZERO, true, 0.001, true)
+\tvar collision = null
+\tif body is PhysicsBody3D:
+\t\tcollision = body.move_and_collide(Vector3.ZERO, true, 0.001, true)
 \tif collision:
 \t\tvar contacts = []
 \t\tfor i in range(collision.get_collision_count()):
@@ -310,8 +318,12 @@ export function genQuerySpatialScript(
   return `${SCENE_TREE_HEADER}
 func _initialize():
 \t_mcp_load_main_scene()
-\tvar space_state = get_root().get_viewport().get_world_3d().direct_space_state
-\tvar center_v = Vector3(${center.x}, ${center.y}, ${center.z})
+\tvar world = get_root().get_viewport().get_world_3d()
+\tif world == null:
+\t\t_mcp_output("error", "No World3D available (scene may not be loaded)")
+\t\t_mcp_done()
+\t\treturn
+\tvar space_state = world.direct_space_state
 \tvar sphere = SphereShape3D.new()
 \tsphere.radius = ${radius}
 \tvar query = PhysicsShapeQueryParameters3D.new()
