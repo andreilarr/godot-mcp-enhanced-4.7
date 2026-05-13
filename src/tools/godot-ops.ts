@@ -737,7 +737,7 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'diagnose_physics',
-      description: `Diagnose physics collision state for a body. Returns velocity, contact points (position/normal), collision shape info, and warns about ConcavePolygonShape3D traps. WARNING: Uses move_and_collide with test_only=true which may have side effects on physics state. `,
+      description: `Diagnose physics collision state for a body. Returns velocity, contact points (position/normal), collision shape info, and warns about ConcavePolygonShape3D traps. WARNING: Uses move_and_collide with test_only=true which may have side effects on physics state. ${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {

@@ -627,7 +627,6 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         return textResult(`Error: Too many matching files (>${MAX_FILES}). Narrow the search with more specific extensions or add directories to exclude_dirs.`);
       }
 
-      const pathSep = process.platform === 'win32' ? '\\' : '/';
       const relOf = (absPath: string) => absPath.slice(p.length + 1);
 
       const changedFiles: string[] = [];

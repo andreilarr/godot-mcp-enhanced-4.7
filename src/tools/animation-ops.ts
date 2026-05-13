@@ -195,6 +195,7 @@ func _initialize():
 \t\tvar _lib: AnimationLibrary = _ap.get_animation_library(_lib_name)
 \t\tif _lib.has_animation("${gdEscape(animName)}"):
 \t\t\t_anim = _lib.get_animation("${gdEscape(animName)}")
+\t\t\tbreak
 \tif _anim == null and _ap.has_animation("${gdEscape(animName)}"):
 \t\t_anim = _ap.get_animation("${gdEscape(animName)}")
 \tif _anim == null:
