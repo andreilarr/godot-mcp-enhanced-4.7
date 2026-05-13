@@ -689,3 +689,14 @@ export async function handleTool(
     return opsErrorResult('SCRIPT_EXEC_FAILED', msg);
   }
 }
+
+export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
+  tilemap_read: { readonly: true, long_running: false },
+  tilemap_set_cell: { readonly: false, long_running: false },
+  tilemap_erase_cell: { readonly: false, long_running: false },
+  tilemap_fill_rect: { readonly: false, long_running: false },
+  tilemap_clear: { readonly: false, long_running: false },
+  tilemap_copy: { readonly: true, long_running: false },
+  tilemap_paste: { readonly: false, long_running: false },
+  tilemap_set_transform: { readonly: false, long_running: false },
+};

@@ -518,3 +518,16 @@ function gdScriptSetLine(key: string, value: unknown): string {
   }
   throw new Error(`Property "${key}" has unsupported type. Use string/number/bool/null, or array of 2 (Vector2), 3 (Vector3), or 4 (Color) numbers.`);
 }
+
+export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
+  read_scene: { readonly: true, long_running: false },
+  create_scene: { readonly: false, long_running: false },
+  add_node: { readonly: false, long_running: false },
+  save_scene: { readonly: false, long_running: false },
+  load_sprite: { readonly: false, long_running: false },
+  batch_add_nodes: { readonly: false, long_running: false },
+  query_scene_tree: { readonly: true, long_running: false },
+  inspect_node: { readonly: true, long_running: false },
+  edit_node: { readonly: false, long_running: false },
+  remove_node: { readonly: false, long_running: false },
+};

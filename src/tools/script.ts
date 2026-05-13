@@ -678,3 +678,13 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       return null;
   }
 }
+
+export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
+  read_script: { readonly: true, long_running: false },
+  write_script: { readonly: false, long_running: false },
+  edit_script: { readonly: false, long_running: false },
+  generate_test: { readonly: false, long_running: false },
+  create_test_scene: { readonly: false, long_running: false },
+  execute_gdscript: { readonly: false, long_running: false },
+  project_replace: { readonly: false, long_running: false },
+};

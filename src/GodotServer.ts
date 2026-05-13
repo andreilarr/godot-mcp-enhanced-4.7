@@ -35,8 +35,20 @@ import * as animationOps from './tools/animation-ops.js';
 import * as profilerOps from './tools/profiler-ops.js';
 import * as spatialOps from './tools/spatial-ops.js';
 import { requiresConfirmation, createPendingToken, consumeToken } from './guard.js';
+import { registerTools } from './core/tool-registry.js';
 
 const toolModules = [runtime, screenshot, project, scene, script, validation, docs, godotOps, tilemapOps, materialOps, gameBridge, workflow, animationOps, profilerOps, spatialOps];
+
+// 注册工具标签
+const allMeta: Array<{ name: string; readonly: boolean; long_running: boolean }> = [];
+for (const mod of toolModules) {
+  if ((mod as any).TOOL_META) {
+    for (const [name, meta] of Object.entries((mod as any).TOOL_META as Record<string, { readonly: boolean; long_running: boolean }>)) {
+      allMeta.push({ name, ...meta });
+    }
+  }
+}
+registerTools(allMeta);
 
 // ─── Godot binary detection ──────────────────────────────────────────────────
 

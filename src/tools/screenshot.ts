@@ -145,3 +145,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       return null;
   }
 }
+
+export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
+  capture_screenshot: { readonly: false, long_running: true },
+  analyze_screenshot: { readonly: true, long_running: false },
+};

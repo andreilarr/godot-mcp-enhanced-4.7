@@ -668,3 +668,7 @@ export async function handleTool(
     return opsErrorResult('INVALID_PARAMS', err instanceof Error ? err.message : String(err));
   }
 }
+
+export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
+  animation: { readonly: false, long_running: false },
+};

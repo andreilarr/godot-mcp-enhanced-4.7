@@ -779,3 +779,9 @@ export async function handleTool(
     return opsErrorResult('SCRIPT_EXEC_FAILED', msg);
   }
 }
+
+export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
+  material_read: { readonly: true, long_running: false },
+  material_write: { readonly: false, long_running: false },
+  shader_edit: { readonly: false, long_running: false },
+};

@@ -802,3 +802,11 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       return null;
   }
 }
+
+export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
+  run_and_verify: { readonly: true, long_running: true },
+  analyze_error: { readonly: true, long_running: false },
+  validate_project: { readonly: true, long_running: false },
+  validate_scripts: { readonly: true, long_running: false },
+  import_resources: { readonly: false, long_running: false },
+};

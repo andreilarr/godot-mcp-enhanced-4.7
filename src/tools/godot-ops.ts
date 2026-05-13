@@ -1092,3 +1092,21 @@ export async function handleTool(
     return opsErrorResult('SCRIPT_EXEC_FAILED', msg);
   }
 }
+
+export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
+  signal_connect: { readonly: false, long_running: false },
+  signal_disconnect: { readonly: false, long_running: false },
+  signal_emit: { readonly: false, long_running: false },
+  signal_list: { readonly: true, long_running: false },
+  physics_raycast: { readonly: true, long_running: false },
+  physics_body_info: { readonly: true, long_running: false },
+  diagnose_physics: { readonly: true, long_running: false },
+  query_spatial: { readonly: true, long_running: false },
+  collision_overlay: { readonly: false, long_running: false },
+  node_create_3d: { readonly: false, long_running: false },
+  nav_query_path: { readonly: true, long_running: false },
+  audio_play: { readonly: false, long_running: false },
+  audio_stop: { readonly: false, long_running: false },
+  audio_set_param: { readonly: false, long_running: false },
+  audio_query: { readonly: true, long_running: false },
+};

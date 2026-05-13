@@ -262,3 +262,12 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       return null;
   }
 }
+
+export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
+  launch_editor: { readonly: false, long_running: false },
+  run_project: { readonly: false, long_running: false },
+  stop_project: { readonly: false, long_running: false },
+  get_debug_output: { readonly: true, long_running: false },
+  run_tests: { readonly: false, long_running: true },
+  get_godot_version: { readonly: true, long_running: false },
+};

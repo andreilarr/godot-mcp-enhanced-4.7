@@ -247,3 +247,9 @@ function runVerification(godot: string, projectPath: string): Promise<Record<str
     });
   });
 }
+
+export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
+  dev_loop: { readonly: false, long_running: true },
+  scene_snapshot: { readonly: true, long_running: false },
+  batch_validate: { readonly: true, long_running: false },
+};

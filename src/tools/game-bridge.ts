@@ -284,3 +284,11 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     return textResult(`Error: ${msg}`);
   }
 }
+
+export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
+  game_bridge_install: { readonly: false, long_running: false },
+  game_bridge_uninstall: { readonly: false, long_running: false },
+  game_query: { readonly: true, long_running: false },
+  game_input: { readonly: false, long_running: false },
+  game_wait: { readonly: true, long_running: false },
+};

@@ -251,3 +251,11 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       return null;
   }
 }
+
+export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
+  list_projects: { readonly: true, long_running: false },
+  get_project_info: { readonly: true, long_running: false },
+  list_files: { readonly: true, long_running: false },
+  read_project_config: { readonly: true, long_running: false },
+  create_project: { readonly: false, long_running: false },
+};
