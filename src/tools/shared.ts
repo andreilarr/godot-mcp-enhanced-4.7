@@ -55,6 +55,17 @@ func _mcp_load_main_scene() -> void:
 \t\tvar _sr = load(_sp)
 \t\tif _sr:
 \t\t\t_r.add_child(_sr.instantiate())
+func _mcp_load_scene(sp: String) -> bool:
+\tvar _r: Node = _mcp_get_root()
+\tif _r == null:
+\t\t_mcp_output("error", "Scene root not available")
+\t\treturn false
+\tvar _sr = load(sp)
+\tif _sr == null:
+\t\t_mcp_output("error", "Failed to load scene: " + sp)
+\t\treturn false
+\t_r.add_child(_sr.instantiate())
+\treturn true
 
 func _mcp_done() -> void:
 \tprint("${MARKER_RESULT}" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))

@@ -424,6 +424,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
     case 'edit_node': {
       const p = validatePath(args.project_path as string);
+      const scenePath = resolveWithinRoot(p, args.scene_path as string);
       const nodePath = normalizeNodePath(args.node_path as string);
       const properties = args.properties as Record<string, unknown>;
       if (!properties || typeof properties !== 'object' || Object.keys(properties).length === 0) {
@@ -441,7 +442,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       const script = `${SCENE_TREE_HEADER}
 func _initialize():
-\t_mcp_load_main_scene()
+\tif not _mcp_load_scene("${gdEscape(scenePath)}"):
+\t\t_mcp_done()
+\t\treturn
 \tvar node = _mcp_get_node("${gdEscape(nodePath)}")
 \tif node == null:
 \t\t_mcp_output("error", "Node not found: ${gdEscape(nodePath)}")
@@ -460,11 +463,14 @@ func _initialize():
 
     case 'remove_node': {
       const p = validatePath(args.project_path as string);
+      const scenePath = resolveWithinRoot(p, args.scene_path as string);
       const nodePath = normalizeNodePath(args.node_path as string);
 
       const script = `${SCENE_TREE_HEADER}
 func _initialize():
-\t_mcp_load_main_scene()
+\tif not _mcp_load_scene("${gdEscape(scenePath)}"):
+\t\t_mcp_done()
+\t\treturn
 \tvar node = _mcp_get_node("${gdEscape(nodePath)}")
 \tif node == null:
 \t\t_mcp_output("error", "Node not found: ${gdEscape(nodePath)}")

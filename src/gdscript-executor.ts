@@ -311,14 +311,17 @@ function injectHelpers(code: string): string {
   const lines = code.split('\n');
   const extendsIdx = lines.findIndex(l => /^\s*extends\s+/.test(l));
 
-  const helperLines = [
-    '',
-    'var _mcp_outputs: Array = []',
-    '',
-    'func _mcp_output(key: String, value: Variant) -> void:',
-    '\t_mcp_outputs.append({"key": key, "value": str(value)})',
-    '',
-  ];
+  // Skip injection if the code already declares these helpers (exclude comment lines)
+  const hasOutputsVar = code.split('\n').some(l => /^\s*var\s+_mcp_outputs\s*:/.test(l) && !l.trim().startsWith('#'));
+  const hasOutputFunc = code.split('\n').some(l => /^\s*func\s+_mcp_output\s*\(/.test(l) && !l.trim().startsWith('#'));
+
+  const helperLines: string[] = [''];
+  if (!hasOutputsVar) {
+    helperLines.push('var _mcp_outputs: Array = []', '');
+  }
+  if (!hasOutputFunc) {
+    helperLines.push('func _mcp_output(key: String, value: Variant) -> void:', '\t_mcp_outputs.append({"key": key, "value": str(value)})', '');
+  }
 
   const result = [...lines.slice(0, extendsIdx + 1), ...helperLines, ...lines.slice(extendsIdx + 1)];
   return result.join('\n');
