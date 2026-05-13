@@ -445,7 +445,7 @@ func _initialize():
 \tif not _mcp_load_scene("${gdEscape(scenePath)}"):
 \t\t_mcp_done()
 \t\treturn
-\tvar node = _mcp_get_node("${gdEscape(nodePath)}")
+\tvar node = _mcp_get_scene_node("${gdEscape(nodePath)}")
 \tif node == null:
 \t\t_mcp_output("error", "Node not found: ${gdEscape(nodePath)}")
 \t\t_mcp_done()
@@ -471,7 +471,7 @@ func _initialize():
 \tif not _mcp_load_scene("${gdEscape(scenePath)}"):
 \t\t_mcp_done()
 \t\treturn
-\tvar node = _mcp_get_node("${gdEscape(nodePath)}")
+\tvar node = _mcp_get_scene_node("${gdEscape(nodePath)}")
 \tif node == null:
 \t\t_mcp_output("error", "Node not found: ${gdEscape(nodePath)}")
 \t\t_mcp_done()

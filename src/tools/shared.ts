@@ -7,6 +7,7 @@ export const MARKER_RESULT = '___MCP_RESULT___';
 export const SCENE_TREE_HEADER = `extends SceneTree
 
 var _mcp_root: Node = null
+var _mcp_scene_instance: Node = null
 
 func _mcp_get_root() -> Node:
 \tif _mcp_root != null:
@@ -64,8 +65,33 @@ func _mcp_load_scene(sp: String) -> bool:
 \tif _sr == null:
 \t\t_mcp_output("error", "Failed to load scene: " + sp)
 \t\treturn false
-\t_r.add_child(_sr.instantiate())
+\t_mcp_scene_instance = _sr.instantiate()
+\t_r.add_child(_mcp_scene_instance)
 \treturn true
+
+func _mcp_get_scene_node(path: String) -> Node:
+\t# Search within loaded scene instance (avoids root/SceneName prefix issue)
+\tif _mcp_scene_instance != null:
+\t\tvar _p: String = path
+\t\tif _p.begins_with("/"):
+\t\t\t_p = _p.substr(1)
+\t\t# Strip leading "root/" or "root" prefix
+\t\tif _p.begins_with("root/"):
+\t\t\t_p = _p.substr(5)
+\t\telif _p == "root":
+\t\t\t_p = ""
+\t\t# Strip scene root name if present (e.g. "Main/UILayer/..." -> "UILayer/...")
+\t\tif _p != "" and _mcp_scene_instance.name.length() > 0:
+\t\t\tvar _scene_name: String = _mcp_scene_instance.name + "/"
+\t\t\tif _p.begins_with(_scene_name):
+\t\t\t\t_p = _p.substr(_scene_name.length())
+\t\tif _p == "":
+\t\t\treturn _mcp_scene_instance
+\t\tvar _node: Node = _mcp_scene_instance.get_node_or_null(_p)
+\t\tif _node != null:
+\t\t\treturn _node
+\t# Fallback to global search
+\treturn _mcp_get_node(path)
 
 func _mcp_done() -> void:
 \tprint("${MARKER_RESULT}" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
