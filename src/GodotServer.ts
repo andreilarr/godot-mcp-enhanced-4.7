@@ -31,9 +31,12 @@ import * as tilemapOps from './tools/tilemap-ops.js';
 import * as materialOps from './tools/material-ops.js';
 import * as gameBridge from './tools/game-bridge.js';
 import * as workflow from './tools/workflow.js';
+import * as animationOps from './tools/animation-ops.js';
+import * as profilerOps from './tools/profiler-ops.js';
+import * as spatialOps from './tools/spatial-ops.js';
 import { requiresConfirmation, createPendingToken, consumeToken } from './guard.js';
 
-const toolModules = [runtime, screenshot, project, scene, script, validation, docs, godotOps, tilemapOps, materialOps, gameBridge, workflow];
+const toolModules = [runtime, screenshot, project, scene, script, validation, docs, godotOps, tilemapOps, materialOps, gameBridge, workflow, animationOps, profilerOps, spatialOps];
 
 // ─── Godot binary detection ──────────────────────────────────────────────────
 
