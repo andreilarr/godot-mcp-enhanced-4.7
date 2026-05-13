@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { validatePath, resolveWithinRoot, parseMcpScriptOutput } from '../helpers.js';
+import { validatePath, resolveWithinRoot, normalizeUserProjectPath, parseMcpScriptOutput } from '../helpers.js';
 import { parseTscn, parseTscnSummary } from '../tscn-parser.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, opsErrorResult, parseGdscriptResult } from './shared.js';
@@ -424,7 +424,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
     case 'edit_node': {
       const p = validatePath(args.project_path as string);
-      const scenePath = resolveWithinRoot(p, args.scene_path as string);
+      const scenePath = resolveWithinRoot(p, normalizeUserProjectPath(args.scene_path as string));
       const nodePath = normalizeNodePath(args.node_path as string);
       const properties = args.properties as Record<string, unknown>;
       if (!properties || typeof properties !== 'object' || Object.keys(properties).length === 0) {
@@ -463,7 +463,7 @@ func _initialize():
 
     case 'remove_node': {
       const p = validatePath(args.project_path as string);
-      const scenePath = resolveWithinRoot(p, args.scene_path as string);
+      const scenePath = resolveWithinRoot(p, normalizeUserProjectPath(args.scene_path as string));
       const nodePath = normalizeNodePath(args.node_path as string);
 
       const script = `${SCENE_TREE_HEADER}
