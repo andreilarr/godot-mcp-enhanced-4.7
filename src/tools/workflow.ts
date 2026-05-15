@@ -8,6 +8,7 @@ import { validatePath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, parseGdscriptResult } from './shared.js';
 import { gdEscape } from './godot-ops.js';
+import { batchValidateScripts } from './validation.js';
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
@@ -177,35 +178,40 @@ func _snap(node: Node, max_depth: int, depth: int) -> Dictionary:
       }
 
       const godot = await ctx.findGodot();
-      const results: Record<string, unknown> = {};
-      let allValid = true;
+      const pathSep = process.platform === 'win32' ? '\\' : '/';
+      const relOf = (absPath: string) => absPath.replace(projectPath + pathSep, '');
+      const fullPaths: string[] = [];
+      const missing: string[] = [];
 
-      for (const scriptPath of scripts) {
-        const fullPath = join(projectPath, scriptPath);
-        if (!existsSync(fullPath)) {
-          results[scriptPath] = { valid: false, error: 'File not found' };
-          allValid = false;
-          continue;
-        }
-
-        const scriptContent = readFileSync(fullPath, 'utf-8');
-        const validateResult = await executeGdscript({
-          godotPath: godot,
-          projectPath,
-          code: scriptContent,
-          timeout: 10,
-          loadAutoloads: false,
-        });
-
-        if (validateResult.compile_success) {
-          results[scriptPath] = { valid: true };
+      for (const s of scripts) {
+        const full = join(projectPath, s);
+        if (existsSync(full)) {
+          fullPaths.push(full);
         } else {
-          results[scriptPath] = { valid: false, error: validateResult.compile_error };
-          allValid = false;
+          missing.push(s);
         }
       }
 
-      return textResult(JSON.stringify({ all_valid: allValid, total: scripts.length, results }, null, 2));
+      const batchResults = await batchValidateScripts(godot, projectPath, fullPaths, 15000);
+
+      const results: Record<string, unknown> = {};
+      let allValid = true;
+      let totalFiltered = 0;
+
+      for (const r of batchResults) {
+        results[r.file] = r.errors.length > 0 ? { valid: false, error: r.errors } : { valid: true };
+        if (r.errors.length > 0) allValid = false;
+        if ((r as any).filtered_count) totalFiltered += (r as any).filtered_count;
+      }
+      for (const m of missing) {
+        results[m] = { valid: false, error: 'File not found' };
+        allValid = false;
+      }
+
+      const summary: Record<string, unknown> = { all_valid: allValid, total: scripts.length, results };
+      if (totalFiltered > 0) summary.filtered_count = totalFiltered;
+
+      return textResult(JSON.stringify(summary, null, 2));
     }
 
     default:
