@@ -271,7 +271,7 @@ func _cmd_get_node_properties(params: Dictionary) -> Variant:
 	var props: Dictionary = {}
 	for prop in node.get_property_list():
 		var name: String = prop["name"]
-		if name.begins_with("_") or name.begins_with("theme_override"):
+		if name.begins_with("_") or name.begins_with("theme_override") or name in BLOCKED_PROPERTIES:
 			continue
 		var val: Variant = node.get(name)
 		if val is Resource:

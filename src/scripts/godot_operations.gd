@@ -302,7 +302,8 @@ func batch_add_nodes(params):
 		if node_def.has("properties"):
 			var properties = node_def.properties
 			for property in properties:
-				new_node.set(property, properties[property])
+				if _is_safe_property(property):
+					new_node.set(property, properties[property])
 
 		parent.add_child(new_node)
 		new_node.owner = scene_root
@@ -529,6 +530,8 @@ func _is_safe_property(prop_name: String) -> bool:
 
 
 func _sanitize_res_path(path: String) -> String:
+	if path.find(" ") != -1:
+		return "res://"
 	var full = path if path.begins_with("res://") else "res://" + path
 	var parts = full.substr(6).split("/")
 	var normalized = []
