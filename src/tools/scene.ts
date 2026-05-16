@@ -251,10 +251,20 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         if (args.properties) params.properties = args.properties;
       } else if (name === 'save_scene') {
         params.scene_path = normalizeUserProjectPath(args.scene_path as string);
-        if (args.new_path) params.new_path = args.new_path;
+        if (args.new_path) {
+          const np = String(args.new_path);
+          if (np.includes('/../') || np.includes('/..') || np.includes('\\')) {
+            return opsErrorResult('INVALID_PATH', 'new_path contains path traversal');
+          }
+          params.new_path = np;
+        }
       } else if (name === 'load_sprite') {
         params.scene_path = normalizeUserProjectPath(args.scene_path as string);
-        params.texture_path = args.texture_path;
+        const tp = String(args.texture_path);
+        if (tp.includes('/../') || tp.includes('/..') || tp.includes('\\')) {
+          return opsErrorResult('INVALID_PATH', 'texture_path contains path traversal');
+        }
+        params.texture_path = tp;
         params.node_path = args.node_path || 'root';
       }
 

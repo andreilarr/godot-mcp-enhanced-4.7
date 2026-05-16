@@ -291,6 +291,8 @@ func _cmd_set_node_property(params: Dictionary) -> Variant:
 		return {"error": {"code": -1, "message": "Node not found: %s" % path}}
 	if prop.begins_with("_") or prop in BLOCKED_PROPERTIES:
 		return {"error": {"code": -2, "message": "Blocked property: %s" % prop}}
+	if "." in prop and prop.split(".")[0] in BLOCKED_PROPERTIES:
+		return {"error": {"code": -2, "message": "Blocked nested property: %s" % prop}}
 	if value is Script or value is Resource:
 		return {"error": {"code": -3, "message": "Value type not allowed: %s" % value.get_class()}}
 	node.set(prop, value)
@@ -426,6 +428,8 @@ func _cmd_wait_for_property(params: Dictionary) -> Variant:
 
 func _cmd_take_screenshot(params: Dictionary) -> Variant:
 	var path: String = str(params.get("path", "user://mcp_screenshot.png"))
+	if not path.begins_with("user://") or ".." in path:
+		return {"error": {"code": -1, "message": "Screenshot path must be user:// and contain no traversal"}}
 	var viewport := get_viewport()
 	var img := viewport.get_texture().get_image()
 	img.save_png(path)

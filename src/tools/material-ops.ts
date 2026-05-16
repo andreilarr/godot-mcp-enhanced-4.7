@@ -656,6 +656,9 @@ export async function handleTool(
       if (!raw || typeof raw !== 'string' || !raw.startsWith('res://')) {
         throw new Error(`${field} must be a string starting with res://`);
       }
+      if (raw.includes('/../') || raw.includes('/..') || raw.includes('\\')) {
+        throw new Error(`${field} contains path traversal: ${raw}`);
+      }
       return raw;
     }
 

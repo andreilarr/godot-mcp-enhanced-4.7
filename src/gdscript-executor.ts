@@ -467,6 +467,8 @@ export async function executeGdscript(
     const timer = setTimeout(() => {
       if (!proc.killed) {
         proc.kill('SIGTERM');
+        // SIGKILL fallback after 3s if SIGTERM didn't work (especially on Windows)
+        setTimeout(() => { if (!proc.killed) proc.kill('SIGKILL'); }, 3000);
       }
     }, timeout * 1000);
 

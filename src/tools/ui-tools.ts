@@ -451,6 +451,9 @@ export function genThemeSetPropertyScript(
   switch (itemType) {
     case 'default_font': {
       const fontPath = String(value);
+      if (fontPath.includes('/../') || fontPath.includes('/..') || fontPath.includes('\\')) {
+        throw new Error('fontPath contains path traversal');
+      }
       setLine = `\ttheme.set_default_font(load("${gdEscape(fontPath)}"))`;
       break;
     }
@@ -467,6 +470,9 @@ export function genThemeSetPropertyScript(
     }
     case 'stylebox': {
       const sbPath = String(value);
+      if (sbPath.includes('/../') || sbPath.includes('/..') || sbPath.includes('\\')) {
+        throw new Error('stylebox path contains path traversal');
+      }
       setLine = `\ttheme.set_stylebox("${safeName}", ${tt}, load("${gdEscape(sbPath)}"))`;
       break;
     }
@@ -772,6 +778,9 @@ export async function handleTool(
         if ((action === 'save' || action === 'load') && !themePath) {
           return opsErrorResult(ERROR_CODES.INVALID_PARAMS, `theme_path is required for ${action} action`);
         }
+        if (themePath && (themePath.includes('/../') || themePath.includes('/..') || themePath.includes('\\'))) {
+          return opsErrorResult(ERROR_CODES.INVALID_PARAMS, 'theme_path contains path traversal');
+        }
         const params = args.params as Record<string, unknown> | undefined;
         script = genUiSetThemeScript(scenePath, nodePath, action as 'set_params' | 'create' | 'save' | 'load', themePath, params);
         break;
@@ -800,6 +809,9 @@ export async function handleTool(
         }
         const sourceNodePath = args.source_node_path as string | undefined;
         const savePath = args.save_path as string | undefined;
+        if (savePath && (savePath.includes('/../') || savePath.includes('/..') || savePath.includes('\\'))) {
+          return opsErrorResult(ERROR_CODES.INVALID_PARAMS, 'save_path contains path traversal');
+        }
         if (action === 'extract' && !sourceNodePath) {
           return opsErrorResult(ERROR_CODES.INVALID_PARAMS, 'source_node_path is required for extract action');
         }
