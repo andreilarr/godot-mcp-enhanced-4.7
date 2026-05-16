@@ -21,9 +21,12 @@ export class EditorConnection {
   private ws: WebSocket | null = null;
   private requestId = 0;
   private pending = new Map<number, PendingRequest>();
+  private notificationHandlers = new Map<string, Set<(params: unknown) => void>>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private connected = false;
   private reconnectEnabled = true;
+
+  public onDisconnect: (() => void) | null = null;
 
   private readonly host: string;
   private readonly shouldReconnect: boolean;
@@ -69,6 +72,8 @@ export class EditorConnection {
       ws.on('close', () => {
         this.connected = false;
         this.ws = null;
+        this.notificationHandlers.clear();
+        this.onDisconnect?.();
         if (this.reconnectEnabled) this.scheduleReconnect();
       });
     });
@@ -88,8 +93,15 @@ export class EditorConnection {
           } else {
             pending.resolve(msg.result);
           }
+        } else if (msg.method && msg.id == null) {
+          const handlers = this.notificationHandlers.get(msg.method);
+          if (handlers) {
+            for (const handler of handlers) {
+              handler(msg.params);
+            }
+          }
         }
-      } catch { /* ignore non-JSON messages (notifications) */ }
+      } catch { /* ignore non-JSON messages */ }
     });
   }
 
@@ -114,6 +126,22 @@ export class EditorConnection {
   async notify(method: string, params: Record<string, unknown> = {}): Promise<void> {
     if (!this.ws || !this.connected) throw new Error('Not connected');
     this.ws.send(JSON.stringify({ jsonrpc: '2.0', method, params }));
+  }
+
+  onNotification(method: string, handler: (params: unknown) => void): void {
+    if (!this.notificationHandlers.has(method)) {
+      this.notificationHandlers.set(method, new Set());
+    }
+    this.notificationHandlers.get(method)!.add(handler);
+  }
+
+  offNotification(method: string, handler?: (params: unknown) => void): void {
+    if (!this.notificationHandlers.has(method)) return;
+    if (handler) {
+      this.notificationHandlers.get(method)!.delete(handler);
+    } else {
+      this.notificationHandlers.delete(method);
+    }
   }
 
   async startOperation(timeoutSec: number): Promise<unknown> {
@@ -160,6 +188,7 @@ export class EditorConnection {
       pending.reject(new Error('Disconnected'));
     }
     this.pending.clear();
+    this.notificationHandlers.clear();
   }
 
   isConnected(): boolean {
