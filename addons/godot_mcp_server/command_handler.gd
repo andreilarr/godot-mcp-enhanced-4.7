@@ -47,6 +47,10 @@ func handle(method: String, params: Dictionary, request_id: int) -> Dictionary:
 			return _scene_commands.handle_open_scene(params)
 		"save_scene":
 			return _scene_commands.handle_save_scene(params)
+		"instance_scene":
+			return _scene_commands.handle_instance_scene(params)
+		"set_instance_property":
+			return _scene_commands.handle_set_instance_property(params)
 		"add_node":
 			return _node_commands.handle_add_node(params, request_id)
 		"test_assert":
