@@ -119,13 +119,23 @@ export class EditorConnection {
 
       this.pending.set(id, { resolve, reject, timer });
       const msg = JSON.stringify({ jsonrpc: '2.0', id, method, params });
-      this.ws.send(msg);
+      try {
+        this.ws.send(msg);
+      } catch (e) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(new Error(`Send failed: ${(e as Error).message}`));
+      }
     });
   }
 
   async notify(method: string, params: Record<string, unknown> = {}): Promise<void> {
     if (!this.ws || !this.connected) throw new Error('Not connected');
-    this.ws.send(JSON.stringify({ jsonrpc: '2.0', method, params }));
+    try {
+      this.ws.send(JSON.stringify({ jsonrpc: '2.0', method, params }));
+    } catch {
+      // best effort — notification has no response
+    }
   }
 
   onNotification(method: string, handler: (params: unknown) => void): void {

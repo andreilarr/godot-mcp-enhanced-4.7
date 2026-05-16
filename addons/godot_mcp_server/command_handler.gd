@@ -46,6 +46,10 @@ func setup(plugin: EditorPlugin) -> void:
 	_sync_commands.setup(self)
 	add_child(_sync_commands)
 
+func cleanup() -> void:
+	if _sync_commands:
+		_sync_commands.cleanup()
+
 func handle(method: String, params: Dictionary, request_id: int) -> Dictionary:
 	match method:
 		"open_scene":

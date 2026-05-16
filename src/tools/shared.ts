@@ -27,7 +27,9 @@ export function gdEscape(s: string): string {
     .replace(/\\/g, '\\\\')
     .replace(/\n/g, '\\n')
     .replace(/"/g, '\\"')
-    .replace(/\0/g, '');
+    .replace(/\0/g, '')
+    .replace(/\$/g, '\\$')      // 防止 $NodePath 注入
+    .replace(/'/g, "\\'");      // 防止单引号字符串逃逸
 }
 
 export function validateVector3(v: unknown): { x: number; y: number; z: number } {

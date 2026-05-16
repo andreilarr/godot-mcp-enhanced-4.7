@@ -2,7 +2,7 @@ extends Node
 
 var _command_handler: Node
 var _syncing: bool = false
-var _node_paths: Dictionary = {}  # { instance_id (int): path (String) }
+var _node_paths: Dictionary = {}  # { instance_id (int): { path: String, type: String } }
 
 
 func setup(handler: Node) -> void:
@@ -38,16 +38,22 @@ func get_scene_tree() -> Dictionary:
 	return {"result": {"success": true, "tree": _serialize_tree(root, 0, 5)}}
 
 
-func _cache_paths_recursive(node: Node) -> void:
-	if node:
-		_node_paths[node.get_instance_id()] = str(node.get_path())
+func _cache_paths_recursive(node: Node, depth: int = 0) -> void:
+	if node and depth < 50:
+		_node_paths[node.get_instance_id()] = {
+			"path": str(node.get_path()),
+			"type": node.get_class()
+		}
 		for child in node.get_children():
-			_cache_paths_recursive(child)
+			_cache_paths_recursive(child, depth + 1)
 
 
 func _on_node_added(node: Node) -> void:
 	var path = str(node.get_path())
-	_node_paths[node.get_instance_id()] = path
+	_node_paths[node.get_instance_id()] = {
+		"path": path,
+		"type": node.get_class()
+	}
 	if _command_handler and _command_handler.has_method("send_notification"):
 		_command_handler.send_notification("scene_tree_changed", {
 			"type": "node_added",
@@ -58,14 +64,21 @@ func _on_node_added(node: Node) -> void:
 
 func _on_node_removed(node: Node) -> void:
 	var id = node.get_instance_id()
-	var path = _node_paths.get(id, "<removed>")
+	var cached = _node_paths.get(id, {})
+	var path = cached.get("path", "<removed>") if cached is Dictionary else "<removed>"
+	var node_type = cached.get("type", "Node") if cached is Dictionary else "Node"
 	_node_paths.erase(id)
 	if _command_handler and _command_handler.has_method("send_notification"):
 		_command_handler.send_notification("scene_tree_changed", {
 			"type": "node_removed",
 			"path": path,
-			"node_type": node.get_class()
+			"node_type": node_type
 		})
+
+
+func cleanup() -> void:
+	if _syncing:
+		stop_sync()
 
 
 func _serialize_tree(node: Node, depth: int, max_depth: int) -> Dictionary:

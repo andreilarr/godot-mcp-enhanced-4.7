@@ -41,11 +41,17 @@ func handle_instance_scene(params: Dictionary) -> Dictionary:
 	for key in properties:
 		if key.begins_with("_") or key in blocked:
 			continue
-		instance.set(key, properties[key])
+		if not key is String:
+			continue
+		var val = properties[key]
+		if val is Object:
+			continue  # 不允许设置 Object 子类型
+		instance.set(key, val)
 
 	var ei = Engine.get_singleton("EditorInterface") as EditorInterface
 	var root = ei.get_edited_scene_root()
 	if root == null:
+		instance.queue_free()  # 释放未添加到树的节点
 		return {"error": {"code": -32003, "message": "No edited scene"}}
 	var parent = _find_node_by_path(root, parent_path)
 	if parent == null:
@@ -79,7 +85,11 @@ func handle_set_instance_property(params: Dictionary) -> Dictionary:
 		"process_internal", "physics_process_mode", "input_event", "ready"]
 	if prop_name.begins_with("_") or prop_name in blocked:
 		return {"error": {"code": -32004, "message": "BLOCKED_PROPERTY: " + prop_name}}
-
+	# 属性名格式验证
+	if prop_name.is_empty() or (not (prop_name[0] == "_" or prop_name[0].is_alpha())):
+		return {"error": {"code": -32004, "message": "INVALID_PROPERTY_NAME: " + prop_name}}
+	if prop_value is Object:
+		return {"error": {"code": -32004, "message": "OBJECT_VALUES_NOT_ALLOWED"}}
 	target.set(prop_name, prop_value)
 	return {"result": {"node": str(target.name), "property": prop_name}}
 

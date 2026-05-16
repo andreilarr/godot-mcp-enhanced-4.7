@@ -16,6 +16,9 @@ func _enter_tree() -> void:
 
 func _exit_tree() -> void:
 	if websocket_server:
+		var handler = websocket_server.get_node_or_null("command_handler")
+		if handler and handler.has_method("cleanup"):
+			handler.cleanup()
 		websocket_server.queue_free()
 	if status_panel:
 		remove_control_from_bottom_panel(status_panel)

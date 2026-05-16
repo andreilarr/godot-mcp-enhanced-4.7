@@ -101,10 +101,10 @@ export class EditorToolExecutor {
         content: [{ type: 'text' as const, text: JSON.stringify(merged) }],
       };
     } catch (err) {
+      // 即使 request 失败（如已断连），仍然返回已缓冲的变更
       const message = err instanceof Error ? err.message : 'Unknown error';
       return {
-        content: [{ type: 'text', text: JSON.stringify({ error: message }) }],
-        isError: true,
+        content: [{ type: 'text', text: JSON.stringify({ warning: message, buffered_changes: changes }) }],
       };
     }
   }

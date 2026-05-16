@@ -600,25 +600,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         propLines += `\n\t${gdScriptSetLine(key, value)}`;
       }
 
-      const trySetHelper = `
-func _try_set(node: Node, prop: String, value: Variant) -> void:
-\tvar _ok = false
-\tif node.get_property_list().any(func(p): return p.name == prop):
-\t\tnode.set(prop, value)
-\t\t_ok = true
-\tif not _ok and node is Control:
-\t\tvar _vtype = typeof(value)
-\t\tif _vtype == TYPE_VECTOR2:
-\t\t\tnode.add_theme_font_size_override(prop, int(value.x))
-\t\telif _vtype == TYPE_COLOR:
-\t\t\tnode.add_theme_color_override(prop, value)
-\t\telif _vtype == TYPE_FLOAT or _vtype == TYPE_INT:
-\t\t\tif node.has_theme_constant(prop):
-\t\t\t\tnode.add_theme_constant_override(prop, int(value))
-`;
-
       const script = `${SCENE_TREE_HEADER}
-${trySetHelper}
+${TRY_SET_HELPER}
 func _initialize():
 \tif not _mcp_load_scene("${gdEscape(scenePath)}"):
 \t\t_mcp_done()
@@ -732,6 +715,25 @@ function gdScriptSetLine(key: string, value: unknown, varName = 'node'): string 
   throw new Error(`Property "${key}" has unsupported type. Use string/number/bool/null, array [2]=Vector2/[3]=Vector3/[4]=Color, or object {x,y}/{x,y,z}/{r,g,b,a}.`);
 }
 
+// ─── trySetHelper (shared across edit_node, instance_scene, set_instance_property) ──
+
+const TRY_SET_HELPER = `
+func _try_set(node: Node, prop: String, value: Variant) -> void:
+\tvar _ok = false
+\tif node.get_property_list().any(func(p): return p.name == prop):
+\t\tnode.set(prop, value)
+\t\t_ok = true
+\tif not _ok and node is Control:
+\t\tvar _vtype = typeof(value)
+\t\tif _vtype == TYPE_VECTOR2:
+\t\t\tnode.add_theme_font_size_override(prop, int(value.x))
+\t\telif _vtype == TYPE_COLOR:
+\t\t\tnode.add_theme_color_override(prop, value)
+\t\telif _vtype == TYPE_FLOAT or _vtype == TYPE_INT:
+\t\t\tif node.has_theme_constant(prop):
+\t\t\t\tnode.add_theme_constant_override(prop, int(value))
+`;
+
 // ─── instance_scene handler ──────────────────────────────────────────────────
 
 const BLOCKED_PROPS = new Set([
@@ -782,27 +784,10 @@ async function handleInstanceScene(args: Record<string, unknown>, ctx: ToolConte
     }
   }
 
-  const trySetHelper = `
-func _try_set(node: Node, prop: String, value: Variant) -> void:
-\tvar _ok = false
-\tif node.get_property_list().any(func(p): return p.name == prop):
-\t\tnode.set(prop, value)
-\t\t_ok = true
-\tif not _ok and node is Control:
-\t\tvar _vtype = typeof(value)
-\t\tif _vtype == TYPE_VECTOR2:
-\t\t\tnode.add_theme_font_size_override(prop, int(value.x))
-\t\telif _vtype == TYPE_COLOR:
-\t\t\tnode.add_theme_color_override(prop, value)
-\t\telif _vtype == TYPE_FLOAT or _vtype == TYPE_INT:
-\t\t\tif node.has_theme_constant(prop):
-\t\t\t\tnode.add_theme_constant_override(prop, int(value))
-`;
-
   const nameLine = nodeName ? `\n\t_inst.name = "${gdEscape(nodeName)}"` : '';
 
   const script = `${SCENE_TREE_HEADER}
-${trySetHelper}
+${TRY_SET_HELPER}
 func _initialize():
 \tif not _mcp_load_scene("${gdEscape(scenePath)}"):
 \t\t_mcp_done()
@@ -883,25 +868,8 @@ async function handleSetInstanceProperty(args: Record<string, unknown>, ctx: Too
     return opsErrorResult('INVALID_VALUE', `Cannot set property "${propName}": non-finite value`);
   }
 
-  const trySetHelper = `
-func _try_set(node: Node, prop: String, value: Variant) -> void:
-\tvar _ok = false
-\tif node.get_property_list().any(func(p): return p.name == prop):
-\t\tnode.set(prop, value)
-\t\t_ok = true
-\tif not _ok and node is Control:
-\t\tvar _vtype = typeof(value)
-\t\tif _vtype == TYPE_VECTOR2:
-\t\t\tnode.add_theme_font_size_override(prop, int(value.x))
-\t\telif _vtype == TYPE_COLOR:
-\t\t\tnode.add_theme_color_override(prop, value)
-\t\telif _vtype == TYPE_FLOAT or _vtype == TYPE_INT:
-\t\t\tif node.has_theme_constant(prop):
-\t\t\t\tnode.add_theme_constant_override(prop, int(value))
-`;
-
   const script = `${SCENE_TREE_HEADER}
-${trySetHelper}
+${TRY_SET_HELPER}
 func _initialize():
 \tif not _mcp_load_scene("${gdEscape(scenePath)}"):
 \t\t_mcp_done()
