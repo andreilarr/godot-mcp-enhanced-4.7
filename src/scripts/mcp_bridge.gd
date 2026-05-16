@@ -10,9 +10,23 @@ const PORT := 9081
 var _server: TCPServer = null
 var _peers: Array[StreamPeerTCP] = []
 var _peer_buffers: Dictionary = {}
+var _authenticated_peers: Dictionary = {}
 var _secret: String = ""
 
-const BLOCKED_PROPERTIES := ["script", "owner", "process_mode", "process_priority", "name"]
+const BLOCKED_PROPERTIES := [
+	"script", "owner", "process_mode", "process_priority", "process_input",
+	"process_unhandled_input", "process_unhandled_key_input", "process_internal",
+	"physics_process_mode", "physics_interpolation_mode", "name", "meta",
+	"input_event", "ready", "tree_entered", "tree_exited", "tree_exiting",
+]
+
+const ALLOWED_METHODS := [
+	"get", "get_class", "get_path", "get_children", "get_child", "get_child_count",
+	"get_parent", "get_property_list", "has_method", "is_class", "get_instance_id",
+	"get_meta", "has_meta", "has_signal", "get_signal_list", "get_signal_connection_list",
+	"get_incoming_connections", "get_index", "get_groups", "is_in_group",
+	"is_inside_tree", "is_part_of_edited_scene", "get_owner",
+]
 
 # ─── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -54,6 +68,7 @@ func _process(_delta: float) -> void:
 		var i: int = to_remove[idx]
 		var pid := _peers[i].get_instance_id()
 		_peer_buffers.erase(pid)
+		_authenticated_peers.erase(pid)
 		_peers.remove_at(i)
 
 
@@ -89,6 +104,7 @@ func _stop_server() -> void:
 		if p.get_status() == StreamPeerTCP.STATUS_CONNECTED:
 			p.disconnect_from_host()
 	_peers.clear()
+	_authenticated_peers.clear()
 	if _server:
 		_server.stop()
 		_server = null
@@ -107,10 +123,10 @@ func _process_buffer(peer: StreamPeerTCP, pid: int) -> void:
 		if line == "":
 			continue
 		# C1: Require auth handshake — first message must be {"method":"auth","secret":"..."}
-		if not _peer_buffers.has(pid + 1):  # authenticated flag
+		if not _authenticated_peers.has(pid):  # authenticated flag
 			var parsed: Variant = JSON.parse_string(line)
 			if parsed is Dictionary and parsed.get("method") == "auth" and str(parsed.get("secret")) == _secret:
-				_peer_buffers[pid + 1] = true  # mark authenticated
+				_authenticated_peers[pid] = true  # mark authenticated
 				peer.put_utf8_string(JSON.stringify({"id": parsed.get("id"), "result": {"authenticated": true}}) + "\n")
 				continue
 			else:
@@ -275,6 +291,8 @@ func _cmd_set_node_property(params: Dictionary) -> Variant:
 		return {"error": {"code": -1, "message": "Node not found: %s" % path}}
 	if prop.begins_with("_") or prop in BLOCKED_PROPERTIES:
 		return {"error": {"code": -2, "message": "Blocked property: %s" % prop}}
+	if value is Script or value is Resource:
+		return {"error": {"code": -3, "message": "Value type not allowed: %s" % value.get_class()}}
 	node.set(prop, value)
 	return {"success": true, "node": path, "property": prop}
 
@@ -288,11 +306,12 @@ func _cmd_call_method(params: Dictionary) -> Variant:
 	var node := get_node_or_null(path)
 	if node == null:
 		return {"error": {"code": -1, "message": "Node not found: %s" % path}}
-	var blocked := ["queue_free", "free", "set_script", "remove_child", "queue_redraw"]
-	if method in blocked:
-		return {"error": {"code": -2, "message": "Blocked method: %s" % method}}
+	if not method in ALLOWED_METHODS:
+		return {"error": {"code": -2, "message": "Method not allowed: %s" % method}}
 	if not node.has_method(method):
 		return {"error": {"code": -3, "message": "Method not found: %s" % method}}
+	if args.size() > 8:
+		return {"error": {"code": -4, "message": "Too many arguments (max 8)"}}
 	var result: Variant = node.callv(method, args)
 	return {"result": _jsonify(result)}
 

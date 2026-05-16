@@ -132,9 +132,7 @@ func instantiate_class(name_of_class: String):
 func create_scene(params):
 	log_info("Creating scene: " + params.scene_path)
 
-	var full_scene_path = params.scene_path
-	if not full_scene_path.begins_with("res://"):
-		full_scene_path = "res://" + full_scene_path
+	var full_scene_path = _sanitize_res_path(params.scene_path)
 
 	var absolute_scene_path = ProjectSettings.globalize_path(full_scene_path)
 	var scene_dir_res = full_scene_path.get_base_dir()
@@ -189,9 +187,7 @@ func create_scene(params):
 func add_node(params):
 	log_info("Adding node to scene: " + params.scene_path)
 
-	var full_scene_path = params.scene_path
-	if not full_scene_path.begins_with("res://"):
-		full_scene_path = "res://" + full_scene_path
+	var full_scene_path = _sanitize_res_path(params.scene_path)
 
 	var absolute_scene_path = ProjectSettings.globalize_path(full_scene_path)
 
@@ -233,7 +229,8 @@ func add_node(params):
 	if params.has("properties"):
 		var properties = params.properties
 		for property in properties:
-			new_node.set(property, properties[property])
+			if _is_safe_property(property):
+				new_node.set(property, properties[property])
 
 	parent.add_child(new_node)
 	new_node.owner = scene_root
@@ -255,9 +252,7 @@ func add_node(params):
 func batch_add_nodes(params):
 	log_info("Batch adding nodes to scene: " + params.scene_path)
 
-	var full_scene_path = params.scene_path
-	if not full_scene_path.begins_with("res://"):
-		full_scene_path = "res://" + full_scene_path
+	var full_scene_path = _sanitize_res_path(params.scene_path)
 
 	var absolute_scene_path = ProjectSettings.globalize_path(full_scene_path)
 
@@ -332,17 +327,13 @@ func batch_add_nodes(params):
 func load_sprite(params):
 	log_info("Loading sprite into scene: " + params.scene_path)
 
-	var full_scene_path = params.scene_path
-	if not full_scene_path.begins_with("res://"):
-		full_scene_path = "res://" + full_scene_path
+	var full_scene_path = _sanitize_res_path(params.scene_path)
 
 	if not FileAccess.file_exists(full_scene_path):
 		log_error("Scene file does not exist: " + full_scene_path)
 		quit(1)
 
-	var full_texture_path = params.texture_path
-	if not full_texture_path.begins_with("res://"):
-		full_texture_path = "res://" + full_texture_path
+	var full_texture_path = _sanitize_res_path(params.texture_path)
 
 	var scene = load(full_scene_path)
 	if not scene:
@@ -400,13 +391,9 @@ func load_sprite(params):
 func export_mesh_library(params):
 	log_info("Exporting MeshLibrary from scene: " + params.scene_path)
 
-	var full_scene_path = params.scene_path
-	if not full_scene_path.begins_with("res://"):
-		full_scene_path = "res://" + full_scene_path
+	var full_scene_path = _sanitize_res_path(params.scene_path)
 
-	var full_output_path = params.output_path
-	if not full_output_path.begins_with("res://"):
-		full_output_path = "res://" + full_output_path
+	var full_output_path = _sanitize_res_path(params.output_path)
 
 	if not FileAccess.file_exists(full_scene_path):
 		log_error("Scene file does not exist: " + full_scene_path)
@@ -479,9 +466,7 @@ func export_mesh_library(params):
 func save_scene(params):
 	log_info("Saving scene: " + params.scene_path)
 
-	var full_scene_path = params.scene_path
-	if not full_scene_path.begins_with("res://"):
-		full_scene_path = "res://" + full_scene_path
+	var full_scene_path = _sanitize_res_path(params.scene_path)
 
 	if not FileAccess.file_exists(full_scene_path):
 		log_error("Scene file does not exist: " + full_scene_path)
@@ -494,9 +479,7 @@ func save_scene(params):
 
 	var scene_root = scene.instantiate()
 
-	var save_path = params.new_path if params.has("new_path") else full_scene_path
-	if params.has("new_path") and not save_path.begins_with("res://"):
-		save_path = "res://" + save_path
+	var save_path = _sanitize_res_path(params.new_path) if params.has("new_path") else full_scene_path
 
 	# Create directory if needed
 	if params.has("new_path"):
@@ -526,10 +509,42 @@ func save_scene(params):
 	scene_root.free()
 
 
+
+# ─── Security helpers ───────────────────────────────────────────────────────
+
+const BLOCKED_PROPERTIES := [
+	"script", "owner", "process_mode", "process_priority", "process_input",
+	"process_unhandled_input", "process_unhandled_key_input", "process_internal",
+	"physics_process_mode", "physics_interpolation_mode", "name", "meta",
+	"input_event", "ready", "tree_entered", "tree_exited", "tree_exiting",
+]
+
+func _is_safe_property(prop_name: String) -> bool:
+	if prop_name.begins_with("_"):
+		return false
+	if prop_name in BLOCKED_PROPERTIES:
+		return false
+	return true
+
+
+
+func _sanitize_res_path(path: String) -> String:
+	var full = path if path.begins_with("res://") else "res://" + path
+	var parts = full.substr(6).split("/")
+	var normalized = []
+	for part in parts:
+		if part == ".." or part == ".":
+			continue
+		if not part.is_empty():
+			normalized.append(part)
+	return "res://" + "/".join(normalized)
+
 # ─── File helpers ─────────────────────────────────────────────────────────────
 
-func find_files(path: String, extension: String) -> Array:
+func find_files(path: String, extension: String, depth: int = 0) -> Array:
 	var files = []
+	if depth > 10:
+		return files
 	var dir = DirAccess.open(path)
 
 	if dir:
@@ -538,7 +553,7 @@ func find_files(path: String, extension: String) -> Array:
 
 		while file_name != "":
 			if dir.current_is_dir() and not file_name.begins_with("."):
-				files.append_array(find_files(path + file_name + "/", extension))
+				files.append_array(find_files(path + file_name + "/", extension, depth + 1))
 			elif file_name.ends_with(extension):
 				files.append(path + file_name)
 			file_name = dir.get_next()
@@ -551,9 +566,7 @@ func get_uid(params):
 		log_error("File path is required")
 		quit(1)
 
-	var file_path = params.file_path
-	if not file_path.begins_with("res://"):
-		file_path = "res://" + file_path
+	var file_path = _sanitize_res_path(params.file_path)
 
 	log_info("Getting UID for file: " + file_path)
 
@@ -591,9 +604,7 @@ func resave_resources(params):
 
 	var project_path = "res://"
 	if params.has("project_path"):
-		project_path = params.project_path
-		if not project_path.begins_with("res://"):
-			project_path = "res://" + project_path
+		project_path = _sanitize_res_path(params.project_path)
 		if not project_path.ends_with("/"):
 			project_path += "/"
 
