@@ -22,6 +22,7 @@ const TOOL_NAMES = [
   'inspect_node',
   'edit_node',
   'remove_node',
+  'instance_scene',
 ] as const;
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
@@ -199,6 +200,23 @@ export function getToolDefinitions(): Tool[] {
           load_autoloads: { type: 'boolean', description: 'Load Autoload context (default: true)', default: true },
         },
         required: ['project_path', 'scene_path', 'node_path'],
+      },
+    },
+    {
+      name: 'instance_scene',
+      description: 'Instantiate a .tscn scene file as a child node in a target scene via headless GDScript execution. '
+        + 'The instanced scene is added at runtime and is not persisted — edit the .tscn file to persist.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          project_path: { type: 'string', description: 'Path to Godot project directory' },
+          scene_path: { type: 'string', description: 'Target scene path relative to project' },
+          instance_path: { type: 'string', description: 'Scene file to instantiate (res://scenes/player.tscn)' },
+          parent_node_path: { type: 'string', description: 'Parent node path (default: root)', default: 'root' },
+          node_name: { type: 'string', description: 'Optional instance node name' },
+          properties: { type: 'object', description: 'Optional initial property overrides' },
+        },
+        required: ['project_path', 'scene_path', 'instance_path'],
       },
     },
   ];
@@ -620,6 +638,10 @@ func _initialize():
       return parseGdscriptResult(result, [], (msg) => msg.includes('not found') ? 'NODE_NOT_FOUND' : 'SCRIPT_EXEC_FAILED');
     }
 
+    case 'instance_scene': {
+      return handleInstanceScene(args, ctx);
+    }
+
     default:
       return null;
   }
@@ -667,6 +689,108 @@ function gdScriptSetLine(key: string, value: unknown): string {
   throw new Error(`Property "${key}" has unsupported type. Use string/number/bool/null, array [2]=Vector2/[3]=Vector3/[4]=Color, or object {x,y}/{x,y,z}/{r,g,b,a}.`);
 }
 
+// ─── GDScript value literal helper ──────────────────────────────────────────
+
+const BLOCKED_PROPS = new Set(['script', 'owner', 'name', 'parent', 'children', 'tree']);
+
+function gdScriptValue(v: unknown): string {
+  if (typeof v === 'string') return '"' + gdEscape(v) + '"';
+  if (typeof v === 'number') return String(v);
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  if (v === null || v === undefined) return 'null';
+  if (Array.isArray(v)) return '[' + v.map(gdScriptValue).join(', ') + ']';
+  if (typeof v === 'object') {
+    const entries = Object.entries(v as Record<string, unknown>);
+    return '{' + entries.map(([k, val]) => '"' + gdEscape(k) + '": ' + gdScriptValue(val)).join(', ') + '}';
+  }
+  return String(v);
+}
+
+// ─── instance_scene handler ──────────────────────────────────────────────────
+
+async function handleInstanceScene(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  // 必需参数校验
+  if (!args.project_path) return opsErrorResult('MISSING_PARAM', 'project_path is required');
+  if (!args.scene_path) return opsErrorResult('MISSING_PARAM', 'scene_path is required');
+  if (!args.instance_path) return opsErrorResult('MISSING_PARAM', 'instance_path is required');
+
+  const p = validatePath(args.project_path as string);
+  const scenePath = resolveWithinRoot(p, normalizeUserProjectPath(args.scene_path as string));
+  const instancePath = String(args.instance_path);
+
+  // 校验 instance_path 后缀
+  if (!instancePath.endsWith('.tscn')) {
+    return opsErrorResult('INVALID_PARAM', 'instance_path must end with .tscn');
+  }
+
+  // 循环引用检查
+  if (scenePath === instancePath || args.scene_path === args.instance_path) {
+    return opsErrorResult('CIRCULAR_REFERENCE', 'CIRCULAR: scene_path and instance_path must not be the same');
+  }
+
+  const parentNodePath = normalizeNodePath((args.parent_node_path as string) || 'root');
+  const nodeName = args.node_name ? String(args.node_name) : '';
+
+  // 属性覆写中排除危险属性
+  const properties = (args.properties as Record<string, unknown>) || {};
+  const safeProps = Object.entries(properties).filter(([k]) => !BLOCKED_PROPS.has(k));
+
+  let propLines = '';
+  for (const [key, value] of safeProps) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) continue;
+    const gdVal = gdScriptValue(value);
+    propLines += `\n\tif _inst.get_property_list().any(func(p): return p.name == "${gdEscape(key)}"):`;
+    propLines += `\n\t\t_inst.set("${gdEscape(key)}", ${gdVal})`;
+  }
+
+  const nameLine = nodeName ? `\n\t_inst.name = "${gdEscape(nodeName)}"` : '';
+
+  const script = `${SCENE_TREE_HEADER}
+func _initialize():
+\tif not _mcp_load_scene("${gdEscape(scenePath)}"):
+\t\t_mcp_done()
+\t\treturn
+\tvar _scene_res = load("${gdEscape(instancePath)}")
+\tif _scene_res == null:
+\t\t_mcp_output("error", "Failed to load instance: ${gdEscape(instancePath)}")
+\t\t_mcp_done()
+\t\treturn
+\tif not (_scene_res is PackedScene):
+\t\t_mcp_output("error", "Resource is not a PackedScene: ${gdEscape(instancePath)}")
+\t\t_mcp_done()
+\t\treturn
+\tvar _inst = _scene_res.instantiate()
+\tif _inst == null:
+\t\t_mcp_output("error", "Failed to instantiate: ${gdEscape(instancePath)}")
+\t\t_mcp_done()
+\t\treturn${nameLine}${propLines}
+\tvar _parent = _mcp_get_scene_node("${gdEscape(parentNodePath)}")
+\tif _parent == null:
+\t\t_mcp_output("error", "Parent node not found: ${gdEscape(parentNodePath)}")
+\t\t_mcp_done()
+\t\treturn
+\t_parent.add_child(_inst, true)
+\t_mcp_output("instanced", {
+\t\t"node_name": str(_inst.name),
+\t\t"node_type": _inst.get_class(),
+\t\t"instance_of": "${gdEscape(instancePath)}",
+\t\t"path": str(_inst.get_path())
+\t})
+\t_mcp_done()
+`;
+
+  const godot = await ctx.findGodot();
+  const result = await executeGdscript({
+    godotPath: godot, projectPath: p, code: script, timeout: 30, loadAutoloads: true,
+  });
+  return parseGdscriptResult(result, [], (msg) => {
+    if (msg.includes('not found')) return 'NODE_NOT_FOUND';
+    if (msg.includes('not a PackedScene')) return 'INVALID_RESOURCE';
+    if (msg.includes('Failed to load')) return 'LOAD_FAILED';
+    return 'SCRIPT_EXEC_FAILED';
+  });
+}
+
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   read_scene: { readonly: true, long_running: false },
   create_scene: { readonly: false, long_running: false },
@@ -679,4 +803,5 @@ export const TOOL_META: Record<string, { readonly: boolean; long_running: boolea
   inspect_node: { readonly: true, long_running: false },
   edit_node: { readonly: false, long_running: false },
   remove_node: { readonly: false, long_running: false },
+  instance_scene: { readonly: false, long_running: true },
 };
