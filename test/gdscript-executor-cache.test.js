@@ -1,8 +1,7 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-// Import cache management from gdscript-executor (re-exported from GodotServer)
-import { clearGodotPathCache, getCachedGodotPath } from '../build/gdscript-executor.js';
+import { clearGodotPathCache, getCachedGodotPath } from '../build/GodotServer.js';
 
 describe('Godot path cache', () => {
   beforeEach(() => {
