@@ -6,6 +6,7 @@ import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { validatePath, resolveWithinRoot, normalizeUserProjectPath, ensureDir, parseMcpScriptOutput } from '../helpers.js';
 import { parseTscn, parseTscnSummary } from '../tscn-parser.js';
+import { findInstanceNode, detachInstance, nodePathToNameAndParent } from '../tscn-editor.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, opsErrorResult, parseGdscriptResult } from './shared.js';
 import { normalizeNodePath, gdEscape } from './shared.js';
@@ -24,6 +25,7 @@ const TOOL_NAMES = [
   'remove_node',
   'instance_scene',
   'set_instance_property',
+  'detach_instance',
 ] as const;
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
@@ -235,6 +237,21 @@ export function getToolDefinitions(): Tool[] {
           load_autoloads: { type: 'boolean', description: 'Load Autoload context (default: true)', default: true },
         },
         required: ['project_path', 'scene_path', 'node_path', 'property', 'value'],
+      },
+    },
+    {
+      name: 'detach_instance',
+      description: 'Detach (inline) an instanced scene node by replacing the instance reference '
+        + 'with the full inlined subtree from the source scene. Equivalent to Godot\'s "Make Local" '
+        + 'operation. This is a pure .tscn text edit — no GDScript execution required.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          project_path: { type: 'string', description: 'Path to Godot project directory' },
+          scene_path: { type: 'string', description: 'Target scene path relative to project' },
+          node_path: { type: 'string', description: 'Path to the instance node (e.g. "root/Player")' },
+        },
+        required: ['project_path', 'scene_path', 'node_path'],
       },
     },
   ];
@@ -664,6 +681,10 @@ func _initialize():
       return handleSetInstanceProperty(args, ctx);
     }
 
+    case 'detach_instance': {
+      return handleDetachInstance(args);
+    }
+
     default:
       return null;
   }
@@ -908,6 +929,81 @@ func _initialize():
   });
 }
 
+// ─── detach_instance handler (TS-side .tscn text edit) ─────────────────────
+
+function handleDetachInstance(args: Record<string, unknown>): ToolResult {
+  if (!args.project_path) return opsErrorResult('MISSING_PARAM', 'project_path is required');
+  if (!args.scene_path) return opsErrorResult('MISSING_PARAM', 'scene_path is required');
+  if (!args.node_path) return opsErrorResult('MISSING_PARAM', 'node_path is required');
+
+  const p = validatePath(args.project_path as string);
+  const sceneAbsPath = resolveWithinRoot(p, normalizeUserProjectPath(args.scene_path as string));
+
+  if (!existsSync(sceneAbsPath)) {
+    return textResult(`Error: Scene file not found: ${sceneAbsPath}`);
+  }
+
+  // Resolve node_path → nodeName + tscnParent
+  let nodeName: string;
+  let tscnParent: string;
+  try {
+    const parsed = nodePathToNameAndParent(String(args.node_path));
+    nodeName = parsed.nodeName;
+    tscnParent = parsed.parent;
+  } catch (e: unknown) {
+    return opsErrorResult('INVALID_PARAM', (e as Error).message);
+  }
+
+  // Read target .tscn
+  let targetContent: string;
+  try {
+    targetContent = readFileSync(sceneAbsPath, 'utf-8');
+  } catch (e: unknown) {
+    return textResult(`Error reading scene: ${(e as Error).message}`);
+  }
+
+  // Find the instance node
+  const info = findInstanceNode(targetContent, nodeName, tscnParent);
+  if (!info) {
+    return opsErrorResult('NOT_AN_INSTANCE', `Node "${nodeName}" (parent: "${tscnParent}") is not an instance or not found`);
+  }
+
+  // Read source .tscn
+  const sourceAbsPath = resolveWithinRoot(p, info.sourcePath.replace(/^res:\/\//, ''));
+  if (!existsSync(sourceAbsPath)) {
+    return textResult(`Error: Source scene not found: ${info.sourcePath} (${sourceAbsPath})`);
+  }
+
+  let sourceContent: string;
+  try {
+    sourceContent = readFileSync(sourceAbsPath, 'utf-8');
+  } catch (e: unknown) {
+    return textResult(`Error reading source scene: ${(e as Error).message}`);
+  }
+
+  // Backup target content
+  const backup = targetContent;
+
+  // Perform detach
+  let result: string;
+  try {
+    result = detachInstance(targetContent, sourceContent, nodeName, tscnParent);
+  } catch (e: unknown) {
+    return textResult(`Error detaching instance: ${(e as Error).message}`);
+  }
+
+  // Write result, rollback on error
+  try {
+    writeFileSync(sceneAbsPath, result, 'utf-8');
+  } catch (e: unknown) {
+    // Rollback
+    try { writeFileSync(sceneAbsPath, backup, 'utf-8'); } catch { /* best effort */ }
+    return textResult(`Error writing scene (rolled back): ${(e as Error).message}`);
+  }
+
+  return textResult(`Detached instance "${nodeName}" — inlined from ${info.sourcePath} (${info.propertyOverrides.length} property override(s) preserved)`);
+}
+
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   read_scene: { readonly: true, long_running: false },
   create_scene: { readonly: false, long_running: false },
@@ -922,4 +1018,5 @@ export const TOOL_META: Record<string, { readonly: boolean; long_running: boolea
   remove_node: { readonly: false, long_running: false },
   instance_scene: { readonly: false, long_running: true },
   set_instance_property: { readonly: false, long_running: true },
+  detach_instance: { readonly: false, long_running: false },
 };

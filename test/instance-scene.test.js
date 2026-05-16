@@ -105,3 +105,36 @@ describe('set_instance_property tool definition', () => {
     assert.ok(result.content[0].text.includes('INVALID_PARAM') || result.content[0].text.includes('Invalid property'));
   });
 });
+
+describe('detach_instance tool definition', () => {
+  it('should be registered in TOOL_NAMES', async () => {
+    const result = await scene.handleTool('detach_instance', {
+      project_path: '/tmp/test',
+      scene_path: 'res://main.tscn',
+    }, { opsScript: '' });
+    assert.ok(result !== null, 'handleTool should return non-null for detach_instance');
+  });
+
+  it('should have tool definition', () => {
+    const defs = scene.getToolDefinitions();
+    const def = defs.find(d => d.name === 'detach_instance');
+    assert.ok(def, 'detach_instance tool definition not found');
+    assert.deepEqual(def.inputSchema.required, ['project_path', 'scene_path', 'node_path']);
+  });
+
+  it('should be marked as write tool', () => {
+    const meta = scene.TOOL_META;
+    assert.ok(meta['detach_instance']);
+    assert.equal(meta['detach_instance'].readonly, false);
+    assert.equal(meta['detach_instance'].long_running, false);
+  });
+
+  it('should reject missing node_path', async () => {
+    const result = await scene.handleTool('detach_instance', {
+      project_path: '/tmp/test',
+      scene_path: 'res://main.tscn',
+    }, { opsScript: '' });
+    assert.ok(result);
+    assert.ok(result.content[0].text.includes('MISSING_PARAM') || result.content[0].text.includes('node_path'));
+  });
+});

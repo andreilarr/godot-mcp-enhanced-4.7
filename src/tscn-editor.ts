@@ -415,3 +415,381 @@ export function changeNodeType(
     scene: lines.join('\n'),
   };
 }
+
+// ── Detach instance (inline subtree) ─────────────────────────────────────────
+
+export interface InstanceNodeInfo {
+  instanceId: number;
+  sourcePath: string;
+  lineIndex: number;
+  propertyOverrides: string[];
+}
+
+/**
+ * Parse all [ext_resource ...] lines from .tscn text, returning id → path map.
+ */
+function parseExtResourceMap(lines: string[]): Map<number, string> {
+  const map = new Map<number, string>();
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('[ext_resource')) continue;
+    // Match id="N" and path="res://..."
+    const idMatch = trimmed.match(/id="(\d+)"/);
+    const pathMatch = trimmed.match(/path="([^"]+)"/);
+    if (idMatch && pathMatch) {
+      map.set(parseInt(idMatch[1]), pathMatch[1]);
+    }
+  }
+  return map;
+}
+
+/**
+ * Convert node_path format to .tscn parent format.
+ * "root/Player" → "."  (direct child of root)
+ * "root/Level/Player" → "Level"
+ * "." or "root" → "."
+ */
+function parentToTscnParent(nodePathParent: string): string {
+  if (nodePathParent === '.' || nodePathParent === 'root' || nodePathParent === '/root') {
+    return '.';
+  }
+  let p = nodePathParent.startsWith('/') ? nodePathParent.slice(1) : nodePathParent;
+  if (p.startsWith('root/')) {
+    p = p.slice('root/'.length);
+  } else if (p === 'root') {
+    return '.';
+  }
+  return p || '.';
+}
+
+/**
+ * Convert node_path to (nodeName, tscnParent) pair.
+ * "/root/Player/Sprite" → ("Sprite", "Player")
+ * "/root/Player" → ("Player", ".")
+ */
+export function nodePathToNameAndParent(nodePath: string): { nodeName: string; parent: string } {
+  let p = nodePath.startsWith('/') ? nodePath.slice(1) : nodePath;
+  if (p.startsWith('root/')) {
+    p = p.slice('root/'.length);
+  } else if (p === 'root') {
+    throw new Error('Cannot detach the root node');
+  }
+  const parts = p.split('/');
+  const nodeName = parts.pop()!;
+  const parent = parts.length === 0 ? '.' : parts.join('/');
+  return { nodeName, parent };
+}
+
+/**
+ * Scan .tscn text to find a node with `instance=ExtResource(N)`.
+ *
+ * @param nodeName - The value of the `name` attribute in .tscn
+ * @param parent - The .tscn parent value: "." for root children, "ParentName" for nested
+ */
+export function findInstanceNode(
+  tscn: string,
+  nodeName: string,
+  parent: string,
+): InstanceNodeInfo | null {
+  const lines = normalizeLines(tscn);
+  const extMap = parseExtResourceMap(lines);
+
+  const tscnParent = parentToTscnParent(parent);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.startsWith('[node ')) continue;
+
+    const nameMatch = line.match(/name="([^"]+)"/);
+    if (!nameMatch || nameMatch[1] !== nodeName) continue;
+
+    const parentMatch = line.match(/parent="([^"]+)"/);
+    const lineParent = parentMatch ? parentMatch[1] : '.';
+    if (lineParent !== tscnParent) continue;
+
+    const instanceMatch = line.match(/instance=ExtResource\("(\d+)"\)/);
+    if (!instanceMatch) continue;
+
+    const instanceId = parseInt(instanceMatch[1]);
+    const sourcePath = extMap.get(instanceId);
+    if (!sourcePath) return null;
+
+    // Collect property overrides: lines after [node] with '=' that don't start with '['
+    const propertyOverrides: string[] = [];
+    const end = findSectionEnd(lines, i);
+    for (let j = i + 1; j < end; j++) {
+      const propLine = lines[j];
+      if (propLine.includes('=')) {
+        propertyOverrides.push(propLine);
+      }
+    }
+
+    return { instanceId, sourcePath, lineIndex: i, propertyOverrides };
+  }
+
+  return null;
+}
+
+/**
+ * Find max ext_resource id in a .tscn text.
+ */
+function findMaxExtResourceId(lines: string[]): number {
+  let maxId = 0;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('[ext_resource')) continue;
+    const m = trimmed.match(/id="(\d+)"/);
+    if (m) {
+      const id = parseInt(m[1]);
+      if (id > maxId) maxId = id;
+    }
+  }
+  return maxId;
+}
+
+/**
+ * Extract sections from source .tscn text into structured groups.
+ */
+function parseSourceScene(sourceTscn: string): {
+  extResources: string[];
+  nodeGroups: Array<{ header: string; props: string[] }>;
+} {
+  const lines = normalizeLines(sourceTscn);
+  const extResources: string[] = [];
+  const nodeGroups: Array<{ header: string; props: string[] }> = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('[ext_resource')) {
+      extResources.push(trimmed);
+    } else if (trimmed.startsWith('[node')) {
+      nodeGroups.push({ header: trimmed, props: [] });
+    } else if (nodeGroups.length > 0 && trimmed !== '' && !trimmed.startsWith('[')) {
+      nodeGroups[nodeGroups.length - 1].props.push(line);
+    }
+  }
+
+  return { extResources, nodeGroups };
+}
+
+/**
+ * Remap ext_resource IDs in source lines to avoid conflicts with target.
+ */
+function remapExtResourceIds(
+  sourceExtResources: string[],
+  targetMaxId: number,
+): { remapped: string[]; idMap: Map<number, number> } {
+  const idMap = new Map<number, number>();
+  let nextId = targetMaxId + 1;
+
+  const remapped = sourceExtResources.map((line) => {
+    const idMatch = line.match(/id="(\d+)"/);
+    if (!idMatch) return line;
+    const oldId = parseInt(idMatch[1]);
+    const newId = nextId++;
+    idMap.set(oldId, newId);
+    return line.replace(`id="${oldId}"`, `id="${newId}"`);
+  });
+
+  return { remapped, idMap };
+}
+
+/**
+ * Apply ID remapping to a line's ExtResource("N") references.
+ */
+function remapNodeLineRefs(line: string, idMap: Map<number, number>): string {
+  return line.replace(/ExtResource\("(\d+)"\)/g, (_match, idStr) => {
+    const oldId = parseInt(idStr);
+    const newId = idMap.get(oldId);
+    return newId !== undefined ? `ExtResource("${newId}")` : _match;
+  });
+}
+
+/**
+ * Detach (inline) an instance node by replacing `instance=ExtResource(N)` with
+ * the expanded subtree from the source scene.
+ *
+ * Equivalent to Godot editor's "Make Local" operation.
+ *
+ * @param targetTscn - The .tscn file text containing the instance reference
+ * @param sourceTscn - The .tscn file text of the instanced scene
+ * @param nodeName - The node name as used in .tscn `name` attribute
+ * @param parent - The .tscn parent value ("." for root children, "X" for nested)
+ */
+export function detachInstance(
+  targetTscn: string,
+  sourceTscn: string,
+  nodeName: string,
+  parent: string,
+): string {
+  const info = findInstanceNode(targetTscn, nodeName, parent);
+  if (!info) throw new Error(`Instance node not found: ${nodeName} (parent: ${parent})`);
+
+  const targetLines = normalizeLines(targetTscn);
+  const source = parseSourceScene(sourceTscn);
+
+  if (source.nodeGroups.length === 0) {
+    throw new Error('Source scene has no nodes');
+  }
+
+  // 1. Find max ext_resource ID in target for remapping
+  const targetMaxId = findMaxExtResourceId(targetLines);
+
+  // 2. Remap source ext_resource IDs to avoid conflicts
+  const { remapped: remappedExtResources, idMap } = remapExtResourceIds(
+    source.extResources,
+    targetMaxId,
+  );
+
+  // 3. Build expanded node lines from source
+  const expandedLines: string[] = [];
+
+  // Root node: remove instance attr, adjust name and parent
+  const rootGroup = source.nodeGroups[0];
+  let rootHeader = rootGroup.header;
+
+  // Remove instance=ExtResource("N") if present (source might itself be instanced)
+  rootHeader = rootHeader.replace(/\s*instance=ExtResource\("\d+"\)/, '');
+
+  // Determine the target parent attribute for this node
+  const tscnParent = parentToTscnParent(parent);
+
+  // Set name to the instance node's name
+  rootHeader = rootHeader.replace(/name="[^"]+"/, `name="${nodeName}"`);
+
+  // Set parent
+  if (!rootHeader.includes('parent=')) {
+    if (tscnParent !== '.') {
+      rootHeader = rootHeader.replace(']', ` parent="${tscnParent}"]`);
+    }
+    // If tscnParent is ".", root node has no parent attr — which is correct for scene root children
+    // But in a target scene, nodes under root need parent="."
+    // Only the source root (which has no parent attr) needs adjustment when being inlined
+    // under a non-root parent. If being inlined as direct child of target root (parent="."),
+    // no parent attr is needed.
+    if (tscnParent === '.') {
+      // Explicit parent="." for clarity
+      rootHeader = rootHeader.replace(']', ` parent="."]`);
+    }
+  } else {
+    rootHeader = rootHeader.replace(/parent="[^"]+"/, `parent="${tscnParent}"`);
+  }
+
+  // Remap ExtResource references in root header
+  rootHeader = remapNodeLineRefs(rootHeader, idMap);
+
+  expandedLines.push(rootHeader);
+
+  // Add root node property lines (remapped)
+  for (const propLine of rootGroup.props) {
+    expandedLines.push(remapNodeLineRefs(propLine, idMap));
+  }
+
+  // Add property overrides from target instance
+  for (const override of info.propertyOverrides) {
+    expandedLines.push(override);
+  }
+
+  // Child nodes: prepend nodeName/ to their parent attribute
+  for (let i = 1; i < source.nodeGroups.length; i++) {
+    const group = source.nodeGroups[i];
+    let header = group.header;
+
+    const parentMatch = header.match(/parent="([^"]+)"/);
+    if (parentMatch) {
+      const originalParent = parentMatch[1];
+      const newParent = originalParent === '.' ? nodeName : `${nodeName}/${originalParent}`;
+      header = header.replace(/parent="[^"]+"/, `parent="${newParent}"`);
+    } else {
+      header = header.replace(']', ` parent="${nodeName}"]`);
+    }
+
+    header = remapNodeLineRefs(header, idMap);
+
+    expandedLines.push(header);
+    for (const propLine of group.props) {
+      expandedLines.push(remapNodeLineRefs(propLine, idMap));
+    }
+  }
+
+  // 4. Build result: replace instance line with expanded subtree, insert new ext_resources
+  const instanceEndIdx = info.lineIndex + 1 + info.propertyOverrides.length;
+
+  // Find where to insert new ext_resources (after last existing ext_resource)
+  let lastExtResourceIdx = -1;
+  for (let i = 0; i < targetLines.length; i++) {
+    if (targetLines[i].trim().startsWith('[ext_resource')) {
+      lastExtResourceIdx = i;
+    }
+  }
+
+  const cleanResult: string[] = [];
+  let insertedExpanded = false;
+
+  for (let i = 0; i < targetLines.length; i++) {
+    // Skip the instance node line and its property overrides
+    if (i >= info.lineIndex && i < instanceEndIdx) {
+      if (!insertedExpanded) {
+        for (const expLine of expandedLines) {
+          cleanResult.push(expLine);
+        }
+        insertedExpanded = true;
+      }
+      continue;
+    }
+
+    cleanResult.push(targetLines[i]);
+
+    // After last existing ext_resource, insert new ext_resources from source
+    if (i === lastExtResourceIdx && remappedExtResources.length > 0) {
+      for (const extLine of remappedExtResources) {
+        cleanResult.push(extLine);
+      }
+    }
+  }
+
+  if (!insertedExpanded) {
+    for (const expLine of expandedLines) {
+      cleanResult.push(expLine);
+    }
+  }
+
+  // 5. Remove the now-unused ext_resource if no other nodes reference it
+  const refPattern = new RegExp(`ExtResource\\("${info.instanceId}"\\)`);
+  let otherRefs = 0;
+  for (const line of cleanResult) {
+    if (refPattern.test(line)) {
+      otherRefs++;
+    }
+  }
+
+  if (otherRefs === 0) {
+    const extLinePattern = new RegExp(`^\\s*\\[ext_resource[^\\]]*id="${info.instanceId}"`);
+    for (let i = cleanResult.length - 1; i >= 0; i--) {
+      if (extLinePattern.test(cleanResult[i])) {
+        cleanResult.splice(i, 1);
+        break;
+      }
+    }
+  }
+
+  // 6. Update load_steps in header if present
+  let extCount = 0;
+  let subCount = 0;
+  for (const line of cleanResult) {
+    if (line.trim().startsWith('[ext_resource')) extCount++;
+    if (line.trim().startsWith('[sub_resource')) subCount++;
+  }
+  const newLoadSteps = extCount + subCount + 1;
+  for (let i = 0; i < cleanResult.length; i++) {
+    if (cleanResult[i].startsWith('[gd_scene') && cleanResult[i].includes('load_steps=')) {
+      cleanResult[i] = cleanResult[i].replace(
+        /load_steps=\d+/,
+        `load_steps=${newLoadSteps}`,
+      );
+      break;
+    }
+  }
+
+  return cleanResult.join('\n');
+}
