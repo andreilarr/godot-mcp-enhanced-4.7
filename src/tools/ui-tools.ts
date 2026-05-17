@@ -674,10 +674,11 @@ export function getToolDefinitions(): Tool[] {
             description: 'create 创建空 Theme | extract 从节点提取 Theme',
           },
           source_node_path: { type: 'string', description: '源节点路径（extract 时必填）' },
+          scene_path: { type: 'string', description: 'Scene file path (res://...)' },
           save_path: { type: 'string', description: '可选，保存到 .tres 文件路径（res://themes/xxx.tres）' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'action'],
+        required: ['project_path', 'scene_path', 'action'],
       },
     },
     {

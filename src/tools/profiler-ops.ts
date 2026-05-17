@@ -254,7 +254,7 @@ export async function handleTool(
   try {
     const projectPath = validatePath(args.project_path as string);
     const action = args.action as string;
-    const loadAutoloads = (args.load_autoloads as boolean) ?? true;
+    const loadAutoloads = (args.load_autoloads as boolean) !== false;
     const godotPath = await ctx.findGodot();
 
     let code: string;

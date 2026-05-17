@@ -77,8 +77,10 @@ function runScreenshot(
     proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
 
     let killTimer: ReturnType<typeof setTimeout> | undefined;
+    let settled = false;
     const timer = setTimeout(() => {
-      if (!proc.killed) {
+      if (!settled && !proc.killed) {
+        settled = true;
         proc.kill('SIGTERM');
         killTimer = setTimeout(() => { if (!proc.killed) proc.kill('SIGKILL'); }, 3000);
         resolve({ code: -1, output: out + `\n[TIMEOUT] Killed after ${timeout}s` });
@@ -88,6 +90,8 @@ function runScreenshot(
     proc.on('close', (code) => {
       clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
+      if (settled) return;
+      settled = true;
       resolve({ code, output: out });
     });
   });
@@ -176,11 +180,10 @@ export async function captureScreenshot(
   // --- Retry: if primary mode failed but process succeeded, retry with doubled frame delay ---
   if (!existsSync(outputPath) && result1.code === 0) {
     const retryArgs = [...args];
-    // Update frame delay in args (it's the second-to-last positional arg before viewport size)
-    const vpSizeArg = `${viewportSize.width}x${viewportSize.height}`;
-    const vpIdx = retryArgs.indexOf(vpSizeArg);
-    if (vpIdx > 0) {
-      retryArgs[vpIdx - 1] = String(frameDelay * 2);
+    // Frame delay is at args.length - 2 (second-to-last), viewport size is last
+    const fdIdx = retryArgs.length - 2;
+    if (fdIdx >= 0) {
+      retryArgs[fdIdx] = String(frameDelay * 2);
     }
     const retryResult = await runScreenshot(godotPath, retryArgs, timeout);
     if (existsSync(outputPath)) {

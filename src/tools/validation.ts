@@ -3,6 +3,7 @@ import { join, dirname, resolve as pathResolve } from 'path';
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { execFile } from 'child_process';
+import { randomUUID } from 'crypto';
 import { promisify } from 'util';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
@@ -119,7 +120,7 @@ export async function batchValidateScripts(
 
   const tmpDir = join(tmpdir(), 'godot-mcp-exec');
   mkdirSync(tmpDir, { recursive: true });
-  const listId = Math.random().toString(36).substring(2, 10);
+  const listId = randomUUID().replace(/-/g, '').substring(0, 8);
   const listPath = join(tmpDir, `validate-list-${listId}.json`).replace(/\\/g, '/');
   writeFileSync(listPath, JSON.stringify(resPaths), 'utf-8');
 

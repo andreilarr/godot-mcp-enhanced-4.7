@@ -2,10 +2,36 @@ import { spawn } from 'child_process';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { join } from 'path';
 import { appendOutput, clearOutputBuffer } from '../core/process-state.js';
-import { existsSync } from 'fs';
 import { validatePath, checkVersionMismatch } from '../helpers.js';
+import { existsSync } from 'fs';
+import { join } from 'path';
+
+const isWin = process.platform === 'win32';
+
+function killProcess(proc: import('child_process').ChildProcess): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      try { proc.kill('SIGKILL'); } catch { /* already dead */ }
+      resolve();
+    }, 5000);
+
+    proc.on('close', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+
+    if (isWin) {
+      try {
+        spawn('taskkill', ['/F', '/T', '/PID', String(proc.pid)], { stdio: 'ignore' });
+      } catch {
+        proc.kill();
+      }
+    } else {
+      proc.kill('SIGTERM');
+    }
+  });
+}
 
 const TOOL_NAMES = [
   'launch_editor',
@@ -104,6 +130,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
   switch (name) {
     case 'launch_editor': {
       const p = validatePath(args.project_path as string);
+      if (!existsSync(join(p, 'project.godot'))) {
+        return textResult(`Error: Not a Godot project (no project.godot found): ${p}`);
+      }
       const godot = await ctx.findGodot();
       spawn(godot, ['--editor', '--path', p], { detached: true, stdio: 'ignore' }).unref();
       return textResult(`Launched Godot editor for project: ${p}`);
@@ -111,7 +140,10 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
     case 'run_project': {
       const p = validatePath(args.project_path as string);
-      const timeout = (args.timeout as number) || 30;
+      if (!existsSync(join(p, 'project.godot'))) {
+        return textResult(`Error: Not a Godot project (no project.godot found): ${p}`);
+      }
+      const timeout = Math.max(5, Number(args.timeout) || 30);
       const godot = await ctx.findGodot();
 
       // Version mismatch warning
@@ -120,7 +152,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       // Stop existing
       if (ctx.runningProcess) {
-        ctx.runningProcess.kill('SIGTERM');
+        await killProcess(ctx.runningProcess);
         ctx.setRunningProcess(null);
       }
 
@@ -149,7 +181,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       if (timeout > 0) {
         const autoStopTimer = setTimeout(() => {
           if (ctx.runningProcess === proc) {
-            proc.kill('SIGTERM');
+            killProcess(proc);
             ctx.setRunningProcess(null);
           }
         }, timeout * 1000);
@@ -163,7 +195,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       if (!ctx.runningProcess) {
         return textResult('No project is currently running.');
       }
-      ctx.runningProcess.kill('SIGTERM');
+      await killProcess(ctx.runningProcess);
       ctx.setRunningProcess(null);
 
       const classified = classifyOutput(ctx.outputBuffer);
@@ -197,6 +229,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
     case 'run_tests': {
       const p = validatePath(args.project_path as string);
+      if (!existsSync(join(p, 'project.godot'))) {
+        return textResult(`Error: Not a Godot project (no project.godot found): ${p}`);
+      }
       const testScript = (args.test_script as string) || 'res://test/';
       const godot = await ctx.findGodot();
 
@@ -213,7 +248,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
 
         const timer = setTimeout(() => {
-          if (!proc.killed) proc.kill('SIGTERM');
+          if (!proc.killed) killProcess(proc);
         }, 120000);
 
         proc.on('close', (code) => {

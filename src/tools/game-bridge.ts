@@ -36,6 +36,10 @@ function sendToBridge(method: string, params: Record<string, unknown> = {}, time
   return new Promise((resolve, reject) => {
     const id = _nextRequestId++;
     const secret = readBridgeSecret();
+    let settled = false;
+
+    function doResolve(resp: BridgeResponse) { if (!settled) { settled = true; clearTimeout(timer); resolve(resp); } }
+    function doReject(err: Error) { if (!settled) { settled = true; clearTimeout(timer); reject(err); } }
 
     const socket = createConnection({ port: BRIDGE_PORT, host: BRIDGE_HOST }, () => {
       if (secret) {
@@ -51,7 +55,7 @@ function sendToBridge(method: string, params: Record<string, unknown> = {}, time
     let authDone = !secret;
     const timer = setTimeout(() => {
       socket.destroy();
-      reject(new Error(`Bridge request timed out after ${timeout}ms`));
+      doReject(new Error(`Bridge request timed out after ${timeout}ms`));
     }, timeout);
 
     socket.on('data', (data: Buffer) => {
@@ -67,27 +71,23 @@ function sendToBridge(method: string, params: Record<string, unknown> = {}, time
             authDone = true;
             continue;
           }
-          clearTimeout(timer);
           socket.destroy();
-          resolve(resp);
+          doResolve(resp);
           return;
         } catch {
-          clearTimeout(timer);
           socket.destroy();
-          reject(new Error(`Invalid JSON from bridge: ${line}`));
+          doReject(new Error(`Invalid JSON from bridge: ${line}`));
           return;
         }
       }
     });
 
     socket.on('error', (err) => {
-      clearTimeout(timer);
-      reject(new Error(`Bridge connection error: ${err.message}`));
+      doReject(new Error(`Bridge connection error: ${err.message}`));
     });
 
     socket.on('close', () => {
-      clearTimeout(timer);
-      reject(new Error('Bridge connection closed before response'));
+      doReject(new Error('Bridge connection closed before response'));
     });
   });
 }

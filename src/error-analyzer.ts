@@ -70,7 +70,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     },
   },
   {
-    test: (msg) => /too few arguments for function/.test(msg),
+    test: (msg) => /too few arguments for function/i.test(msg),
     type: 'script_error',
     suggestion: (msg) => {
       const match = msg.match(/function "(\w+)"/);
@@ -79,7 +79,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     },
   },
   {
-    test: (msg) => /too many arguments for function/.test(msg),
+    test: (msg) => /too many arguments for function/i.test(msg),
     type: 'script_error',
     suggestion: (msg) => {
       const match = msg.match(/function "(\w+)"/);

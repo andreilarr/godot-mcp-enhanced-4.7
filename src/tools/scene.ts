@@ -329,11 +329,13 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
         let out = '';
+        let settled = false;
         proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
         proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
 
         const timer = setTimeout(() => {
-          if (!proc.killed) {
+          if (!settled && !proc.killed) {
+            settled = true;
             proc.kill('SIGTERM');
             resolve({ content: [{ type: 'text', text: `${name} timed out.` }] });
           }
@@ -341,6 +343,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
         proc.on('close', (code) => {
           clearTimeout(timer);
+          if (settled) return;
+          settled = true;
           if (code !== 0) {
             resolve({ content: [{ type: 'text', text: `${name} failed (exit code ${code}):\n${out}` }] });
           } else {
@@ -350,6 +354,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
         proc.on('error', (err) => {
           clearTimeout(timer);
+          if (settled) return;
+          settled = true;
           resolve({ content: [{ type: 'text', text: `Error: ${err.message}` }] });
         });
       });
@@ -451,6 +457,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       return new Promise((resolve) => {
         let out = '';
+        let settled = false;
         const proc = spawn(godot, [
           '--headless', '--path', p,
           '--script', treeScript,
@@ -461,7 +468,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
 
         const timer = setTimeout(() => {
-          if (!proc.killed) {
+          if (!settled && !proc.killed) {
+            settled = true;
             proc.kill('SIGTERM');
             resolve(textResult('query_scene_tree timed out after 60s'));
           }
@@ -469,12 +477,16 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
         proc.on('close', (code) => {
           clearTimeout(timer);
+          if (settled) return;
+          settled = true;
           const result = parseMcpScriptOutput(out, code);
           resolve(textResult(JSON.stringify(result, null, 2)));
         });
 
         proc.on('error', (err) => {
           clearTimeout(timer);
+          if (settled) return;
+          settled = true;
           resolve(textResult(`Error: ${err.message}`));
         });
       });
@@ -500,6 +512,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       return new Promise((resolve) => {
         let out = '';
+        let settled = false;
         const proc = spawn(godot, [
           '--headless', '--path', p,
           '--script', inspectScript,
@@ -510,7 +523,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
 
         const timer = setTimeout(() => {
-          if (!proc.killed) {
+          if (!settled && !proc.killed) {
+            settled = true;
             proc.kill('SIGTERM');
             resolve(textResult('inspect_node timed out after 60s'));
           }
@@ -518,12 +532,16 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
         proc.on('close', (code) => {
           clearTimeout(timer);
+          if (settled) return;
+          settled = true;
           const result = parseMcpScriptOutput(out, code);
           resolve(textResult(JSON.stringify(result, null, 2)));
         });
 
         proc.on('error', (err) => {
           clearTimeout(timer);
+          if (settled) return;
+          settled = true;
           resolve(textResult(`Error: ${err.message}`));
         });
       });
@@ -556,11 +574,13 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
         let out = '';
+        let settled = false;
         proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
         proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
 
         const timer = setTimeout(() => {
-          if (!proc.killed) {
+          if (!settled && !proc.killed) {
+            settled = true;
             proc.kill('SIGTERM');
             resolve({ content: [{ type: 'text', text: 'batch_add_nodes timed out after 60s.' }] });
           }
@@ -568,6 +588,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
         proc.on('close', (code) => {
           clearTimeout(timer);
+          if (settled) return;
+          settled = true;
           if (code !== 0) {
             resolve({ content: [{ type: 'text', text: `batch_add_nodes failed (exit code ${code}):\n${out}` }] });
           } else {
@@ -577,6 +599,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
         proc.on('error', (err) => {
           clearTimeout(timer);
+          if (settled) return;
+          settled = true;
           resolve({ content: [{ type: 'text', text: `Error: ${err.message}` }] });
         });
       });
@@ -953,9 +977,6 @@ function handleDetachInstance(args: Record<string, unknown>): ToolResult {
   } catch (e: unknown) {
     return textResult(`Error reading source scene: ${(e as Error).message}`);
   }
-
-  // Backup target content
-  const backup = targetContent;
 
   // Perform detach
   let result: string;
