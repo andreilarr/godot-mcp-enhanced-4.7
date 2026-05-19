@@ -59,7 +59,7 @@ describe('TOOL_NAMES', () => {
 describe('genUiCreateControlScript', () => {
   it('generates GDScript that creates a Control node', () => {
     const script = genUiCreateControlScript('/path/to/scene.tscn', 'Button', 'MyButton', '/root');
-    assert.ok(script.includes('Button.new()'));
+    assert.ok(script.includes('ClassDB.instantiate("Button")'));
     assert.ok(script.includes('node.name = "MyButton"'));
     assert.ok(script.includes('parent.add_child(node)'));
     assert.ok(script.includes('_mcp_load_scene'));
@@ -249,7 +249,7 @@ describe('genUiSetThemeScript', () => {
 describe('genUiContainerAddScript', () => {
   it('generates GDScript that adds child to container', () => {
     const script = genUiContainerAddScript('/scene.tscn', '/root/VBox', 'Button', 'MyBtn');
-    assert.ok(script.includes('Button.new()'));
+    assert.ok(script.includes('ClassDB.instantiate("Button")'));
     assert.ok(script.includes('child.name = "MyBtn"'));
     assert.ok(script.includes('container.add_child(child)'));
     assert.ok(script.includes('child.owner ='));
@@ -678,5 +678,290 @@ describe('colorToGd', () => {
   });
   it('throws for non-array input', () => {
     assert.throws(() => colorToGd('red'), /Color must be \[r, g, b\] or \[r, g, b, a\]/);
+  });
+});
+
+// ─── Flex Layout Translation ────────────────────────────────────────────────
+
+describe('Flex Layout: direction', () => {
+  it('direction: row → HBoxContainer', () => {
+    const tree = { type: 'Panel', name: 'Root', layout: { direction: 'row' } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('ClassDB.instantiate("HBoxContainer")'));
+    assert.ok(!script.includes('ClassDB.instantiate("Panel")'));
+  });
+
+  it('direction: column → VBoxContainer', () => {
+    const tree = { type: 'Panel', name: 'Root', layout: { direction: 'column' } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('ClassDB.instantiate("VBoxContainer")'));
+    assert.ok(!script.includes('ClassDB.instantiate("Panel")'));
+  });
+
+  it('direction: row-reverse → HBoxContainer with reversed children', () => {
+    const tree = {
+      type: 'Panel', name: 'Root', layout: { direction: 'row-reverse' },
+      children: [
+        { type: 'Button', name: 'A' },
+        { type: 'Button', name: 'B' },
+      ],
+    };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('ClassDB.instantiate("HBoxContainer")'));
+    const idxB = script.indexOf('node.name = "B"');
+    const idxA = script.indexOf('node.name = "A"');
+    assert.ok(idxB < idxA, 'B should be generated before A (reversed order)');
+  });
+
+  it('direction: column-reverse → VBoxContainer with reversed children', () => {
+    const tree = {
+      type: 'Panel', name: 'Root', layout: { direction: 'column-reverse' },
+      children: [
+        { type: 'Label', name: 'X' },
+        { type: 'Label', name: 'Y' },
+      ],
+    };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('ClassDB.instantiate("VBoxContainer")'));
+    const idxY = script.indexOf('node.name = "Y"');
+    const idxX = script.indexOf('node.name = "X"');
+    assert.ok(idxY < idxX, 'Y should be generated before X (reversed order)');
+  });
+});
+
+describe('Flex Layout: justify', () => {
+  it('justify: center → alignment = 1', () => {
+    const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', justify: 'center' } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('node.alignment = 1'));
+  });
+
+  it('justify: flex-start → alignment = 0', () => {
+    const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', justify: 'flex-start' } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('node.alignment = 0'));
+  });
+
+  it('justify: flex-end → alignment = 2', () => {
+    const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', justify: 'flex-end' } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('node.alignment = 2'));
+  });
+
+  it('justify: space-between → approximated with warning', () => {
+    const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', justify: 'space-between' } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('node.alignment = 0'));
+    assert.ok(script.includes('approximated'));
+  });
+});
+
+describe('Flex Layout: align', () => {
+  it('align: stretch → SIZE_EXPAND_FILL on cross axis', () => {
+    const tree = {
+      type: 'Panel', name: 'R', layout: { direction: 'row', align: 'stretch' },
+      children: [{ type: 'Button', name: 'Btn' }],
+    };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('SIZE_EXPAND_FILL'));
+  });
+
+  it('align: center → SIZE_SHRINK_CENTER', () => {
+    const tree = {
+      type: 'Panel', name: 'R', layout: { direction: 'row', align: 'center' },
+      children: [{ type: 'Button', name: 'Btn' }],
+    };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('SIZE_SHRINK_CENTER'));
+  });
+});
+
+describe('Flex Layout: wrap', () => {
+  it('wrap: wrap + row → HFlowContainer', () => {
+    const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', wrap: 'wrap' } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('ClassDB.instantiate("HFlowContainer")'));
+  });
+
+  it('wrap: wrap + column → VFlowContainer', () => {
+    const tree = { type: 'Panel', name: 'R', layout: { direction: 'column', wrap: 'wrap' } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('ClassDB.instantiate("VFlowContainer")'));
+  });
+});
+
+describe('Flex Layout: gap', () => {
+  it('BoxContainer gap → separation', () => {
+    const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', gap: 10 } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('add_theme_constant_override("separation", 10)'));
+  });
+
+  it('HFlowContainer gap → h_separation + v_separation', () => {
+    const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', wrap: 'wrap', gap: 8 } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('add_theme_constant_override("h_separation", 8)'));
+    assert.ok(script.includes('add_theme_constant_override("v_separation", 8)'));
+  });
+
+  it('row_gap in wrap mode', () => {
+    const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', wrap: 'wrap', gap: 8, row_gap: 5 } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('add_theme_constant_override("h_separation", 8)'));
+    assert.ok(script.includes('add_theme_constant_override("v_separation", 5)'));
+  });
+
+  it('row_gap without wrap → warning', () => {
+    const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', row_gap: 5 } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('row_gap'));
+  });
+});
+
+describe('Flex Layout: padding', () => {
+  it('BoxContainer padding → theme override margin_*', () => {
+    const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', padding: 10 } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('add_theme_constant_override("margin_top", 10)'));
+    assert.ok(script.includes('add_theme_constant_override("margin_right", 10)'));
+    assert.ok(script.includes('add_theme_constant_override("margin_bottom", 10)'));
+    assert.ok(script.includes('add_theme_constant_override("margin_left", 10)'));
+    assert.ok(!script.includes('MarginContainer'));
+  });
+
+  it('BoxContainer padding array → individual margins', () => {
+    const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', padding: [1, 2, 3, 4] } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('add_theme_constant_override("margin_top", 1)'));
+    assert.ok(script.includes('add_theme_constant_override("margin_right", 2)'));
+    assert.ok(script.includes('add_theme_constant_override("margin_bottom", 3)'));
+    assert.ok(script.includes('add_theme_constant_override("margin_left", 4)'));
+  });
+
+  it('FlowContainer padding → MarginContainer wrapper', () => {
+    const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', wrap: 'wrap', padding: 5 } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('ClassDB.instantiate("MarginContainer")'));
+    assert.ok(script.includes('R_margin'));
+  });
+});
+
+describe('Flex Layout: flex child properties', () => {
+  it('flex.grow → stretch_ratio + SIZE_EXPAND', () => {
+    const tree = {
+      type: 'Panel', name: 'R', layout: { direction: 'row' },
+      children: [{ type: 'Button', name: 'Btn', flex: { grow: 2 } }],
+    };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('size_flags_stretch_ratio = 2'));
+    assert.ok(script.includes('SIZE_EXPAND'));
+  });
+
+  it('flex.align_self: center → SIZE_SHRINK_CENTER', () => {
+    const tree = {
+      type: 'Panel', name: 'R', layout: { direction: 'row' },
+      children: [{ type: 'Button', name: 'Btn', flex: { align_self: 'center' } }],
+    };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('SIZE_SHRINK_CENTER'));
+  });
+
+  it('flex.min_width → custom_minimum_size', () => {
+    const tree = {
+      type: 'Panel', name: 'R', layout: { direction: 'row' },
+      children: [{ type: 'Button', name: 'Btn', flex: { min_width: 200 } }],
+    };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('custom_minimum_size = Vector2(200'));
+  });
+
+  it('flex.shrink → warning', () => {
+    const tree = {
+      type: 'Panel', name: 'R', layout: { direction: 'row' },
+      children: [{ type: 'Button', name: 'Btn', flex: { shrink: 1 } }],
+    };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('shrink'));
+  });
+
+  it('flex.max_width → warning', () => {
+    const tree = {
+      type: 'Panel', name: 'R', layout: { direction: 'row' },
+      children: [{ type: 'Button', name: 'Btn', flex: { max_width: 300 } }],
+    };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('max_width'));
+  });
+});
+
+describe('Flex Layout: backward compatibility', () => {
+  it('no layout field → existing behavior unchanged', () => {
+    const tree = { type: 'Button', name: 'MyButton' };
+    const script = genUiBuildLayoutScript('/scene.tscn', 'root', tree);
+    assert.ok(script.includes('ClassDB.instantiate("Button")'));
+    assert.ok(script.includes('node.name = "MyButton"'));
+    assert.ok(!script.includes('HBoxContainer'));
+    assert.ok(!script.includes('VBoxContainer'));
+  });
+
+  it('layout overrides type', () => {
+    const tree = { type: 'Panel', name: 'R', layout: { direction: 'column' } };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('ClassDB.instantiate("VBoxContainer")'));
+    assert.ok(!script.includes('ClassDB.instantiate("Panel")'));
+  });
+
+  it('nested layout: row inside column', () => {
+    const tree = {
+      type: 'Panel', name: 'Root', layout: { direction: 'column', gap: 10 },
+      children: [
+        {
+          type: 'Panel', name: 'TopRow', layout: { direction: 'row', gap: 5 },
+          children: [
+            { type: 'Button', name: 'A' },
+            { type: 'Button', name: 'B' },
+          ],
+        },
+        { type: 'Label', name: 'Title' },
+      ],
+    };
+    const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
+    assert.ok(script.includes('ClassDB.instantiate("VBoxContainer")'));
+    assert.ok(script.includes('ClassDB.instantiate("HBoxContainer")'));
+    assert.ok(script.includes('separation", 10)'));
+    assert.ok(script.includes('separation", 5)'));
+  });
+});
+
+describe('Flex Layout: validation', () => {
+  it('invalid direction → error', () => {
+    assert.throws(
+      () => genUiBuildLayoutScript('/s.tscn', 'root', { type: 'Panel', name: 'R', layout: { direction: 'diagonal' } }),
+      /INVALID_LAYOUT/,
+    );
+  });
+
+  it('negative gap → error', () => {
+    assert.throws(
+      () => genUiBuildLayoutScript('/s.tscn', 'root', { type: 'Panel', name: 'R', layout: { direction: 'row', gap: -1 } }),
+      /INVALID_LAYOUT/,
+    );
+  });
+
+  it('invalid padding format → error', () => {
+    assert.throws(
+      () => genUiBuildLayoutScript('/s.tscn', 'root', { type: 'Panel', name: 'R', layout: { direction: 'row', padding: 'big' } }),
+      /INVALID_LAYOUT/,
+    );
+  });
+
+  it('invalid align_self → error', () => {
+    assert.throws(
+      () => genUiBuildLayoutScript('/s.tscn', 'root', {
+        type: 'Panel', name: 'R', layout: { direction: 'row' },
+        children: [{ type: 'Button', name: 'B', flex: { align_self: 'middle' } }],
+      }),
+      /INVALID_FLEX/,
+    );
   });
 });
