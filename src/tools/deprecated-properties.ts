@@ -1,0 +1,35 @@
+export interface DeprecatedProperty {
+  removed: boolean;
+  replacement?: string;
+  /** Lint rule ID that handles this property */
+  lintRule?: string;
+}
+
+export const DEPRECATED_PROPERTIES: Record<string, Record<string, DeprecatedProperty>> = {
+  "Environment": {
+    "adjustments_enabled": { removed: false, replacement: "adjustment_enabled", lintRule: "L004" },
+    "adjustments_brightness": { removed: false, replacement: "adjustment_brightness", lintRule: "L004" },
+    "adjustments_contrast": { removed: false, replacement: "adjustment_contrast", lintRule: "L004" },
+    "adjustments_saturation": { removed: false, replacement: "adjustment_saturation", lintRule: "L004" },
+    "tone_mapper": { removed: false, replacement: "tonemap_mode", lintRule: "L005" },
+    "physically_based_lights_enabled": { removed: true, lintRule: "L011" },
+  },
+  "Node3D": {
+    "visibility_range_begin": { removed: false, replacement: "GeometryInstance3D.visibility_range_begin", lintRule: "L007" },
+    "visibility_range_end": { removed: false, replacement: "GeometryInstance3D.visibility_range_end", lintRule: "L007" },
+  },
+  "SoftBody3D": {
+    "mass": { removed: false, replacement: "total_mass", lintRule: "L006" },
+    "linear_damping": { removed: false, replacement: "damping_coefficient" },
+  },
+  "RigidBody3D": {
+    "bounce": { removed: true, replacement: "PhysicsMaterial.bounce via physics_material_override", lintRule: "L002" },
+    "friction": { removed: true, replacement: "PhysicsMaterial.friction via physics_material_override" },
+  },
+  "CylinderMesh": {
+    "radius": { removed: true, replacement: "top_radius 和 bottom_radius 分别设置", lintRule: "L003" },
+  },
+  "FogMaterial": {
+    "albedo_color": { removed: false, replacement: "albedo", lintRule: "L010" },
+  },
+};

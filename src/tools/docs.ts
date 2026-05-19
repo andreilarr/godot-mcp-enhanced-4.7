@@ -7,37 +7,7 @@ import {
   findMethod as findMethodInfo,
   getInheritanceChain,
 } from '../godot-docs.js';
-
-// ─── Deprecated property annotations (Godot 4.6) ────────────────────────────
-
-const DEPRECATED_PROPERTIES: Record<string, Record<string, { removed: boolean; replacement?: string }>> = {
-  "Environment": {
-    "adjustments_enabled": { removed: false, replacement: "adjustment_enabled" },
-    "adjustments_brightness": { removed: false, replacement: "adjustment_brightness" },
-    "adjustments_contrast": { removed: false, replacement: "adjustment_contrast" },
-    "adjustments_saturation": { removed: false, replacement: "adjustment_saturation" },
-    "tone_mapper": { removed: false, replacement: "tonemap_mode" },
-    "physically_based_lights_enabled": { removed: true },
-  },
-  "Node3D": {
-    "visibility_range_begin": { removed: false, replacement: "GeometryInstance3D.visibility_range_begin" },
-    "visibility_range_end": { removed: false, replacement: "GeometryInstance3D.visibility_range_end" },
-  },
-  "SoftBody3D": {
-    "mass": { removed: false, replacement: "total_mass" },
-    "linear_damping": { removed: false, replacement: "damping_coefficient" },
-  },
-  "RigidBody3D": {
-    "bounce": { removed: true, replacement: "PhysicsMaterial.bounce via physics_material_override" },
-    "friction": { removed: true, replacement: "PhysicsMaterial.friction via physics_material_override" },
-  },
-  "CylinderMesh": {
-    "radius": { removed: true, replacement: "top_radius 和 bottom_radius 分别设置" },
-  },
-  "FogMaterial": {
-    "albedo_color": { removed: false, replacement: "albedo" },
-  },
-};
+import { DEPRECATED_PROPERTIES } from './deprecated-properties.js';
 
 const TOOL_NAMES = [
   'get_class_info',

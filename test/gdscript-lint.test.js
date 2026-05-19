@@ -162,6 +162,10 @@ describe('GDScript Lint', () => {
     it('边界: 注释中不触发', () => {
       assert.ok(!lintGDScript('# rb.bounce = 0.4').errors.some(e => e.rule === 'L002'));
     });
+    it('边界: 注释中的 RigidBody3D 不影响非 RigidBody 代码', () => {
+      const code = '# RigidBody3D says bounce deprecated\nvar mat := SomeMaterial.new()\nmat.bounce = 0.4';
+      assert.ok(!lintGDScript(code).errors.some(e => e.rule === 'L002'));
+    });
   });
 
   // L007

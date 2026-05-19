@@ -1,3 +1,5 @@
+// See deprecated-properties.ts for the canonical deprecated property list
+
 // ─── Lint Types ─────────────────────────────────────────────────────────────
 
 export interface LintRule {
@@ -35,14 +37,6 @@ export interface LintOutput {
 }
 
 // ─── Utility Functions ──────────────────────────────────────────────────────
-
-function getLineNumber(code: string, index: number): number {
-  let line = 1;
-  for (let i = 0; i < index && i < code.length; i++) {
-    if (code[i] === '\n') line++;
-  }
-  return line;
-}
 
 function isInComment(line: string, matchIndex: number): boolean {
   let inString = false;
@@ -94,7 +88,7 @@ interface FunctionInfo {
 
 function extractFunctions(code: string): FunctionInfo[] {
   const functions: FunctionInfo[] = [];
-  const lines = code.split('\n');
+  const lines = code.split(/\r?\n/);
 
   for (let i = 0; i < lines.length; i++) {
     const match = lines[i].match(/^(\s*)func\s+(\w+)\s*\(/);
@@ -128,7 +122,7 @@ function extractFunctions(code: string): FunctionInfo[] {
 }
 
 function extractContext(code: string, matchIndex: number): LintContext {
-  const lines = code.split('\n');
+  const lines = code.split(/\r?\n/);
   let charCount = 0;
   let matchLine = 0;
 
@@ -147,7 +141,8 @@ function extractContext(code: string, matchIndex: number): LintContext {
 }
 
 function hasTypeContext(precedingLines: string[], typeNames: string[]): boolean {
-  const text = precedingLines.join('\n');
+  const codeLines = precedingLines.filter(l => !l.trimStart().startsWith('#'));
+  const text = codeLines.join('\n');
   return typeNames.some(t => text.includes(t));
 }
 
@@ -294,7 +289,7 @@ const RULES: LintRule[] = [
 export function lintGDScript(code: string): LintOutput {
   const errors: LintResult[] = [];
   const warnings: LintResult[] = [];
-  const lines = code.split('\n');
+  const lines = code.split(/\r?\n/);
   const functions = extractFunctions(code);
 
   for (const rule of RULES) {
@@ -395,7 +390,14 @@ function lintRegex(
   let match: RegExpMatchArray | null;
   while ((match = globalPattern.exec(code)) !== null) {
     const matchIndex = match.index!;
-    const lineNum = getLineNumber(code, matchIndex);
+    // Binary search on lineOffsets to find 1-based line number
+    let lo = 0, hi = lines.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (lineOffsets[mid] <= matchIndex) lo = mid + 1;
+      else hi = mid;
+    }
+    const lineNum = lo;
     const lineText = lines[lineNum - 1] || '';
 
     const lineOffset = matchIndex - lineOffsets[lineNum - 1];
