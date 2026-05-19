@@ -523,7 +523,7 @@ export type UiNodeSpec = {
 
 const MAX_NESTING_DEPTH = 10;
 
-function validateUiNodeSpec(spec: UiNodeSpec, depth: number): void {
+function validateUiNodeSpec(spec: UiNodeSpec, depth: number, warnings: string[] = []): void {
   if (depth > MAX_NESTING_DEPTH) {
     throw new Error(`Maximum nesting depth is ${MAX_NESTING_DEPTH}, exceeded at node "${spec.name}"`);
   }
@@ -536,10 +536,78 @@ function validateUiNodeSpec(spec: UiNodeSpec, depth: number): void {
   if (spec.anchor_preset && !(spec.anchor_preset in ANCHOR_PRESETS)) {
     throw new Error(`INVALID_ANCHOR_PRESET: "${spec.anchor_preset}"`);
   }
+  if (spec.layout) {
+    validateFlexLayout(spec.layout, warnings);
+  }
+  if (spec.flex) {
+    validateFlexChild(spec.flex, warnings);
+  }
   if (spec.children) {
     for (const child of spec.children) {
-      validateUiNodeSpec(child, depth + 1);
+      validateUiNodeSpec(child, depth + 1, warnings);
     }
+  }
+}
+
+const VALID_DIRECTIONS = ['row', 'column', 'row-reverse', 'column-reverse'] as const;
+const VALID_JUSTIFY = ['flex-start', 'center', 'flex-end', 'space-between', 'space-around', 'space-evenly'] as const;
+const VALID_ALIGN = ['stretch', 'flex-start', 'center', 'flex-end'] as const;
+const VALID_WRAP = ['nowrap', 'wrap'] as const;
+const VALID_ALIGN_SELF = ['auto', 'flex-start', 'center', 'flex-end', 'stretch'] as const;
+
+function validateFlexLayout(layout: FlexLayout, warnings: string[]): void {
+  if (!VALID_DIRECTIONS.includes(layout.direction)) {
+    throw new Error(`INVALID_LAYOUT: direction must be one of: ${VALID_DIRECTIONS.join(', ')}, got "${layout.direction}"`);
+  }
+  if (layout.gap !== undefined && (typeof layout.gap !== 'number' || layout.gap < 0 || !Number.isFinite(layout.gap))) {
+    throw new Error('INVALID_LAYOUT: gap must be a non-negative finite number');
+  }
+  if (layout.row_gap !== undefined && (typeof layout.row_gap !== 'number' || layout.row_gap < 0 || !Number.isFinite(layout.row_gap))) {
+    throw new Error('INVALID_LAYOUT: row_gap must be a non-negative finite number');
+  }
+  if (layout.justify !== undefined && !VALID_JUSTIFY.includes(layout.justify)) {
+    throw new Error(`INVALID_LAYOUT: justify must be one of: ${VALID_JUSTIFY.join(', ')}, got "${layout.justify}"`);
+  }
+  if (layout.align !== undefined && !VALID_ALIGN.includes(layout.align)) {
+    throw new Error(`INVALID_LAYOUT: align must be one of: ${VALID_ALIGN.join(', ')}, got "${layout.align}"`);
+  }
+  if (layout.wrap !== undefined && !VALID_WRAP.includes(layout.wrap)) {
+    throw new Error(`INVALID_LAYOUT: wrap must be one of: ${VALID_WRAP.join(', ')}, got "${layout.wrap}"`);
+  }
+  if (layout.padding !== undefined) {
+    if (typeof layout.padding === 'number') {
+      if (layout.padding < 0) throw new Error('INVALID_LAYOUT: padding must be non-negative');
+    } else if (Array.isArray(layout.padding)) {
+      if (layout.padding.length !== 4 || layout.padding.some(v => typeof v !== 'number' || v < 0)) {
+        throw new Error('INVALID_LAYOUT: padding array must be [top, right, bottom, left] with non-negative numbers');
+      }
+    } else {
+      throw new Error('INVALID_LAYOUT: padding must be a number or [top, right, bottom, left] array');
+    }
+  }
+  if (layout.row_gap !== undefined && layout.wrap !== 'wrap') {
+    warnings.push('layout.row_gap is ignored when wrap is not "wrap"');
+  }
+  if (layout.justify !== undefined && ['space-between', 'space-around', 'space-evenly'].includes(layout.justify)) {
+    warnings.push(`layout.justify "${layout.justify}" is approximated (no exact Godot equivalent)`);
+  }
+}
+
+function validateFlexChild(flex: FlexChild, warnings: string[]): void {
+  if (flex.grow !== undefined && (typeof flex.grow !== 'number' || flex.grow < 0 || !Number.isFinite(flex.grow))) {
+    throw new Error('INVALID_FLEX: grow must be a non-negative finite number');
+  }
+  if (flex.align_self !== undefined && !VALID_ALIGN_SELF.includes(flex.align_self)) {
+    throw new Error(`INVALID_FLEX: align_self must be one of: ${VALID_ALIGN_SELF.join(', ')}, got "${flex.align_self}"`);
+  }
+  if (flex.shrink !== undefined) {
+    warnings.push('flex.shrink is ignored (no Godot equivalent)');
+  }
+  if (flex.max_width !== undefined) {
+    warnings.push('flex.max_width is ignored (no Godot equivalent)');
+  }
+  if (flex.max_height !== undefined) {
+    warnings.push('flex.max_height is ignored (no Godot equivalent)');
   }
 }
 
