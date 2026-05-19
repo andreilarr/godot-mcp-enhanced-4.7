@@ -248,6 +248,35 @@ const RULES: LintRule[] = [
     message: "CharacterBody3D 不提供 body_entered 信号，应使用 Area3D 子节点进行碰撞检测",
     suggestion: "添加 Area3D 子节点并连接其 body_entered/body_exited 信号",
   },
+  // L002: RigidBody3D.bounce
+  {
+    id: "L002",
+    severity: "error",
+    pattern: /\.bounce\s*=/,
+    message: "RigidBody3D.bounce 在 Godot 4 中不存在，需使用 PhysicsMaterial",
+    suggestion: "使用 PhysicsMaterial:\n  var mat := PhysicsMaterial.new()\n  mat.bounce = 0.4\n  body.physics_material_override = mat",
+    requiresSemanticValidation: true,
+    contextFilter: (match, context): boolean => {
+      if (hasTypeContext(context.precedingLines, ['PhysicsMaterial'])) return false;
+      return hasTypeContext(context.precedingLines, ['RigidBody3D', 'RigidDynamicBody3D', 'PhysicsBody3D']);
+    },
+  },
+  // L007: Node3D.visibility_range_*
+  {
+    id: "L007",
+    severity: "error",
+    pattern: /\.visibility_range_\w+\s*=/,
+    message: "visibility_range_* 属性位于 GeometryInstance3D，不在 Node3D 上",
+    suggestion: "确保使用的是 MeshInstance3D/GPUParticles3D 等 GeometryInstance3D 子类",
+    requiresSemanticValidation: true,
+    contextFilter: (match, context): boolean => {
+      const geoSubclasses = ['MeshInstance3D', 'GPUParticles3D', 'CPUParticles3D',
+        'MultiMeshInstance3D', 'Decal', 'FogVolume', 'GeometryInstance3D',
+        'VisualInstance3D', 'SpriteBase3D', 'Label3D'];
+      if (hasTypeContext(context.precedingLines, geoSubclasses)) return false;
+      return hasTypeContext(context.precedingLines, ['Node3D']);
+    },
+  },
 ];
 
 // ─── Main Lint Function ────────────────────────────────────────────────────

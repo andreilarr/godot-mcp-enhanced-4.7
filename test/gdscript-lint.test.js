@@ -150,4 +150,30 @@ describe('GDScript Lint', () => {
       assert.ok(!lintGDScript('# body_entered signal', true).errors.some(e => e.rule === 'L013'));
     });
   });
+
+  // L002
+  describe('L002 RigidBody3D.bounce', () => {
+    it('命中: RigidBody3D.bounce 直接赋值', () => {
+      assert.ok(lintGDScript('var rb := RigidBody3D.new()\nrb.bounce = 0.4', true).errors.some(e => e.rule === 'L002'));
+    });
+    it('忽略: PhysicsMaterial.bounce 合法', () => {
+      assert.ok(!lintGDScript('var phys_mat := PhysicsMaterial.new()\nphys_mat.bounce = 0.4', true).errors.some(e => e.rule === 'L002'));
+    });
+    it('边界: 注释中不触发', () => {
+      assert.ok(!lintGDScript('# rb.bounce = 0.4', true).errors.some(e => e.rule === 'L002'));
+    });
+  });
+
+  // L007
+  describe('L007 Node3D.visibility_range_*', () => {
+    it('命中: Node3D 上下文引用 visibility_range', () => {
+      assert.ok(lintGDScript('var node := Node3D.new()\nnode.visibility_range_begin = 5.0', true).errors.some(e => e.rule === 'L007'));
+    });
+    it('忽略: MeshInstance3D 合法', () => {
+      assert.ok(!lintGDScript('var mesh := MeshInstance3D.new()\nmesh.visibility_range_begin = 5.0', true).errors.some(e => e.rule === 'L007'));
+    });
+    it('边界: 注释中不触发', () => {
+      assert.ok(!lintGDScript('# visibility_range_begin', true).errors.some(e => e.rule === 'L007'));
+    });
+  });
 });
