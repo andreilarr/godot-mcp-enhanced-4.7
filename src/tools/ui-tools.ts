@@ -697,7 +697,7 @@ function applyAlignSelf(align: string, isRow: boolean, indent: string, warnings?
       return `\n${indent}node.size_flags_horizontal = (node.size_flags_horizontal & ~Control.SIZE_EXPAND & ~Control.SIZE_FILL) | Control.SIZE_SHRINK_CENTER`;
     }
   } else if (align === 'flex-end') {
-    warnings?.push('align/flex.align_self "flex-end" is approximated as default alignment (no anchor offset support in Container)');
+    warnings?.push('align/flex.align_self "flex-end" has no direct Container equivalent; consider adding a spacer child with SIZE_EXPAND before this node to push it to the end');
   }
   return '';
 }
