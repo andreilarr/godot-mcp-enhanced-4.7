@@ -258,7 +258,7 @@ func _initialize():
 \t_mcp_load_main_scene()
 \tvar _desc = "${escapedDesc}"
 \t# --- user assertion code ---
-\t${assertionCode.replace(/\r\n/g, '\n').split('\n').join('\n\t')}
+\t${assertionCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').join('\n\t')}
 \t# --- end user code ---
 \t_mcp_done()
 `;

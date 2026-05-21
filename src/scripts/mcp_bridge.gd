@@ -119,10 +119,12 @@ func _generate_secret() -> String:
 		if b >= 256 - (256 % chars.length()):
 			continue
 		result += chars[b % chars.length()]
-	# Fallback: if rejection sampling exhausted bytes, generate more
-	while result.length() < 32:
+	# Fallback: if rejection sampling exhausted bytes, generate more (max 10 attempts)
+	var fallback_attempts := 0
+	while result.length() < 32 and fallback_attempts < 10:
 		rng_bytes = _crypto.generate_random_bytes(64)
 		idx = 0
+		fallback_attempts += 1
 		while result.length() < 32 and idx < rng_bytes.size():
 			var b2: int = rng_bytes[idx]
 			idx += 1
