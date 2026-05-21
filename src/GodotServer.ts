@@ -46,6 +46,7 @@ import * as uiOps from './tools/ui-tools.js';
 import * as recordingOps from './tools/recording.js';
 import * as editorSync from './tools/editor-sync.js';
 import * as animationTrack from './tools/animation-track.js';
+import * as delivery from './tools/delivery.js';
 import { requiresConfirmation, createPendingToken, consumeToken } from './guard.js';
 import { registerTools, LITE_TOOLS } from './core/tool-registry.js';
 import { ReadOnlyGuard } from './core/ReadOnlyGuard.js';
@@ -58,7 +59,7 @@ import { killProcess } from './core/process-state.js';
 // Re-export for backward compatibility (tests import from GodotServer)
 export { clearGodotPathCache, getCachedGodotPath };
 
-const toolModules = [runtime, screenshot, project, scene, script, validation, docs, node3dOps, physicsOps, audioOps, tilemapOps, materialOps, gameBridge, workflow, animationOps, animationTrack, profilerOps, spatialOps, testFramework, animtreeOps, navigationOps, particlesOps, signalOps, batchTools, uiOps, recordingOps, editorSync];
+const toolModules = [runtime, screenshot, project, scene, script, validation, docs, node3dOps, physicsOps, audioOps, tilemapOps, materialOps, gameBridge, workflow, animationOps, animationTrack, profilerOps, spatialOps, testFramework, animtreeOps, navigationOps, particlesOps, signalOps, batchTools, uiOps, recordingOps, editorSync, delivery];
 
 interface ToolMetaExport {
   TOOL_META?: Record<string, { readonly: boolean; long_running: boolean }>;
