@@ -1,3 +1,4 @@
+import { it } from 'node:test';
 import { findGodot } from '../../build/core/godot-finder.js';
 
 let _godotPath = null;
