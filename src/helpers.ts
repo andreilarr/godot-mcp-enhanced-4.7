@@ -18,11 +18,18 @@ export const validatePath = resolvePath;
 
 export function resolveWithinRoot(root: string, userPath: string): string {
   const base = resolvePath(root);
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(userPath);
-  } catch {
-    throw new Error(`Path traversal detected: ${userPath}`);
+  // Decode iteratively to defeat double-encoding
+  let decoded = userPath;
+  let prev = '';
+  let iterations = 0;
+  while (decoded !== prev && iterations < 5) {
+    prev = decoded;
+    try {
+      decoded = decodeURIComponent(decoded);
+    } catch {
+      throw new Error(`Path traversal detected: ${userPath}`);
+    }
+    iterations++;
   }
   const normalizedPath = decoded.replace(/\\/g, '/');
   const resolved = resolve(base, normalizedPath);

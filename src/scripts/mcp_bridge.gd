@@ -119,6 +119,17 @@ func _generate_secret() -> String:
 		if b >= 256 - (256 % chars.length()):
 			continue
 		result += chars[b % chars.length()]
+	# Fallback: if rejection sampling exhausted bytes, generate more
+	while result.length() < 32:
+		rng_bytes = _crypto.generate_random_bytes(64)
+		idx = 0
+		while result.length() < 32 and idx < rng_bytes.size():
+			var b2: int = rng_bytes[idx]
+			idx += 1
+			if b2 >= 256 - (256 % chars.length()):
+				continue
+			result += chars[b2 % chars.length()]
+	assert(result.length() == 32, "Failed to generate 32-char secret")
 	return result
 
 

@@ -26,11 +26,18 @@ export function sanitizeResPath(raw: unknown, field: string): string {
   if (!raw || typeof raw !== 'string' || !raw.startsWith('res://')) {
     throw new Error(`${field} must be a string starting with res://`);
   }
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(raw);
-  } catch {
-    throw new Error(`${field} contains invalid encoding: ${raw}`);
+  // Decode iteratively to defeat double-encoding (%252e%252e%252f etc.)
+  let decoded = raw;
+  let prev = '';
+  let iterations = 0;
+  while (decoded !== prev && iterations < 5) {
+    prev = decoded;
+    try {
+      decoded = decodeURIComponent(decoded);
+    } catch {
+      throw new Error(`${field} contains invalid encoding: ${raw}`);
+    }
+    iterations++;
   }
   if (decoded.includes('/../') || decoded.endsWith('/..') || decoded.includes('\\')) {
     throw new Error(`${field} contains path traversal: ${raw}`);
@@ -251,7 +258,7 @@ func _initialize():
 \t_mcp_load_main_scene()
 \tvar _desc = "${escapedDesc}"
 \t# --- user assertion code ---
-\t${assertionCode.split('\n').join('\n\t')}
+\t${assertionCode.replace(/\r\n/g, '\n').split('\n').join('\n\t')}
 \t# --- end user code ---
 \t_mcp_done()
 `;
