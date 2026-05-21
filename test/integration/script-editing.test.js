@@ -38,15 +38,16 @@ describe('Level B: Script editing', async () => {
       'Script file should exist');
   });
 
-  // 用例 13: edit_script — 行号替换模式（替换函数体而非签名，避免自动验证回滚）
-  itIfGodot('line-number edit', async () => {
+  // 用例 13: edit_script — search_and_replace 模式
+  itIfGodot('search and replace edit', async () => {
     const scriptPath = 'scripts/main.gd';
     const result = await script.handleTool('edit_script', {
       project_path: dirRef.path,
       script_path: scriptPath,
-      start_line: 4,
-      end_line: 4,
-      new_content: '\tprint("edited")',
+      start_line: 1,
+      end_line: 1,
+      new_content: '',
+      search_and_replace: { search: '\tpass', replace: '\tprint("edited")' },
     }, ctx);
     assert.ok(!result.isError, `Should succeed: ${result.content?.[0]?.text || ''}`);
     const content = readFileSync(join(dirRef.path, scriptPath), 'utf-8');
