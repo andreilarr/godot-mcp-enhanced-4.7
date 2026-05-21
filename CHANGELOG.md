@@ -12,6 +12,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **L1 quickVerify**: optional lightweight verification embedded in write tool return values (`verify=true`)
 - **dev_loop acceptance**: acceptance criteria parameter for post-execution verification
 
+### Security
+
+- **迭代 URL 解码**: `sanitizeResPath` 和 `resolveWithinRoot` 迭代解码最多 5 轮，防御 `%252e%252e%252f` 双编码路径遍历。
+- **密钥文件生命周期**: Bridge 密钥文件不再由客户端读后即删，改为由 GDScript Bridge `_stop_server()` 统一管理，修复多实例兼容性。
+- **认证锁定断开连接**: 超过最大认证失败次数后立即断开 TCP 连接，防止 CPU 空转。
+
+### Fixed
+
+- **断言隔离**: verify_delivery 断言改为逐条独立执行，单条失败不阻塞后续断言。
+- **认证失败检测**: game-bridge 客户端用 Bridge 错误码 (-32001/-32002) 替代魔法字符串匹配。
+- **findAssociatedScenes 性能**: 场景文件内容缓存，避免 O(n*m) 重复读取。
+- **项目有效性验证**: verify_delivery 入口检查 `project.godot` 是否存在。
+- **quickVerify 占位**: 未实现的 quickVerify 返回 `passed:false` 而非误导性的 `passed:true`。
+- **CRLF 处理**: `wrapAssertionCode` 正确处理独立 `\r`（与 `gdEscape` 一致）。
+- **密钥生成 fallback**: `_generate_secret` 添加 10 次重试上限防止理论死循环。
+- **parseConfigValue 引号**: 数组解析分割时尊重引号边界，不再误拆引号内逗号。
+
 ## [0.10.1] - 2026-05-21
 
 ### Security
