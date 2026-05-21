@@ -145,27 +145,29 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         appendOutput(data.toString().split('\n'));
       });
 
-      proc.on('close', () => {
-        ctx.setRunningProcess(null);
-      });
-
-      proc.on('error', (err) => {
-        ctx.setRunningProcess(null);
-        appendOutput([`Spawn error: ${err.message}`]);
-      });
-
-      ctx.setRunningProcess(proc);
-
       // Auto-stop after timeout
+      let autoStopTimer: ReturnType<typeof setTimeout> | undefined;
       if (timeout > 0) {
-        const autoStopTimer = setTimeout(() => {
+        autoStopTimer = setTimeout(() => {
           if (ctx.runningProcess === proc) {
             void killProcess(proc);
             ctx.setRunningProcess(null);
           }
         }, timeout * 1000);
-        proc.on('close', () => { clearTimeout(autoStopTimer); });
       }
+
+      proc.on('close', () => {
+        ctx.setRunningProcess(null);
+        if (autoStopTimer) clearTimeout(autoStopTimer);
+      });
+
+      proc.on('error', (err) => {
+        ctx.setRunningProcess(null);
+        if (autoStopTimer) clearTimeout(autoStopTimer);
+        appendOutput([`Spawn error: ${err.message}`]);
+      });
+
+      ctx.setRunningProcess(proc);
 
       return textResult(warnPrefix + `Running project at ${p} (timeout: ${timeout}s). Use get_debug_output or stop_project to check.`);
     }

@@ -20,6 +20,23 @@ export function normalizeNodePath(input: string): string {
   return trimmed.startsWith('/') ? trimmed : '/' + trimmed;
 }
 
+// Validates a res:// path against traversal attacks, including URL-encoded bypass.
+export function sanitizeResPath(raw: unknown, field: string): string {
+  if (!raw || typeof raw !== 'string' || !raw.startsWith('res://')) {
+    throw new Error(`${field} must be a string starting with res://`);
+  }
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    throw new Error(`${field} contains invalid encoding: ${raw}`);
+  }
+  if (decoded.includes('/../') || decoded.endsWith('/..') || decoded.includes('\\')) {
+    throw new Error(`${field} contains path traversal: ${raw}`);
+  }
+  return decoded;
+}
+
 // Escapes a string for embedding in a GDScript string literal.
 // % → %% prevents GDScript string formatting from interpreting % as a placeholder.
 // Note: do NOT apply gdEscape to already-escaped output (e.g. gdEscape(gdEscape(x)))

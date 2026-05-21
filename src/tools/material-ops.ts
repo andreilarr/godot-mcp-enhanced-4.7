@@ -2,7 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { validatePath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
-import { normalizeNodePath, gdEscape } from './shared.js';
+import { normalizeNodePath, gdEscape, sanitizeResPath } from './shared.js';
 import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } from './shared.js';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -472,7 +472,6 @@ func _initialize():
 }
 
 export function genShaderSaveFileScript(filePath: string, code: string): string {
-  const jsonCode = gdEscape(JSON.stringify(code));
   return `${SCENE_TREE_HEADER}
 func _initialize():
 \t_mcp_load_main_scene()
@@ -668,13 +667,7 @@ export async function handleTool(
     }
 
     function requireResPath(raw: unknown, field: string): string {
-      if (!raw || typeof raw !== 'string' || !raw.startsWith('res://')) {
-        throw new Error(`${field} must be a string starting with res://`);
-      }
-      if (raw.includes('/../') || raw.includes('/..') || raw.includes('\\')) {
-        throw new Error(`${field} contains path traversal: ${raw}`);
-      }
-      return raw;
+      return sanitizeResPath(raw, field);
     }
 
     switch (name) {
@@ -712,8 +705,10 @@ export async function handleTool(
               return opsErrorResult('INVALID_MATERIAL_TYPE', `material_type must be one of: ${ALLOWED_MATERIAL_TYPES.join(', ')}`);
             }
             const shaderPath = args.shader_path as string | undefined;
-            if (shaderPath && (shaderPath.includes('/../') || shaderPath.includes('\\'))) {
-              return opsErrorResult('INVALID_PATH', 'shader_path contains path traversal');
+            if (shaderPath) {
+              try { sanitizeResPath(shaderPath, 'shader_path'); } catch {
+                return opsErrorResult('INVALID_PATH', 'shader_path contains path traversal');
+              }
             }
             script = genMaterialCreateScript(nodePath, materialType, shaderPath);
             break;

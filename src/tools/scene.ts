@@ -8,7 +8,7 @@ import { validatePath, resolveWithinRoot, normalizeUserProjectPath, ensureDir, p
 import { parseTscn, parseTscnSummary } from '../tscn-parser.js';
 import { findInstanceNode, detachInstance, nodePathToNameAndParent } from '../tscn-editor.js';
 import { executeGdscript } from '../gdscript-executor.js';
-import { SCENE_TREE_HEADER, opsErrorResult, parseGdscriptResult } from './shared.js';
+import { SCENE_TREE_HEADER, opsErrorResult, parseGdscriptResult, sanitizeResPath } from './shared.js';
 import { normalizeNodePath, gdEscape } from './shared.js';
 import { forceKillTree } from '../core/process-state.js';
 
@@ -317,7 +317,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       } else if (name === 'load_sprite') {
         params.scene_path = normalizeUserProjectPath(args.scene_path as string);
         const tp = String(args.texture_path);
-        if (tp.includes('/../') || tp.includes('/..') || tp.includes('\\')) {
+        try { sanitizeResPath(tp, 'texture_path'); } catch {
           return opsErrorResult('INVALID_PATH', 'texture_path contains path traversal');
         }
         params.texture_path = tp;

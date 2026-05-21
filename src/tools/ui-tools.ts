@@ -2,7 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { validatePath, resolveWithinRoot, normalizeUserProjectPath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
-import { normalizeNodePath, gdEscape } from './shared.js';
+import { normalizeNodePath, gdEscape, sanitizeResPath } from './shared.js';
 import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } from './shared.js';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -961,9 +961,7 @@ export function genThemeSetPropertyScript(
   switch (itemType) {
     case 'default_font': {
       const fontPath = String(value);
-      if (fontPath.includes('/../') || fontPath.includes('/..') || fontPath.includes('\\')) {
-        throw new Error('fontPath contains path traversal');
-      }
+      sanitizeResPath(fontPath, 'font_path');
       setLine = `\ttheme.set_default_font(load("${gdEscape(fontPath)}"))`;
       break;
     }
@@ -980,9 +978,7 @@ export function genThemeSetPropertyScript(
     }
     case 'stylebox': {
       const sbPath = String(value);
-      if (sbPath.includes('/../') || sbPath.includes('/..') || sbPath.includes('\\')) {
-        throw new Error('stylebox path contains path traversal');
-      }
+      sanitizeResPath(sbPath, 'stylebox_path');
       setLine = `\ttheme.set_stylebox("${safeName}", ${tt}, load("${gdEscape(sbPath)}"))`;
       break;
     }
@@ -1387,8 +1383,10 @@ export async function handleTool(
         if ((action === 'save' || action === 'load') && !themePath) {
           return opsErrorResult(ERROR_CODES.INVALID_PARAMS, `theme_path is required for ${action} action`);
         }
-        if (themePath && (themePath.includes('/../') || themePath.includes('/..') || themePath.includes('\\'))) {
-          return opsErrorResult(ERROR_CODES.INVALID_PARAMS, 'theme_path contains path traversal');
+        if (themePath) {
+          try { sanitizeResPath(themePath, 'theme_path'); } catch {
+            return opsErrorResult(ERROR_CODES.INVALID_PARAMS, 'theme_path contains path traversal');
+          }
         }
         const params = args.params as Record<string, unknown> | undefined;
         script = genUiSetThemeScript(scenePath, nodePath, action as 'set_params' | 'create' | 'save' | 'load', themePath, params);
@@ -1418,8 +1416,10 @@ export async function handleTool(
         }
         const sourceNodePath = args.source_node_path as string | undefined;
         const savePath = args.save_path as string | undefined;
-        if (savePath && (savePath.includes('/../') || savePath.includes('/..') || savePath.includes('\\'))) {
-          return opsErrorResult(ERROR_CODES.INVALID_PARAMS, 'save_path contains path traversal');
+        if (savePath) {
+          try { sanitizeResPath(savePath, 'save_path'); } catch {
+            return opsErrorResult(ERROR_CODES.INVALID_PARAMS, 'save_path contains path traversal');
+          }
         }
         if (action === 'extract' && !sourceNodePath) {
           return opsErrorResult(ERROR_CODES.INVALID_PARAMS, 'source_node_path is required for extract action');
