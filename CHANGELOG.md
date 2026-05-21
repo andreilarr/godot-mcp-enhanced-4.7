@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- **verify_delivery** tool: end-to-end delivery verification with 4 dimensions (scene tree integrity, script health, performance, custom assertions)
+- **L1 quickVerify**: optional lightweight verification embedded in write tool return values (`verify=true`)
+- **dev_loop acceptance**: acceptance criteria parameter for post-execution verification
+
 ## [0.10.1] - 2026-05-21
 
 ### Security
