@@ -1,11 +1,11 @@
 import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { parseGodotConfig } from '../../build/helpers.js';
 
-// opsScript 指向编译后的 godot_operations.gd
-const OPS_SCRIPT = join(dirname(import.meta.url.replace('file:///', '').replace('file://', '')),
-  '..', '..', 'build', 'scripts', 'godot_operations.gd');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const OPS_SCRIPT = join(__dirname, '..', '..', 'build', 'scripts', 'godot_operations.gd');
 
 /** 创建最小 ToolContext mock */
 export function createToolContext(projectPath) {
