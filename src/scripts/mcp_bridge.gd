@@ -153,7 +153,8 @@ func _generate_secret() -> String:
 			if b2 >= 256 - (256 % chars.length()):
 				continue
 			result += chars[b2 % chars.length()]
-	assert(result.length() == 32, "Failed to generate 32-char secret")
+	if result.length() < 32:
+		push_error("[MCP Bridge] Failed to generate 32-char secret, using truncated value")
 	return result
 
 

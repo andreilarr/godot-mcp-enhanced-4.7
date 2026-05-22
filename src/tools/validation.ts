@@ -114,7 +114,18 @@ export function isErrorFalsePositive(line: string): boolean {
   // 规则 1: 已知基类方法/属性 — "not found in base self" 但方法是合法继承的
   if (trimmedLine.includes('not found in base self')) {
     for (const method of KNOWN_BASE_METHODS) {
-      if (trimmedLine.includes('.' + method) || trimmedLine.includes(method + '(') || trimmedLine.includes('"' + method + '"')) return true;
+      if (trimmedLine.includes('.' + method) || trimmedLine.includes('"' + method + '"')) return true;
+      // Short names (4 chars or less): use word boundary to avoid substring matches
+      if (method.length <= 4) {
+        const pattern = method + '(';
+            let pi = trimmedLine.indexOf(pattern);
+            while (pi !== -1) {
+              if (pi === 0 || !/[\w]/.test(trimmedLine[pi - 1])) return true;
+              pi = trimmedLine.indexOf(pattern, pi + 1);
+            }
+      } else if (trimmedLine.includes(method + '(')) {
+        return true;
+      }
     }
   }
 

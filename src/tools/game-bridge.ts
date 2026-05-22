@@ -73,9 +73,8 @@ function sendToBridge(method: string, params: Record<string, unknown> = {}, time
 
     const socket = createConnection({ port: BRIDGE_PORT, host: BRIDGE_HOST }, () => {
       if (secret) {
-        const authMsg = JSON.stringify({ id: 0, method: 'auth', params: { secret } }) + '\n';
-        const cmdMsg = JSON.stringify({ id, method, params }) + '\n';
-        socket.write(authMsg + cmdMsg);
+        socket.write(JSON.stringify({ id: 0, method: 'auth', params: { secret } }) + '\n');
+        // Command sent after auth succeeds (in data handler);
       } else {
         socket.write(JSON.stringify({ id, method, params }) + '\n');
       }
@@ -99,6 +98,7 @@ function sendToBridge(method: string, params: Record<string, unknown> = {}, time
           const resp = JSON.parse(line);
           if (!authDone && resp.result?.authenticated) {
             authDone = true;
+            socket.write(JSON.stringify({ id, method, params }) + '\n');
             continue;
           }
           socket.destroy();

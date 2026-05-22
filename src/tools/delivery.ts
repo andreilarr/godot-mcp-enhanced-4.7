@@ -67,7 +67,7 @@ export function getToolDefinitions(): Tool[] {
               performance: { type: 'boolean', description: 'Check performance/resource health' },
               assertions: {
                 type: 'array',
-                description: 'Custom behavior assertions (max 10)',
+                description: 'Custom behavior assertions (max 10). GDScript must use _mcp_output("assert_N", value) to report results; keys must start with "assert_" or be "assert_result".',
                 items: {
                   type: 'object',
                   properties: {
@@ -337,6 +337,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
     // GDScript syntax validation via Godot headless parser
     const existingScripts = scriptPaths.filter(sp => existsSync(join(projectPath, sp)));
+    if (existingScripts.length > 200) {
+      issues.push({ severity: 'warning', location: '(script validation)', message: `Script count (${existingScripts.length}) exceeds 200 limit; validation skipped. Set scope='script' to validate individual files.` });
+    }
     if (existingScripts.length > 0 && existingScripts.length <= 200) {
       try {
         const godot = await ctx.findGodot();

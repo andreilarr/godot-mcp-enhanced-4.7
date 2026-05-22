@@ -79,7 +79,8 @@ func _generate_secret() -> String:
 			if b2 >= 256 - (256 % chars.length()):
 				continue
 			result += chars[b2 % chars.length()]
-	assert(result.length() == 32, "Failed to generate 32-char secret")
+	if result.length() < 32:
+		push_error("[MCP] Failed to generate 32-char secret, using truncated value")
 	return result
 
 func _get_project_dir() -> String:
@@ -114,6 +115,7 @@ func _process(delta: float) -> void:
 		if _peers.size() >= MAX_PEERS:
 			tcp_peer.disconnect_from_host()
 			push_warning("[MCP] Connection rejected: max peers reached (%d)" % MAX_PEERS)
+			_update_panel("MCP: Rejected connection (%d/%d peers)" % [_peers.size(), MAX_PEERS])
 			return
 
 		var ws_peer = WebSocketPeer.new()
