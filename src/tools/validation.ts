@@ -103,8 +103,8 @@ const TOOL_NAMES = [
 export function isErrorFalsePositive(line: string): boolean {
   const trimmedLine = line.trim();
 
-  // await expressions are never "not found in base self" errors
-  if (trimmedLine.includes('await ')) return true;
+  // await expressions in "not found in base self" context are false positives
+  if (trimmedLine.includes('await ') && trimmedLine.includes('not found in base self')) return true;
 
   // ScriptBus internal
   if (trimmedLine.includes('not found in base self') && trimmedLine.includes('ScriptBus')) return true;

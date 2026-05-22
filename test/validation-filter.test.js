@@ -153,11 +153,10 @@ describe('validation-filter: await rule', () => {
     assert.ok(isErrorFalsePositive(line));
   });
 
-  it('filters "await " with leading space to avoid "awaiting" false positive... actually filters any await', () => {
-    // The rule checks for 'await ' (with space) to avoid matching "awaiting"
-    // but both should be filtered since await lines are never false positives
-    const line = 'SCRIPT ERROR: Parse Error: Cannot await in base self.';
-    assert.ok(isErrorFalsePositive(line));
+  it('does NOT filter real await parse errors without "not found in base self"', () => {
+    // Real parse errors about await syntax should NOT be filtered
+    const line = 'SCRIPT ERROR: Parse Error: Cannot use await outside of a coroutine function.';
+    assert.ok(!isErrorFalsePositive(line));
   });
 
   it('does NOT filter a real error line without await or whitelist match', () => {
