@@ -250,13 +250,13 @@ export async function quickVerify(
 }
 
 /** Shared assertion wrapper — called by both dev_loop.acceptance and delivery.ts assertions */
-export function wrapAssertionCode(assertionCode: string, description: string): string {
+export function wrapAssertionCode(assertionCode: string, description: string, loadScene = false): string {
   const escapedDesc = gdEscape(description);
+  const sceneLoadLine = loadScene ? '\t_mcp_load_main_scene()\n' : '';
   return `${SCENE_TREE_HEADER}
 
 func _initialize():
-\t_mcp_load_main_scene()
-\tvar _desc = "${escapedDesc}"
+${sceneLoadLine}\tvar _desc = "${escapedDesc}"
 \t# --- user assertion code ---
 \t${assertionCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').join('\n\t')}
 \t# --- end user code ---

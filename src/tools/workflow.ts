@@ -138,41 +138,40 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         result.step2_verify = await runVerification(godot, projectPath);
       }
 
-      // ── Acceptance assertions ──
+      // ── Acceptance assertions (execute individually for isolation) ──
       const acceptance = args.acceptance as Record<string, unknown> | undefined;
       if (acceptance) {
         const assertionList = (acceptance.assertions as Array<Record<string, string>>) ?? [];
         if (assertionList.length > 0) {
           const assertionResults: Array<Record<string, unknown>> = [];
-          const allAssertCode = assertionList.map((a, i) => {
-            return `# --- assertion ${i}: ${a.description} ---\n${a.gdscript}`;
-          }).join('\n');
 
-          const wrappedCode = wrapAssertionCode(allAssertCode, 'acceptance');
-          const assertResult = await executeGdscript({
-            godotPath: godot, projectPath, code: wrappedCode, timeout, loadAutoloads,
-          });
+          for (let i = 0; i < assertionList.length; i++) {
+            const a = assertionList[i];
+            const desc = a.description ?? `assertion ${i}`;
+            try {
+              const wrappedCode = wrapAssertionCode(a.gdscript, desc);
+              const assertResult = await executeGdscript({
+                godotPath: godot, projectPath, code: wrappedCode, timeout, loadAutoloads,
+              });
 
-          if (!assertResult.compile_success) {
-            result.acceptance = { passed: false, error: assertResult.compile_error };
-          } else if (!assertResult.run_success) {
-            result.acceptance = { passed: false, error: assertResult.run_error };
-          } else {
-            const assertOutputs: Record<string, unknown> = {};
-            for (const entry of assertResult.outputs) {
-              try { assertOutputs[entry.key] = JSON.parse(entry.value); } catch { assertOutputs[entry.key] = entry.value; }
+              if (!assertResult.compile_success) {
+                assertionResults.push({ description: desc, passed: false, error: assertResult.compile_error });
+              } else if (!assertResult.run_success) {
+                assertionResults.push({ description: desc, passed: false, error: assertResult.run_error });
+              } else {
+                const actual = String(assertResult.outputs.find(e => e.key.startsWith('assert_') || e.key === 'assert_result')?.value ?? '');
+                const passed = a.expect ? actual === a.expect : true;
+                assertionResults.push({ description: desc, passed, actual, expected: a.expect });
+              }
+            } catch (err) {
+              assertionResults.push({ description: desc, passed: false, error: err instanceof Error ? err.message : String(err) });
             }
-            for (let i = 0; i < assertionList.length; i++) {
-              const a = assertionList[i];
-              const actual = String(assertOutputs[`assert_${i}`] ?? assertOutputs['assert_result'] ?? '');
-              const passed = a.expect ? actual === a.expect : true;
-              assertionResults.push({ description: a.description, passed, actual, expected: a.expect });
-            }
-            result.acceptance = {
-              passed: assertionResults.every(r => r.passed),
-              results: assertionResults,
-            };
           }
+
+          result.acceptance = {
+            passed: assertionResults.every(r => r.passed),
+            results: assertionResults,
+          };
         }
       }
 
