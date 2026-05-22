@@ -112,7 +112,7 @@ func _process(delta: float) -> void:
 		var tcp_peer = _server.take_connection()
 
 		if _peers.size() >= MAX_PEERS:
-			tcp_peer.disconnect()
+			tcp_peer.disconnect_from_host()
 			push_warning("[MCP] Connection rejected: max peers reached (%d)" % MAX_PEERS)
 			return
 
