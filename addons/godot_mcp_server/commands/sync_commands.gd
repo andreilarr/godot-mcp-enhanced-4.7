@@ -95,9 +95,6 @@ func _get_edited_scene_root() -> Node:
 			var ei = plugin.get_editor_interface()
 			if ei:
 				return ei.get_edited_scene_root()
-	var ml = Engine.get_main_loop()
-	if ml and ml is SceneTree and ml.root and ml.root.get_child_count() > 0:
-		return ml.root.get_child(0)
 	return null
 
 

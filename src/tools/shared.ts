@@ -61,7 +61,7 @@ export function gdEscape(s: string): string {
     .replace(/%/g, '%%')
     .replace(/\$/g, '\\$')
     .replace(/'/g, "\\'")
-    .replace(/\\u(?=[0-9a-fA-F]{4})/g, '\\\\u');
+    .replace(/\\[uU](?=[0-9a-fA-F]{4})/g, '\\\\u');
 }
 
 export function validateVector3(v: unknown): { x: number; y: number; z: number } {
@@ -251,7 +251,7 @@ export async function quickVerify(
 }
 
 /** Shared assertion wrapper — called by both dev_loop.acceptance and delivery.ts assertions */
-export function wrapAssertionCode(assertionCode: string, description: string, loadScene = false): string {
+export function wrapAssertionCode(assertionCode: string, description: string, loadScene = true): string {
   const escapedDesc = gdEscape(description);
   const sceneLoadLine = loadScene ? '\t_mcp_load_main_scene()\n' : '';
   return `${SCENE_TREE_HEADER}

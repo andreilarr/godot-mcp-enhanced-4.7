@@ -46,7 +46,8 @@ func _add_method_call(undo_redo: UndoRedo, mode: String, m: Dictionary) -> void:
 			else:
 				undo_redo.add_undo_method(target, method, args[0], args[1], args[2], args[3])
 		_:
+			var callable := Callable(target, method).bindv(args)
 			if mode == "do":
-				undo_redo.add_do_method(target, method, args)
+				undo_redo.add_do_method(callable)
 			else:
-				undo_redo.add_undo_method(target, method, args)
+				undo_redo.add_undo_method(callable)

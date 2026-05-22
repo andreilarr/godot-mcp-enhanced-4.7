@@ -8,6 +8,7 @@ extends Node
 const PORT := 9081
 const MAX_AUTH_FAILS := 5
 const LOCKOUT_SECONDS := 30.0
+const _LOCKOUT_KEY := "localhost"
 
 var _server: TCPServer = null
 var _peers: Array[StreamPeerTCP] = []
@@ -81,7 +82,7 @@ func _process(_delta: float) -> void:
 		var pid := _peers[i].get_instance_id()
 		_peer_buffers.erase("buf_" + str(pid))
 		_authenticated_peers.erase(pid)
-		# Auth fail/lockout counts are IP-based — do NOT clear on disconnect
+		# Auth fail/lockout counts persist across reconnects (all connections are localhost)
 		_peers.remove_at(i)
 
 
@@ -111,11 +112,14 @@ func _server_take_connection() -> StreamPeerTCP:
 
 
 func _constant_time_compare(a: String, b: String) -> bool:
-	if a.length() != b.length():
-		return false
+	var max_len := maxi(a.length(), b.length())
 	var result := 0
-	for i in range(a.length()):
-		result = result | (ord(a[i]) ^ ord(b[i]))
+	if a.length() != b.length():
+		result = 1
+	for i in range(max_len):
+		var ca := ord(a[i]) if i < a.length() else 0
+		var cb := ord(b[i]) if i < b.length() else 0
+		result = result | (ca ^ cb)
 	return result == 0
 
 func _generate_secret() -> String:
@@ -181,26 +185,26 @@ func _process_buffer_bytes(peer: StreamPeerTCP, pid: int) -> void:
 			break
 		if not _authenticated_peers.has(pid):
 			
-			if _auth_locked_until.has(pid):
-				var locked_until: float = _auth_locked_until[pid]
+			if _auth_locked_until.has(_LOCKOUT_KEY):
+				var locked_until: float = _auth_locked_until[_LOCKOUT_KEY]
 				if Time.get_ticks_msec() / 1000.0 < locked_until:
 					peer.put_utf8_string(JSON.stringify({"id": null, "error": {"code": -32002, "message": "Too many auth failures, temporarily locked"}}) + "\n")
 					peer.disconnect_from_host()
 					continue
 				else:
-					_auth_locked_until.erase(pid)
-					_auth_fail_count[pid] = 0
+					_auth_locked_until.erase(_LOCKOUT_KEY)
+					_auth_fail_count[_LOCKOUT_KEY] = 0
 			var parsed: Variant = JSON.parse_string(line)
 			if parsed is Dictionary and parsed.get("method") == "auth" and _constant_time_compare(str(parsed.get("secret")), _secret):
 				_authenticated_peers[pid] = true
-				_auth_fail_count.erase(pid)
+				_auth_fail_count.erase(_LOCKOUT_KEY)
 				peer.put_utf8_string(JSON.stringify({"id": parsed.get("id"), "result": {"authenticated": true}}) + "\n")
 				continue
 			else:
-				var fails: int = int(_auth_fail_count.get(pid, 0)) + 1
-				_auth_fail_count[pid] = fails
+				var fails: int = int(_auth_fail_count.get(_LOCKOUT_KEY, 0)) + 1
+				_auth_fail_count[_LOCKOUT_KEY] = fails
 				if fails >= MAX_AUTH_FAILS:
-					_auth_locked_until[pid] = Time.get_ticks_msec() / 1000.0 + LOCKOUT_SECONDS
+					_auth_locked_until[_LOCKOUT_KEY] = Time.get_ticks_msec() / 1000.0 + LOCKOUT_SECONDS
 				peer.put_utf8_string(JSON.stringify({"id": null, "error": {"code": -32001, "message": "Authentication required"}}) + "\n")
 				continue
 		var response := _handle_message(line)

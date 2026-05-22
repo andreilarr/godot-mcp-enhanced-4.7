@@ -142,10 +142,8 @@ func _handle_message(text: String, peer: WebSocketPeer) -> void:
 	# Auth endpoint — always allowed
 	if parsed.get("method") == "auth":
 		if _secret == "":
-			# No secret configured (couldn't write file); skip auth
-			_authenticated_peers[pid] = true
-			peer.send_text(JSON.stringify({"jsonrpc": "2.0", "id": parsed.get("id"), "result": {"authenticated": true}}))
-			_send_session_sync(peer)
+			peer.send_text(JSON.stringify({"jsonrpc": "2.0", "id": parsed.get("id"), "error": {"code": -32002, "message": "Server auth not configured; connection rejected"}}))
+			peer.close()
 			return
 		var provided: String = str(parsed.get("params", {}).get("secret", ""))
 		if _constant_time_compare(provided, _secret):
@@ -159,7 +157,7 @@ func _handle_message(text: String, peer: WebSocketPeer) -> void:
 		return
 
 	# All other methods require authentication
-	if _secret != "" and not _authenticated_peers.has(pid):
+	if _secret == "" or not _authenticated_peers.has(pid):
 		peer.send_text(JSON.stringify({"jsonrpc": "2.0", "id": parsed.get("id"), "error": {"code": -32001, "message": "Authentication required"}}))
 		peer.close()
 		return
@@ -221,11 +219,14 @@ func _get_panel() -> Node:
 	return get_node_or_null("../../../../../MCP")
 
 func _constant_time_compare(a: String, b: String) -> bool:
-	if a.length() != b.length():
-		return false
+	var max_len := maxi(a.length(), b.length())
 	var result := 0
-	for i in range(a.length()):
-		result = result | (ord(a[i]) ^ ord(b[i]))
+	if a.length() != b.length():
+		result = 1
+	for i in range(max_len):
+		var ca := ord(a[i]) if i < a.length() else 0
+		var cb := ord(b[i]) if i < b.length() else 0
+		result = result | (ca ^ cb)
 	return result == 0
 
 func _exit_tree() -> void:
