@@ -17,7 +17,7 @@ import { forceKillTree } from '../core/process-state.js';
 // (Node, Node2D, Control, CharacterBody, etc.), so legitimate calls are
 // incorrectly flagged as "not found in base self". This whitelist filters them.
 
-const KNOWN_BASE_METHODS: Set<string> = new Set([
+export const KNOWN_BASE_METHODS: Set<string> = new Set([
   // Node 核心
   'add_child', 'remove_child', 'get_child', 'get_children', 'get_child_count',
   'get_parent', 'get_tree', 'get_node', 'find_child', 'find_children',
@@ -48,6 +48,31 @@ const KNOWN_BASE_METHODS: Set<string> = new Set([
   'wait_time', 'autostart', 'one_shot',
   // Resource / Object
   'get_path', 'resource_path', 'get_resource', 'duplicate',
+  // Input 事件
+  'is_action_pressed', 'is_action_just_pressed', 'is_action_just_released',
+  'get_vector', 'get_strength', 'mouse_mode', 'set_mouse_mode',
+  // Area2D / Collision
+  'get_overlapping_bodies', 'get_overlapping_areas',
+  'monitoring', 'monitorable', 'collision_mask', 'collision_layer',
+  'set_collision_mask_value',
+  // AnimationPlayer
+  'play', 'stop', 'pause', 'seek',
+  'get_current_animation_position', 'current_animation', 'speed_scale', 'autoplay',
+  // AudioStreamPlayer
+  'playing', 'volume_db', 'pitch_scale', 'stream',
+  // TileMap / TileMapLayer
+  'set_cell', 'get_cell', 'get_used_cells', 'map_to_local', 'local_to_map',
+  // Sprite2D / Texture
+  'texture', 'hframes', 'vframes', 'frame', 'region_enabled', 'region_rect',
+  // Label / RichTextLabel
+  'horizontal_alignment', 'vertical_alignment', 'autowrap_mode',
+  'bbcode_text', 'append_text', 'scroll_to_line',
+  // Timer 扩展
+  'start', 'time_left', 'paused',
+  // Tween
+  'tween_property', 'tween_callback', 'set_parallel', 'set_trans', 'set_ease',
+  // Window
+  'get_window', 'set_flag', 'borderless', 'transparent',
 ]);
 
 export interface BatchValidateResult {
@@ -71,6 +96,35 @@ const TOOL_NAMES = [
   'validate_scripts',
   'import_resources',
 ] as const;
+
+// ─── False-positive error filter ────────────────────────────────────────────
+// Exported for testing; used internally by batchValidateScripts.
+
+export function isErrorFalsePositive(line: string): boolean {
+  const trimmedLine = line.trim();
+
+  // await expressions are never "not found in base self" errors
+  if (trimmedLine.includes('await ')) return true;
+
+  // ScriptBus internal
+  if (trimmedLine.includes('not found in base self') && trimmedLine.includes('ScriptBus')) return true;
+  // Godot engine noise
+  if (trimmedLine.includes('Condition') && trimmedLine.includes('is true')) return true;
+
+  // 规则 1: 已知基类方法/属性 — "not found in base self" 但方法是合法继承的
+  if (trimmedLine.includes('not found in base self')) {
+    for (const method of KNOWN_BASE_METHODS) {
+      if (trimmedLine.includes('.' + method) || trimmedLine.includes(method + '(') || trimmedLine.includes('"' + method + '"')) return true;
+    }
+  }
+
+  // 规则 2: 虚拟方法签名不匹配 — _process/_ready 等重写签名差异
+  if (/Parse Error.*\b(_ready|_process|_physics_process|_input|_unhandled_input|_enter_tree|_exit_tree)\b/.test(trimmedLine)) {
+    if (/signature|not found in base/.test(trimmedLine)) return true;
+  }
+
+  return false;
+}
 
 // ─── Script file collection ────────────────────────────────────────────────
 
@@ -157,33 +211,6 @@ export async function batchValidateScripts(
   writeFileSync(validatorPath, validatorCode, 'utf-8');
 
   const results = new Map<string, string[]>();
-
-  // Only filter Godot engine internal noise, NOT user-visible identifier errors.
-  // Previously "Identifier not found" and "not declared in the current scope" were
-  // filtered here, but those are real errors when class_name references fail to
-  // resolve in headless mode — exactly the bugs users need to catch.
-  // Autoload errors (e.g. DataRegistry, PlayerData not available in headless) are
-  // intentionally NOT filtered — users should know their scripts depend on autoloads.
-  const isErrorFalsePositive = (line: string): boolean => {
-    // ScriptBus internal
-    if (line.includes('not found in base self') && line.includes('ScriptBus')) return true;
-    // Godot engine noise
-    if (line.includes('Condition') && line.includes('is true')) return true;
-
-    // 规则 1: 已知基类方法/属性 — "not found in base self" 但方法是合法继承的
-    if (line.includes('not found in base self')) {
-      for (const method of KNOWN_BASE_METHODS) {
-        if (line.includes('.' + method) || line.includes(method + '(')) return true;
-      }
-    }
-
-    // 规则 2: 虚拟方法签名不匹配 — _process/_ready 等重写签名差异
-    if (/Parse Error.*\b(_ready|_process|_physics_process|_input|_unhandled_input|_enter_tree|_exit_tree)\b/.test(line)) {
-      if (/signature|not found in base/.test(line)) return true;
-    }
-
-    return false;
-  };
 
   const output = await new Promise<string>((resolve) => {
     let stdout = '';
