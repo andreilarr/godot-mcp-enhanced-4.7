@@ -1,4 +1,5 @@
-import { it } from 'node:test';
+// test/helpers/integration-setup.js
+
 import { findGodot } from '../../build/core/godot-finder.js';
 
 let _godotPath = null;
@@ -22,7 +23,7 @@ export function getGodotPath() { return _godotPath; }
 
 /**
  * 条件执行：Godot 可用时跑测试，不可用时 skip。
- * node:test 没有 describe.skip，用 it({ skip: true }) 替代。
+ * node:test 没有 describe.skip，用 it({ skip }) 替代。
  */
 export function itIfGodot(name, fn) {
   if (_godotAvailable) {
