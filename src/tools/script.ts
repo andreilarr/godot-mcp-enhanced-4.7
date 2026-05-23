@@ -7,6 +7,7 @@ import { validatePath, resolveWithinRoot, ensureDir } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { batchValidateScripts } from './validation.js';
 import { lintGDScript, formatLintResults } from './gdscript-lint.js';
+import { getTemplateSuggestion } from './code-templates.js';
 
 function detectDuplicateLines(lines: string[]): string[] {
   const warnings: string[] = [];
@@ -266,11 +267,24 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       writeFileSync(sp, content, 'utf-8');
 
       let lintSection = '';
+      let templateHint = '';
       if (sp.endsWith('.gd')) {
         const lintOutput = lintGDScript(content);
         lintSection = formatLintResults(lintOutput);
+
+        const allIssues = [...lintOutput.errors, ...lintOutput.warnings];
+        if (allIssues.length > 0) {
+          const suggestions = new Set<string>();
+          for (const issue of allIssues) {
+            const suggestion = getTemplateSuggestion(issue.rule);
+            if (suggestion) suggestions.add(`  (${issue.rule}) → use list_templates to find a fix`);
+          }
+          if (suggestions.size > 0) {
+            templateHint = '\n\nTemplate suggestions:\n' + [...suggestions].join('\n');
+          }
+        }
       }
-      return textResult(`Script written to ${sp} (${content.split('\n').length} lines)${lintSection}`);
+      return textResult(`Script written to ${sp} (${content.split('\n').length} lines)${lintSection}${templateHint}`);
     }
 
     case 'edit_script': {
