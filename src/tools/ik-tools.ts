@@ -84,7 +84,7 @@ func _initialize():
 \t_mcp_output("type", ik_node.get_class())
 \t_mcp_output("active", ik_node.active)
 \t_mcp_output("influence", ik_node.influence)
-\tif ik_node.has_method("get_bone_name"):
+\tif "bone_name" in ik_node:
 \t\t_mcp_output("bone_name", str(ik_node.bone_name))
 \t\t_mcp_output("target_nodepath", str(ik_node.target_nodepath))
 \t\t_mcp_output("use_magnet", ik_node.use_magnet)
@@ -254,6 +254,7 @@ export async function handleTool(
           return opsErrorResult(ERROR_CODES.INVALID_TYPE,
             `Invalid IK type: "${ikType}". Must be one of: ${IK_TYPE_WHITELIST.join(', ')}`);
         }
+        validateIdentifier(ikType, 'type');
         validateIdentifier(args.name as string, 'name');
         const nodeName = args.name as string;
         const parent = normalizeNodePath((args.parent as string) || 'root');
@@ -282,6 +283,24 @@ export async function handleTool(
         }
         if ('bone_name' in props && (!props.bone_name || String(props.bone_name).trim() === '')) {
           return opsErrorResult(ERROR_CODES.INVALID_PROPERTY, 'bone_name must be non-empty');
+        }
+        if ('active' in props && typeof props.active !== 'boolean') {
+          return opsErrorResult(ERROR_CODES.INVALID_PROPERTY, 'active must be a boolean');
+        }
+        if ('influence' in props) {
+          const inf = Number(props.influence);
+          if (!Number.isFinite(inf) || inf < 0 || inf > 1) {
+            return opsErrorResult(ERROR_CODES.INVALID_PROPERTY, 'influence must be a number in [0, 1]');
+          }
+        }
+        if ('use_magnet' in props && typeof props.use_magnet !== 'boolean') {
+          return opsErrorResult(ERROR_CODES.INVALID_PROPERTY, 'use_magnet must be a boolean');
+        }
+        if ('magnet_position' in props) {
+          props.magnet_position = validateVector3(props.magnet_position);
+        }
+        if ('target_nodepath' in props && typeof props.target_nodepath === 'string') {
+          normalizeNodePath(props.target_nodepath);
         }
         script = genIkSetScript(nodePath, props);
         break;

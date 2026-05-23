@@ -55,12 +55,12 @@ texture = ExtResource("1")
 [node name="GrandChild" type="Node3D" parent="Child"]
 `;
     const result = parseTscn(content);
-    // parser 返回平铺列表 + 单层 children
     assert.strictEqual(result.nodes.length, 3);
     assert.strictEqual(result.nodes[0].name, 'Root');
     assert.strictEqual(result.nodes[0].children.length, 1);
     assert.strictEqual(result.nodes[0].children[0].name, 'Child');
-    // GrandChild 在平铺列表中但未被递归嵌套到 Child.children
+    // GrandChild's parent "Child" maps to nodeMap key "./Child", not "Child"
+    // so recursive nesting is limited to parent="." children only
     assert.strictEqual(result.nodes[2].name, 'GrandChild');
     assert.strictEqual(result.nodes[2].parent, 'Child');
   });

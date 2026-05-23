@@ -73,7 +73,7 @@ describe('genBodyInfoScript', () => {
   it('contains CollisionShape3D scan', () => {
     const script = genBodyInfoScript('/root/Player');
     assert.ok(script.includes('CollisionShape3D'));
-    assert.ok(script.includes('get_node("/root/Player")'));
+    assert.ok(script.includes('_mcp_get_node("/root/Player")'));
     assert.ok(script.includes('has_collision'));
   });
   it('contains collision_layer and collision_mask', () => {
