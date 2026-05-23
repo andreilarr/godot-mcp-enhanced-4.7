@@ -288,4 +288,36 @@ describe('用户模板加载', () => {
     assert.ok(t001, 'T001 应存在');
     assert.equal(t001.name, '覆盖 T001');
   });
+
+  it('variables 为非数组时模板被跳过', () => {
+    const tplDir = join(tmpDir, '.mcp-templates');
+    mkdirSync(tplDir, { recursive: true });
+
+    writeFileSync(join(tplDir, 'bad-vars.json'), JSON.stringify({
+      id: 'bad-vars',
+      name: '坏变量',
+      description: '变量不是数组',
+      code: 'pass',
+      variables: 'not-an-array',
+    }), 'utf-8');
+
+    const result = loadUserTemplates(tmpDir);
+    assert.equal(result.length, 0, 'variables 为字符串时应被跳过');
+  });
+
+  it('tags 为非数组时模板被跳过', () => {
+    const tplDir = join(tmpDir, '.mcp-templates');
+    mkdirSync(tplDir, { recursive: true });
+
+    writeFileSync(join(tplDir, 'bad-tags.json'), JSON.stringify({
+      id: 'bad-tags',
+      name: '坏标签',
+      description: '标签不是数组',
+      code: 'pass',
+      tags: 123,
+    }), 'utf-8');
+
+    const result = loadUserTemplates(tmpDir);
+    assert.equal(result.length, 0, 'tags 为数字时应被跳过');
+  });
 });

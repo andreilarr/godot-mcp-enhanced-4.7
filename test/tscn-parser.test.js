@@ -59,10 +59,8 @@ texture = ExtResource("1")
     assert.strictEqual(result.nodes[0].name, 'Root');
     assert.strictEqual(result.nodes[0].children.length, 1);
     assert.strictEqual(result.nodes[0].children[0].name, 'Child');
-    // GrandChild's parent "Child" maps to nodeMap key "./Child", not "Child"
-    // so recursive nesting is limited to parent="." children only
-    assert.strictEqual(result.nodes[2].name, 'GrandChild');
-    assert.strictEqual(result.nodes[2].parent, 'Child');
+    assert.strictEqual(result.nodes[0].children[0].children.length, 1);
+    assert.strictEqual(result.nodes[0].children[0].children[0].name, 'GrandChild');
   });
 
   it('parses instance ExtResource references', () => {

@@ -337,6 +337,8 @@ function validateUserTemplate(raw: unknown, filePath: string): UserTemplateFile 
   if (typeof t.name !== 'string' || !t.name) return null;
   if (typeof t.code !== 'string' || !t.code.trim()) return null;
   if (typeof t.description !== 'string') t.description = '';
+  if (t.variables !== undefined && !Array.isArray(t.variables)) return null;
+  if (t.tags !== undefined && !Array.isArray(t.tags)) return null;
   return t as unknown as UserTemplateFile;
 }
 

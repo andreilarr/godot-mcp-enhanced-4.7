@@ -420,12 +420,24 @@ export function parseTscn(content: string): ParsedScene {
   }
 
   let rootNode: ParsedNode | undefined;
+  const nodeFullPath = new Map<ParsedNode, string>();
   for (const node of result.nodes) {
     node.children = [];
-    const uniquePath = node.parent ? `${node.parent}/${node.name}` : node.name;
-    nodeMap.set(uniquePath, node);
     if (!node.parent) {
       rootNode = node;
+      nodeMap.set(node.name, node);
+      nodeFullPath.set(node, node.name);
+    } else if (node.parent === '.') {
+      const uniquePath = rootNode ? `${rootNode.name}/${node.name}` : node.name;
+      nodeMap.set(uniquePath, node);
+      nodeFullPath.set(node, uniquePath);
+    } else {
+      // Find parent's full path to build this node's full path
+      const parentNode = result.nodes.find(n => n.name === node.parent && n !== node);
+      const parentFull = parentNode ? (nodeFullPath.get(parentNode) ?? node.parent) : node.parent;
+      const uniquePath = `${parentFull}/${node.name}`;
+      nodeMap.set(uniquePath, node);
+      nodeFullPath.set(node, uniquePath);
     }
   }
 
@@ -435,7 +447,11 @@ export function parseTscn(content: string): ParsedScene {
       if (node.parent === '.') {
         parent = rootNode;
       } else {
+        // Look up by name first, then by full path
         parent = nodeMap.get(node.parent);
+        if (!parent) {
+          parent = result.nodes.find(n => n.name === node.parent && n !== node);
+        }
       }
       if (parent) {
         parent.children.push(node);
