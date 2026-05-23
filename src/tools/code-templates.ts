@@ -1,6 +1,9 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 // ─── Code Template Types ────────────────────────────────────────────────────
 
-interface TemplateParam {
+export interface TemplateParam {
   name: string;
   type: string;
   default: string;
@@ -306,4 +309,90 @@ export function getTemplateSuggestion(ruleId: string): string | null {
   const template = TEMPLATES.find(t => t.id === templateId);
   if (!template) return null;
   return template.generate({});
+}
+
+// ─── User Template Loading ──────────────────────────────────────────────────
+
+interface UserTemplateFile {
+  id: string;
+  name: string;
+  description: string;
+  tags?: string[];
+  appliesTo?: string[];
+  godotVersion?: string;
+  code: string;
+  variables?: TemplateParam[];
+}
+
+function validateUserTemplate(raw: unknown, filePath: string): UserTemplateFile | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const t = raw as Record<string, unknown>;
+  if (typeof t.id !== 'string' || !t.id) return null;
+  if (typeof t.name !== 'string' || !t.name) return null;
+  if (typeof t.code !== 'string' || !t.code.trim()) return null;
+  if (typeof t.description !== 'string') t.description = '';
+  return t as unknown as UserTemplateFile;
+}
+
+/** 加载项目 .mcp-templates/ 目录下的用户模板 */
+export function loadUserTemplates(projectPath: string): CodeTemplate[] {
+  const templateDir = join(projectPath, '.mcp-templates');
+  if (!existsSync(templateDir)) return [];
+
+  const userTemplates: CodeTemplate[] = [];
+  const builtInIds = new Set(TEMPLATES.map(t => t.id));
+
+  for (const file of readdirSync(templateDir)) {
+    if (!file.endsWith('.json')) continue;
+    const filePath = join(templateDir, file);
+    try {
+      const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
+      const validated = validateUserTemplate(raw, filePath);
+      if (!validated) continue;
+
+      const id = validated.id;
+      if (builtInIds.has(id)) {
+        console.warn(`[template] User template '${id}' in ${file} overrides built-in template`);
+      }
+
+      userTemplates.push({
+        id,
+        name: validated.name,
+        description: validated.description ?? '',
+        relatedRules: [],
+        params: validated.variables ?? [],
+        generate: (p) => {
+          let code = validated.code;
+          for (const [key, value] of Object.entries(p)) {
+            code = code.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
+          }
+          return code;
+        },
+        verifiedGodotVersion: validated.godotVersion ?? '4.2',
+        lastVerified: new Date().toISOString().split('T')[0],
+      });
+    } catch (err) {
+      console.warn(`[template] Failed to load ${file}: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  return userTemplates;
+}
+
+/** 渲染模板变量 — 供 MCP 工具使用 */
+export function renderTemplate(code: string, variables: Record<string, string>): string {
+  return code.replace(/\{\{(\w+)\}\}/g, (match, key) => variables[key] ?? match);
+}
+
+/** 获取所有模板（内置 + 用户） */
+export function getAllTemplates(projectPath?: string): CodeTemplate[] {
+  const builtIn = [...TEMPLATES];
+  if (!projectPath) return builtIn;
+  const user = loadUserTemplates(projectPath);
+  if (user.length === 0) return builtIn;
+
+  // 用户模板覆盖同名内置模板
+  const userIds = new Set(user.map(t => t.id));
+  const merged = builtIn.filter(t => !userIds.has(t.id)).concat(user);
+  return merged;
 }
