@@ -120,4 +120,12 @@ describe('validateIdentifier', () => {
   it('rejects identifiers with dots', () => {
     assert.throws(() => validateIdentifier('Node3D.new()', 'test'), /not a valid GDScript identifier/);
   });
+  it('rejects names longer than 64 characters', () => {
+    const longName = 'a'.repeat(65);
+    assert.throws(() => validateIdentifier(longName, 'test'), /64 characters/);
+  });
+  it('accepts names exactly 64 characters', () => {
+    const maxName = 'a'.repeat(64);
+    assert.doesNotThrow(() => validateIdentifier(maxName, 'test'));
+  });
 });

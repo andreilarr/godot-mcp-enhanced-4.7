@@ -66,6 +66,9 @@ export function gdEscape(s: string): string {
 
 /** Validates that a string is a safe GDScript identifier (class name, type name, etc.). */
 export function validateIdentifier(name: string, label: string): void {
+  if (name.length > 64) {
+    throw new Error(`${label} "${name.slice(0, 20)}..." must be 1-64 characters (got ${name.length})`);
+  }
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
     throw new Error(`${label} "${name}" is not a valid GDScript identifier`);
   }
