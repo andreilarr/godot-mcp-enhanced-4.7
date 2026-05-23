@@ -320,4 +320,20 @@ describe('用户模板加载', () => {
     const result = loadUserTemplates(tmpDir);
     assert.equal(result.length, 0, 'tags 为数字时应被跳过');
   });
+
+  it('appliesTo 为非数组时模板被跳过', () => {
+    const tplDir = join(tmpDir, '.mcp-templates');
+    mkdirSync(tplDir, { recursive: true });
+
+    writeFileSync(join(tplDir, 'bad-applies.json'), JSON.stringify({
+      id: 'bad-applies',
+      name: '坏适用范围',
+      description: 'appliesTo 不是数组',
+      code: 'pass',
+      appliesTo: 'not-an-array',
+    }), 'utf-8');
+
+    const result = loadUserTemplates(tmpDir);
+    assert.equal(result.length, 0, 'appliesTo 为字符串时应被跳过');
+  });
 });

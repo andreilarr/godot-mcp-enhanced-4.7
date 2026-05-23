@@ -63,6 +63,25 @@ texture = ExtResource("1")
     assert.strictEqual(result.nodes[0].children[0].children[0].name, 'GrandChild');
   });
 
+  it('handles 4+ level nesting with slash parent paths', () => {
+    const content = `[gd_scene load_steps=1 format=3]
+
+[node name="Root" type="Node3D"]
+
+[node name="Child" type="Node3D" parent="."]
+
+[node name="GrandChild" type="Node3D" parent="Child"]
+
+[node name="GreatGrand" type="Node3D" parent="Child/GrandChild"]
+`;
+    const result = parseTscn(content);
+    assert.strictEqual(result.nodes.length, 4);
+    assert.strictEqual(result.nodes[0].name, 'Root');
+    assert.strictEqual(result.nodes[0].children[0].name, 'Child');
+    assert.strictEqual(result.nodes[0].children[0].children[0].name, 'GrandChild');
+    assert.strictEqual(result.nodes[0].children[0].children[0].children[0].name, 'GreatGrand');
+  });
+
   it('parses instance ExtResource references', () => {
     const content = `[gd_scene load_steps=2 format=3]
 
