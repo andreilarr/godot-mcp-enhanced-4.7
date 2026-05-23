@@ -797,7 +797,7 @@ function uiNodeToGdWithLayout(spec: UiNodeSpec, parentVar: string, ownerVar: str
   if (isGrid && layout.justify) warnings.push('layout.justify is ignored for grid direction');
   if (isGrid && layout.align) warnings.push('layout.align is ignored for grid direction');
   if (isGrid && layout.wrap) warnings.push('layout.wrap is ignored for grid direction');
-  if (isGrid && (layout.columns === undefined || layout.columns <= 0)) warnings.push('Grid layout without columns: GridContainer will auto-fill columns');
+  if (isGrid && (layout.columns === undefined || layout.columns <= 0)) warnings.push('Grid layout without columns: GridContainer defaults to 1 column');
 
   let lines = `${indent}node = ClassDB.instantiate("${gdEscape(containerType)}")
 ${indent}if node == null:
