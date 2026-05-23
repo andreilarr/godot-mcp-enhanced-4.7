@@ -48,6 +48,7 @@ import * as recordingOps from './tools/recording.js';
 import * as editorSync from './tools/editor-sync.js';
 import * as animationTrack from './tools/animation-track.js';
 import * as delivery from './tools/delivery.js';
+import * as codeTemplates from './tools/code-templates.js';
 import { requiresConfirmation, createPendingToken, consumeToken } from './guard.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -63,7 +64,7 @@ import { killProcess } from './core/process-state.js';
 // Re-export for backward compatibility (tests import from GodotServer)
 export { clearGodotPathCache, getCachedGodotPath };
 
-const toolModules = [runtime, screenshot, project, scene, script, validation, docs, node3dOps, physicsOps, audioOps, tilemapOps, materialOps, gameBridge, workflow, animationOps, animationTrack, profilerOps, spatialOps, testFramework, animtreeOps, navigationOps, particlesOps, signalOps, batchTools, uiOps, recordingOps, editorSync, delivery];
+const toolModules = [runtime, screenshot, project, scene, script, validation, docs, node3dOps, physicsOps, audioOps, tilemapOps, materialOps, gameBridge, workflow, animationOps, animationTrack, profilerOps, spatialOps, testFramework, animtreeOps, navigationOps, particlesOps, signalOps, batchTools, uiOps, recordingOps, editorSync, delivery, codeTemplates];
 
 interface ToolMetaExport {
   TOOL_META?: Record<string, { readonly: boolean; long_running: boolean }>;

@@ -1,5 +1,9 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { ToolResult } from '../types.js';
+import { textResult as okResult, errorResult } from '../types.js';
+import { validatePath, resolveWithinRoot, ensureDir } from '../helpers.js';
 
 // ─── Code Template Types ────────────────────────────────────────────────────
 
@@ -395,4 +399,95 @@ export function getAllTemplates(projectPath?: string): CodeTemplate[] {
   const userIds = new Set(user.map(t => t.id));
   const merged = builtIn.filter(t => !userIds.has(t.id)).concat(user);
   return merged;
+}
+
+// ─── MCP Tool Definitions ───────────────────────────────────────────────────
+
+export function getToolDefinitions(): Tool[] {
+  return [
+    {
+      name: 'list_templates',
+      description: '列出可用的代码模板（内置 + 用户自定义）。支持按标签或适用类过滤。',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          project_path: { type: 'string', description: 'Path to Godot project directory (for loading user templates)' },
+          tag: { type: 'string', description: 'Filter by tag keyword' },
+          applies_to: { type: 'string', description: 'Filter by applicable class name' },
+        },
+      },
+    },
+    {
+      name: 'apply_template',
+      description: '将代码模板应用到指定脚本路径，支持变量替换。',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          project_path: { type: 'string', description: 'Path to Godot project directory' },
+          template_id: { type: 'string', description: 'Template ID to apply (e.g. T008, user-custom)' },
+          script_path: { type: 'string', description: 'Target script path relative to project (e.g. res://scripts/player.gd)' },
+          variables: {
+            type: 'object',
+            description: 'Template variable overrides (key-value pairs)',
+            additionalProperties: { type: 'string' },
+          },
+        },
+        required: ['project_path', 'template_id', 'script_path'],
+      },
+    },
+  ];
+}
+
+export const TOOL_META = {
+  list_templates: { readonly: true, long_running: false },
+  apply_template: { readonly: false, long_running: false },
+};
+
+export async function handleTool(
+  name: string, args: Record<string, unknown>, _ctx: unknown
+): Promise<ToolResult | null> {
+  if (name !== 'list_templates' && name !== 'apply_template') return null;
+
+  const projectPath = args.project_path ? validatePath(args.project_path as string) : undefined;
+
+  if (name === 'list_templates') {
+    const templates = getAllTemplates(projectPath);
+    const tag = args.tag as string | undefined;
+    const appliesTo = args.applies_to as string | undefined;
+    let filtered = templates;
+    if (tag) filtered = filtered.filter(t => t.description.toLowerCase().includes(tag.toLowerCase()));
+    if (appliesTo) filtered = filtered.filter(t => t.description.toLowerCase().includes(appliesTo.toLowerCase()));
+
+    const lines = filtered.map(t =>
+      `- **${t.id}**: ${t.name} — ${t.description} (params: ${t.params.map(p => p.name).join(', ') || 'none'})`
+    );
+    return okResult(`Available templates (${filtered.length}):\n${lines.join('\n')}`);
+  }
+
+  if (name === 'apply_template') {
+    const templateId = args.template_id as string;
+    const scriptPath = args.script_path as string;
+    if (!templateId) return errorResult('template_id is required');
+    if (!scriptPath) return errorResult('script_path is required');
+    if (!projectPath) return errorResult('project_path is required');
+
+    const templates = getAllTemplates(projectPath);
+    const template = templates.find(t => t.id === templateId);
+    if (!template) return errorResult(`Template '${templateId}' not found. Available: ${templates.map(t => t.id).join(', ')}`);
+
+    const variables: Record<string, string> = {};
+    const userVars = (args.variables ?? {}) as Record<string, unknown>;
+    for (const param of template.params) {
+      variables[param.name] = String(userVars[param.name] ?? param.default);
+    }
+
+    const code = template.generate(variables);
+    const fullPath = resolveWithinRoot(projectPath, scriptPath);
+    ensureDir(fullPath);
+    writeFileSync(fullPath, code, 'utf-8');
+
+    return okResult(`Template '${template.name}' applied to ${scriptPath} (${code.split('\n').length} lines)`);
+  }
+
+  return null;
 }
