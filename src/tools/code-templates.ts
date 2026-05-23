@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolResult } from '../types.js';
 import { textResult as okResult, errorResult } from '../types.js';
-import { validatePath, resolveWithinRoot, ensureDir } from '../helpers.js';
+import { validatePath, validateProjectRoot, resolveWithinRoot, ensureDir } from '../helpers.js';
 
 // ─── Code Template Types ────────────────────────────────────────────────────
 
@@ -381,9 +381,23 @@ export function loadUserTemplates(projectPath: string): CodeTemplate[] {
   return userTemplates;
 }
 
+/** Sanitize a user template variable value to prevent GDScript injection. */
+function sanitizeTemplateValue(value: string): string {
+  if (!/^[A-Za-z0-9_."()\s,\-+*/%:!<>#]+$/.test(value)) {
+    throw new Error(`Template variable value contains disallowed characters: "${value.slice(0, 50)}"`);
+  }
+  return value;
+}
+
 /** 渲染模板变量 — 供 MCP 工具使用 */
 export function renderTemplate(code: string, variables: Record<string, string>): string {
-  return code.replace(/\{\{(\w+)\}\}/g, (match, key) => variables[key] ?? match);
+  return code.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+    const value = variables[key] ?? match;
+    if (variables[key] !== undefined) {
+      return sanitizeTemplateValue(value);
+    }
+    return value;
+  });
 }
 
 /** 获取所有模板（内置 + 用户） */
@@ -446,7 +460,7 @@ export async function handleTool(
 ): Promise<ToolResult | null> {
   if (name !== 'list_templates' && name !== 'apply_template') return null;
 
-  const projectPath = args.project_path ? validatePath(args.project_path as string) : undefined;
+  const projectPath = args.project_path ? validateProjectRoot(args.project_path as string) : undefined;
 
   if (name === 'list_templates') {
     const templates = getAllTemplates(projectPath);

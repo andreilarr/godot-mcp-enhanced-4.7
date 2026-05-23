@@ -76,12 +76,14 @@ function sendToBridge(method: string, params: Record<string, unknown> = {}, time
         socket.write(JSON.stringify({ id: 0, method: 'auth', params: { secret } }) + '\n');
         // Command sent after auth succeeds (in data handler);
       } else {
-        socket.write(JSON.stringify({ id, method, params }) + '\n');
+        socket.destroy();
+        doReject(new Error('Bridge secret not found. Ensure the game is running with the MCP Bridge autoload.'));
+        return;
       }
     });
 
     let buffer = '';
-    let authDone = !secret;
+    let authDone = false;
     const timer = setTimeout(() => {
       socket.destroy();
       doReject(new Error(`Bridge request timed out after ${timeout}ms`));

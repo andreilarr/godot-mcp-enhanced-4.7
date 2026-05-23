@@ -1,7 +1,7 @@
 // src/core/editor-auth.ts
 import { readFileSync, writeFileSync, chmodSync, statSync, existsSync } from 'fs';
 import { join } from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 const SECRET_FILE_NAME = 'mcp_editor.key';
 let _permWarned = false;
@@ -9,7 +9,9 @@ let _permWarned = false;
 /** On Windows, use icacls to restrict file to current user only. */
 function restrictFileWindows(filePath: string): void {
   try {
-    execSync(`icacls "${filePath}" /inheritance:r /grant:r "%USERNAME%:R"`, { stdio: 'ignore' });
+    const username = process.env.USERNAME;
+    if (!username) return;
+    execFileSync('icacls', [filePath, '/inheritance:r', '/grant:r', `${username}:R`], { stdio: 'ignore' });
   } catch { /* best effort */ }
 }
 
