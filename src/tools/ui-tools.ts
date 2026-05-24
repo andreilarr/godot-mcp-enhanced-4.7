@@ -116,10 +116,10 @@ func _initialize():
 \t\t_mcp_done()
 \t\treturn
 \tvar node = ClassDB.instantiate("${gdEscape(nodeType)}")
-	if node == null:
-		_mcp_output("error", "Failed to instantiate: ${gdEscape(nodeType)}")
-		_mcp_done()
-		return
+\tif node == null:
+\t\t_mcp_output("error", "Failed to instantiate: ${gdEscape(nodeType)}")
+\t\t_mcp_done()
+\t\treturn
 \tnode.name = "${gdEscape(nodeName)}"${propLines}
 \tparent.add_child(node)
 \tnode.owner = parent.owner if parent.owner != null else parent
@@ -382,10 +382,10 @@ func _initialize():
 \t\t_mcp_done()
 \t\treturn
 \tvar child = ClassDB.instantiate("${gdEscape(childType)}")
-	if child == null:
-		_mcp_output("error", "Failed to instantiate: ${gdEscape(childType)}")
-		_mcp_done()
-		return
+\tif child == null:
+\t\t_mcp_output("error", "Failed to instantiate: ${gdEscape(childType)}")
+\t\t_mcp_done()
+\t\treturn
 \tchild.name = "${gdEscape(childName)}"${propLines}
 \tcontainer.add_child(child)
 \tchild.owner = container.owner if container.owner != null else container
@@ -425,8 +425,9 @@ function drawOpToGd(op: DrawOp): string {
       const r = op.radius as number;
       const sa = op.start_angle as number;
       const ea = op.end_angle as number;
+      const pointCount = (op.point_count as number) ?? 32;
       const w = op.width as number | undefined;
-      return `\tdraw_arc(Vector2(${ctr[0]}, ${ctr[1]}), ${r}, ${sa}, ${ea}, ${col(op.color)}${w != null ? `, ${w}` : ''})`;
+      return `\tdraw_arc(Vector2(${ctr[0]}, ${ctr[1]}), ${r}, ${sa}, ${ea}, ${pointCount}, ${col(op.color)}${w != null ? `, ${w}` : ''})`;
     }
     case 'polygon': {
       const pts = op.points as number[][];
