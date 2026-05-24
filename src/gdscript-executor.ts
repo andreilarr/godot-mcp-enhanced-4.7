@@ -6,6 +6,11 @@
  * - Code snippet auto-wrapping (no `extends` → auto-wrap)
  * - Structured key-value output via `_mcp_output(key, value)`
  * - Marked output protocol for reliable parsing
+ *
+ * SECURITY WARNING: GDScript has full system access (FileAccess, DirAccess,
+ * OS.execute). There is NO sandbox or code audit layer. This is acceptable for
+ * local MCP usage (editor on the same machine), but MUST NOT be exposed to
+ * untrusted remote connections without an external sandbox.
  */
 
 import { spawn } from 'child_process';

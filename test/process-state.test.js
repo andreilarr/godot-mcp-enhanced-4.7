@@ -2,10 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock child_process to prevent real taskkill/spawn calls on Windows
 vi.mock('child_process', () => ({
-  spawnSync: vi.fn(),
-  spawn: vi.fn(),
+  spawn: vi.fn(() => ({ on: vi.fn() })),
 }));
-import { spawnSync } from 'child_process';
+import { spawn } from 'child_process';
 import {
   resetState,
   getRunningProcess,
@@ -202,11 +201,11 @@ describe('forceKillTree', () => {
     expect(proc.kill).not.toHaveBeenCalled();
   });
 
-  it('calls kill on non-Windows (or spawnSync taskkill on Windows)', () => {
+  it('calls kill on non-Windows (or async spawn taskkill on Windows)', () => {
     const proc = makeMockProc({ killed: false });
     forceKillTree(proc);
     if (process.platform === 'win32') {
-      expect(spawnSync).toHaveBeenCalledWith(
+      expect(spawn).toHaveBeenCalledWith(
         'taskkill', ['/F', '/T', '/PID', '12345'], { stdio: 'ignore' }
       );
     } else {

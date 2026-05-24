@@ -99,7 +99,7 @@ func _delete_secret_file() -> void:
 func _start_server() -> void:
 	_server = TCPServer.new()
 	for port in range(BASE_PORT, MAX_PORT + 1):
-		if _server.listen(port) == OK:
+		if _server.listen(port, "127.0.0.1") == OK:
 			_current_port = port
 			print("[MCP] Listening on port %d" % port)
 			_update_panel("MCP: Listening on port %d" % port)
@@ -197,14 +197,16 @@ func _handle_message(text: String, peer: WebSocketPeer) -> void:
 		var timeout = parsed.get("params", {}).get("timeout", 300)
 		_heartbeat.pause_for_operation(timeout)
 		_update_panel("MCP: Operation in progress...")
-		_get_panel().set_operation_active(true)
+		var _op_panel := _get_panel()
+		if _op_panel: _op_panel.set_operation_active(true)
 		peer.send_text(JSON.stringify({"jsonrpc": "2.0", "id": parsed.get("id"), "result": {}}))
 		return
 
 	if parsed.get("method") == "operation_end":
 		_heartbeat.resume()
 		_update_panel("MCP: %d client(s) connected" % _peers.size())
-		_get_panel().set_operation_active(false)
+		var _op_panel := _get_panel()
+		if _op_panel: _op_panel.set_operation_active(false)
 		peer.send_text(JSON.stringify({"jsonrpc": "2.0", "id": parsed.get("id"), "result": {}}))
 		return
 

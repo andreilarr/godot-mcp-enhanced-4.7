@@ -99,8 +99,7 @@ async function dispatchTool(
   const result = await targetMod.handleTool(toolName, args, ctx);
   if (result !== null) {
     const duration = Date.now() - startTime;
-    result.content.push({ type: 'text', text: `_duration_ms: ${duration}` });
-    return result;
+    return { ...result, content: [...result.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] };
   }
   return { content: [{ type: 'text', text: `Tool "${toolName}" registered but handler returned null` }] };
 }
@@ -244,8 +243,7 @@ export class GodotServer {
           if (this.connectionMode === 'editor' && this.editorExecutor) {
             const editorResult = await this.editorExecutor.execute(pending.toolName, pending.args);
             const duration = Date.now() - startTime;
-            (editorResult.content as Array<{ type: 'text'; text: string }>).push({ type: 'text', text: `_duration_ms: ${duration}` });
-            return editorResult;
+            return { ...editorResult, content: [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] };
           }
           return dispatchTool(pending.toolName, pending.args, ctx, startTime);
         }
@@ -271,8 +269,7 @@ export class GodotServer {
         if (this.connectionMode === 'editor' && this.editorExecutor) {
           const editorResult = await this.editorExecutor.execute(name, args);
           const duration = Date.now() - startTime;
-          (editorResult.content as Array<{ type: 'text'; text: string }>).push({ type: 'text', text: `_duration_ms: ${duration}` });
-          return editorResult;
+          return { ...editorResult, content: [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] };
         }
 
         return dispatchTool(name, args, ctx, startTime);

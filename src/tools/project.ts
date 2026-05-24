@@ -1,5 +1,6 @@
 import { join, basename } from 'path';
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'fs';
+import { randomUUID } from 'crypto';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
@@ -217,7 +218,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       writeFileSync(join(p, 'project.godot'), projectGodot, 'utf-8');
 
       const mainTscn = [
-        '[gd_scene load_steps=2 format=3 uid="uid://b6q8a1x2c3d4"]',
+        `[gd_scene load_steps=2 format=3 uid="uid://${randomUUID().replace(/-/g, 'a').slice(0, 12)}"]`,
         '',
         '[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]',
         '',

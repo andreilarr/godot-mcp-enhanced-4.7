@@ -41,11 +41,16 @@ func handle_instance_scene(params: Dictionary) -> Dictionary:
 
 	var blocked: Array = ["script", "owner", "name", "parent", "children", "tree", "meta", "process_mode", "process_priority",
 		"process_input", "process_unhandled_input", "process_unhandled_key_input",
-		"process_internal", "physics_process_mode", "input_event", "ready"]
+		"process_internal", "physics_process_mode", "input_event", "ready",
+			"material", "texture", "mesh", "collision_layer", "collision_mask",
+			"collision_priority", "transform", "global_transform"]
 	for key in properties:
 		if key.begins_with("_") or key in blocked:
 			continue
 		if not key is String:
+			continue
+		# Block sub-property paths
+		if ":" in key or "/" in key:
 			continue
 		var val = properties[key]
 		if val is Object:
@@ -86,9 +91,14 @@ func handle_set_instance_property(params: Dictionary) -> Dictionary:
 
 	var blocked: Array = ["script", "owner", "name", "parent", "children", "tree", "meta", "process_mode", "process_priority",
 		"process_input", "process_unhandled_input", "process_unhandled_key_input",
-		"process_internal", "physics_process_mode", "input_event", "ready"]
+		"process_internal", "physics_process_mode", "input_event", "ready",
+		"material", "texture", "mesh", "collision_layer", "collision_mask",
+		"collision_priority", "transform", "global_transform"]
 	if prop_name.begins_with("_") or prop_name in blocked:
 		return {"error": {"code": -32004, "message": "BLOCKED_PROPERTY: " + prop_name}}
+	# Block sub-property paths
+	if ":" in prop_name or "/" in prop_name:
+		return {"error": {"code": -32004, "message": "BLOCKED_SUBPROPERTY: " + prop_name}}
 	# 属性名格式验证
 	if prop_name.is_empty() or (not (prop_name[0] == "_" or prop_name[0].is_alpha())):
 		return {"error": {"code": -32004, "message": "INVALID_PROPERTY_NAME: " + prop_name}}

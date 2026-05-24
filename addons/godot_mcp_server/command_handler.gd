@@ -9,6 +9,9 @@ var _nav_commands: Node
 var _animtree_commands: Node
 var _sync_commands: Node
 var _undo_manager: Node
+var _animation_commands: Node
+var _recording_commands: Node
+var _ui_commands: Node
 
 func setup(plugin: EditorPlugin) -> void:
 	_undo_manager = preload("undo_manager.gd").new()
@@ -45,6 +48,18 @@ func setup(plugin: EditorPlugin) -> void:
 	_sync_commands = preload("commands/sync_commands.gd").new()
 	_sync_commands.setup(self)
 	add_child(_sync_commands)
+
+	_animation_commands = preload("commands/animation_commands.gd").new()
+	_animation_commands.setup(plugin)
+	add_child(_animation_commands)
+
+	_recording_commands = preload("commands/recording_commands.gd").new()
+	_recording_commands.setup(plugin)
+	add_child(_recording_commands)
+
+	_ui_commands = preload("commands/ui_commands.gd").new()
+	_ui_commands.setup(plugin)
+	add_child(_ui_commands)
 
 func cleanup() -> void:
 	if _sync_commands:
@@ -106,6 +121,39 @@ func handle(method: String, params: Dictionary, request_id: int) -> Dictionary:
 			return _sync_commands.stop_sync()
 		"editor_get_scene_tree":
 			return _sync_commands.get_scene_tree()
+		# --- animation ------------------------------------------------
+		"animation_track":
+			return _animation_commands.handle_animation_track(params)
+		"animation_keyframe":
+			return _animation_commands.handle_animation_keyframe(params)
+		"animation_curve":
+			return _animation_commands.handle_animation_curve(params)
+		"animation_blend":
+			return _animation_commands.handle_animation_blend(params)
+		# --- recording ------------------------------------------------
+		"recording_start":
+			return _recording_commands.handle_recording_start(params)
+		"recording_stop":
+			return _recording_commands.handle_recording_stop(params)
+		"recording_play":
+			return _recording_commands.handle_recording_play(params)
+		# --- ui -------------------------------------------------------
+		"ui_create_control":
+			return _ui_commands.handle_ui_create_control(params, request_id)
+		"ui_set_layout":
+			return _ui_commands.handle_ui_set_layout(params)
+		"ui_get_layout":
+			return _ui_commands.handle_ui_get_layout(params)
+		"ui_anchor_preset":
+			return _ui_commands.handle_ui_anchor_preset(params)
+		"ui_set_theme":
+			return _ui_commands.handle_ui_set_theme(params)
+		"ui_container_add":
+			return _ui_commands.handle_ui_container_add(params, request_id)
+		"theme_create":
+			return _ui_commands.handle_theme_create(params)
+		"theme_set_property":
+			return _ui_commands.handle_theme_set_property(params)
 		_:
 			return {"error": {"code": -32601, "message": "Unknown method: %s" % method}}
 

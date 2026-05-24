@@ -91,6 +91,7 @@ export class EditorConnection {
             await this.performAuth();
           } catch (authErr) {
             this.connected = false;
+            this.connectAttempt = true; // Prevent close handler from treating this as a disconnect
             this.ws = null;
             ws.removeAllListeners();
             ws.terminate();
