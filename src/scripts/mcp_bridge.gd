@@ -39,6 +39,8 @@ const ALLOWED_METHODS := [
 # ─── Lifecycle ─────────────────────────────────────────────────────────────
 
 func _ready() -> void:
+	if Engine.is_editor_hint():
+		return
 	_start_server()
 
 
@@ -196,28 +198,35 @@ func _process_buffer_bytes(peer: StreamPeerTCP, pid: int) -> void:
 			if _auth_locked_until.has(_LOCKOUT_KEY):
 				var locked_until: float = _auth_locked_until[_LOCKOUT_KEY]
 				if Time.get_ticks_msec() / 1000.0 < locked_until:
-					peer.put_utf8_string(JSON.stringify({"id": null, "error": {"code": -32002, "message": "Too many auth failures, temporarily locked"}}) + "\n")
+					peer.put_data((JSON.stringify({"id": null, "error": {"code": -32002, "message": "Too many auth failures, temporarily locked"}}) + "
+").to_utf8_buffer())
 					peer.disconnect_from_host()
 					continue
 				else:
 					_auth_locked_until.erase(_LOCKOUT_KEY)
 					_auth_fail_count[_LOCKOUT_KEY] = 0
 			var parsed: Variant = JSON.parse_string(line)
-			if parsed is Dictionary and parsed.get("method") == "auth" and _constant_time_compare(str(parsed.get("secret")), _secret):
+			var incoming_secret: String = ""
+			if parsed is Dictionary and parsed.get("params") is Dictionary:
+				incoming_secret = str(parsed["params"].get("secret", ""))
+			if parsed is Dictionary and parsed.get("method") == "auth" and _constant_time_compare(incoming_secret, _secret):
+
 				_authenticated_peers[pid] = true
 				_auth_fail_count.erase(_LOCKOUT_KEY)
-				peer.put_utf8_string(JSON.stringify({"id": parsed.get("id"), "result": {"authenticated": true}}) + "\n")
+				peer.put_data((JSON.stringify({"id": parsed.get("id"), "result": {"authenticated": true}}) + "
+").to_utf8_buffer())
 				continue
 			else:
 				var fails: int = int(_auth_fail_count.get(_LOCKOUT_KEY, 0)) + 1
 				_auth_fail_count[_LOCKOUT_KEY] = fails
 				if fails >= MAX_AUTH_FAILS:
 					_auth_locked_until[_LOCKOUT_KEY] = Time.get_ticks_msec() / 1000.0 + LOCKOUT_SECONDS
-				peer.put_utf8_string(JSON.stringify({"id": null, "error": {"code": -32001, "message": "Authentication required"}}) + "\n")
+				peer.put_data((JSON.stringify({"id": null, "error": {"code": -32001, "message": "Authentication required"}}) + "
+").to_utf8_buffer())
 				peer.disconnect_from_host()
 				continue
 		var response := _handle_message(line)
-		peer.put_utf8_string(response + "\n")
+		peer.put_data((response + "\n").to_utf8_buffer())
 	_peer_buffers[key] = raw
 
 func _handle_message(raw: String) -> String:
