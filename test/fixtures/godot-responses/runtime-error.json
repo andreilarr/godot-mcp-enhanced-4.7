@@ -1,0 +1,19 @@
+{
+  "success": false,
+  "compile_success": true,
+  "compile_error": "",
+  "errors": [
+    {
+      "type": "runtime",
+      "file": "res://scripts/test.gd",
+      "line": 10,
+      "message": "Invalid get index 'nonexistent' (on base: 'Node').",
+      "suggestion": "Check that the node or property exists before accessing it."
+    }
+  ],
+  "run_success": false,
+  "run_error": "Invalid get index 'nonexistent' (on base: 'Node').",
+  "outputs": [],
+  "raw_output": "SCRIPT ERROR: Invalid get index 'nonexistent' (on base: 'Node').\n",
+  "duration_ms": 200
+}

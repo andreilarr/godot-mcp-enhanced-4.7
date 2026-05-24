@@ -1,0 +1,19 @@
+{
+  "success": false,
+  "compile_success": false,
+  "compile_error": "Expected indented block after 'if' statement.",
+  "errors": [
+    {
+      "type": "compile",
+      "file": "res://scripts/test.gd",
+      "line": 5,
+      "message": "Expected indented block after 'if' statement.",
+      "suggestion": "Add an indented block after 'if', or use 'pass' as a placeholder."
+    }
+  ],
+  "run_success": false,
+  "run_error": "",
+  "outputs": [],
+  "raw_output": "",
+  "duration_ms": 50
+}

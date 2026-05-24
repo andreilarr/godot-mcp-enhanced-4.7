@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "compile_success": true,
+  "compile_error": "",
+  "errors": [],
+  "run_success": true,
+  "run_error": "",
+  "outputs": [
+    { "key": "tree", "value": "root\n  Main\n    Camera2D\n    Player\n      Sprite2D\n      CollisionShape2D\n    TileMapLayer\n    HUD\n      ScoreLabel\n      HealthBar\n    Enemy\n      Sprite2D\n      CollisionShape2D" }
+  ],
+  "raw_output": "___MCP_RESULT___{\"success\":true,\"tree\":\"root\\n  Main\\n    ...\"}\n",
+  "duration_ms": 300
+}

@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "compile_success": true,
+  "compile_error": "",
+  "errors": [],
+  "run_success": true,
+  "run_error": "",
+  "outputs": [
+    { "key": "tree", "value": "root" }
+  ],
+  "raw_output": "___MCP_RESULT___{\"success\":true,\"tree\":\"root\"}\n",
+  "duration_ms": 80
+}

@@ -1,0 +1,14 @@
+{
+  "success": true,
+  "compile_success": true,
+  "compile_error": "",
+  "errors": [],
+  "run_success": true,
+  "run_error": "",
+  "outputs": [
+    { "key": "node_count", "value": "5" },
+    { "key": "scene_path", "value": "res://scenes/main.tscn" }
+  ],
+  "raw_output": "___MCP_RESULT___{\"success\":true,\"outputs\":[{\"key\":\"node_count\",\"value\":\"5\"}]}\n",
+  "duration_ms": 150
+}
