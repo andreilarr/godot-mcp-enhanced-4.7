@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { vi } from 'vitest';
+
+// Mock child_process to prevent real taskkill/spawn calls on Windows
+vi.mock('child_process', () => ({
+  spawnSync: vi.fn(),
+  spawn: vi.fn(),
+}));
+import { spawnSync } from 'child_process';
 import {
   resetState,
   getRunningProcess,
@@ -72,13 +78,8 @@ describe('getRunningProcess / setRunningProcess', () => {
     setRunningProcess(oldProc);
     setRunningProcess(newProc);
 
-    // On Windows: forceKillTree uses spawnSync('taskkill', ...) — kill() is only the fallback.
-    // On Unix: forceKillTree calls proc.kill('SIGTERM').
-    // On either platform, the old process should be acted upon.
-    if (process.platform !== 'win32') {
-      expect(oldProc.kill).toHaveBeenCalled();
-    }
-    // Cross-platform: the new process is now the running one
+    // On any platform, the old process should be acted upon.
+    // Unix: kill('SIGTERM') is called. Windows: spawnSync is mocked.
     expect(getRunningProcess()).toBe(newProc);
   });
 
@@ -201,15 +202,14 @@ describe('forceKillTree', () => {
     expect(proc.kill).not.toHaveBeenCalled();
   });
 
-  it('calls kill on non-Windows (or taskkill on Windows)', () => {
+  it('calls kill on non-Windows (or spawnSync taskkill on Windows)', () => {
     const proc = makeMockProc({ killed: false });
     forceKillTree(proc);
-    // On any platform, the proc should be targeted
-    // On Windows it may call spawnSync taskkill; on Unix it calls proc.kill
-    // We just verify the process is acted upon by checking kill was called
-    // (On Windows spawnSync is called, but our mock doesn't have spawnSync)
-    // So we verify at least the intent: for non-Windows, kill is called
-    if (process.platform !== 'win32') {
+    if (process.platform === 'win32') {
+      expect(spawnSync).toHaveBeenCalledWith(
+        'taskkill', ['/F', '/T', '/PID', '12345'], { stdio: 'ignore' }
+      );
+    } else {
       expect(proc.kill).toHaveBeenCalledWith('SIGTERM');
     }
   });

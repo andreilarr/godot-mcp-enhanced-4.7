@@ -12,8 +12,8 @@ exports[`parseTscn > handles connections > scene-with-connections 1`] = `
   ],
   "extResources": [],
   "header": {},
-  "nodeMap": Map {
-    "Root" => {
+  "nodeMap": {
+    "Root": {
       "children": [],
       "name": "Root",
       "parent": "",
@@ -45,8 +45,8 @@ exports[`parseTscn > parses a minimal scene with one node > minimal-scene 1`] = 
     },
   ],
   "header": {},
-  "nodeMap": Map {
-    "Player" => {
+  "nodeMap": {
+    "Player": {
       "children": [
         {
           "children": [],
@@ -73,7 +73,7 @@ exports[`parseTscn > parses a minimal scene with one node > minimal-scene 1`] = 
       ],
       "type": "CharacterBody2D",
     },
-    "Player/Sprite" => {
+    "Player/Sprite": {
       "children": [],
       "name": "Sprite",
       "parent": ".",
@@ -156,8 +156,8 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
     },
   ],
   "header": {},
-  "nodeMap": Map {
-    "Root" => {
+  "nodeMap": {
+    "Root": {
       "children": [
         {
           "children": [
@@ -226,7 +226,7 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
       "properties": [],
       "type": "Node2D",
     },
-    "Root/Player" => {
+    "Root/Player": {
       "children": [
         {
           "children": [],
@@ -266,20 +266,7 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
       ],
       "type": "CharacterBody2D",
     },
-    "Root/Player/Sprite" => {
-      "children": [],
-      "name": "Sprite",
-      "parent": "Player",
-      "properties": [
-        {
-          "name": "texture = ExtResource("2")",
-          "type": "unknown",
-          "value": "texture = ExtResource("2")",
-        },
-      ],
-      "type": "Sprite2D",
-    },
-    "Root/Player/Camera" => {
+    "Root/Player/Camera": {
       "children": [],
       "name": "Camera",
       "parent": "Player",
@@ -292,7 +279,20 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
       ],
       "type": "Camera2D",
     },
-    "Root/UI" => {
+    "Root/Player/Sprite": {
+      "children": [],
+      "name": "Sprite",
+      "parent": "Player",
+      "properties": [
+        {
+          "name": "texture = ExtResource("2")",
+          "type": "unknown",
+          "value": "texture = ExtResource("2")",
+        },
+      ],
+      "type": "Sprite2D",
+    },
+    "Root/UI": {
       "children": [
         {
           "children": [],
@@ -313,7 +313,7 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
       "properties": [],
       "type": "CanvasLayer",
     },
-    "Root/UI/HUD" => {
+    "Root/UI/HUD": {
       "children": [],
       "name": "HUD",
       "parent": "UI",

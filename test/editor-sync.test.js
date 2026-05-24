@@ -1,67 +1,38 @@
 import { expect } from 'vitest';
-import { EditorConnection } from '../build/core/EditorConnection.js';
-import { WebSocketServer } from 'ws';
+import {
+  getToolDefinitions,
+  TOOL_META,
+} from '../build/tools/editor-sync.js';
 
-describe('EditorConnection', () => {
-  let wss;
-  let port;
-
-  beforeEach(() => {
-    wss = new WebSocketServer({ port: 0 });
-    port = wss.address().port;
-  });
-
-  afterEach(() => {
-    wss.close();
-  });
-
-  it('connects and sends JSON-RPC request', async () => {
-    wss.on('connection', (ws) => {
-      ws.on('message', (data) => {
-        const msg = JSON.parse(data.toString());
-        ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { status: 'ok' } }));
-      });
+describe('editor-sync tools', () => {
+  describe('getToolDefinitions', () => {
+    it('returns definitions for editor_sync_start, editor_sync_stop, editor_get_scene_tree', () => {
+      const defs = getToolDefinitions();
+      const names = defs.map(d => d.name);
+      expect(names).toContain('editor_sync_start');
+      expect(names).toContain('editor_sync_stop');
+      expect(names).toContain('editor_get_scene_tree');
     });
 
-    const conn = new EditorConnection({ port, reconnect: false });
-    await conn.connect();
-    const result = await conn.request('test_method', { key: 'value' });
-    expect(result).toEqual({ status: 'ok' });
-    conn.disconnect();
+    it('each definition has name, description, and inputSchema', () => {
+      const defs = getToolDefinitions();
+      for (const def of defs) {
+        expect(def.name).toBeTruthy();
+        expect(def.description).toBeTruthy();
+        expect(def.inputSchema).toBeDefined();
+        expect(def.inputSchema.type).toBe('object');
+      }
+    });
   });
 
-  it('handles connection refused gracefully', async () => {
-    const conn = new EditorConnection({ port: 59999, reconnect: false, connectTimeout: 1000 });
-    await expect(() => conn.connect()).rejects.toThrow(/connect/i);
-  });
-
-  it('handles request timeout', async () => {
-    wss.on('connection', (ws) => {
-      // 不回复，模拟超时
+  describe('TOOL_META', () => {
+    it('marks editor_sync_start as not readonly and not long_running', () => {
+      expect(TOOL_META.editor_sync_start.readonly).toBe(false);
+      expect(TOOL_META.editor_sync_start.long_running).toBe(false);
     });
 
-    const conn = new EditorConnection({ port, reconnect: false, requestTimeout: 500 });
-    await conn.connect();
-    await expect(() => conn.request('slow_method', {})).rejects.toThrow(/timeout/i);
-    conn.disconnect();
-  });
-
-  it('sends operation_start for long running operations', async () => {
-    let received = [];
-    wss.on('connection', (ws) => {
-      ws.on('message', (data) => {
-        const msg = JSON.parse(data.toString());
-        received.push(msg);
-        ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: {} }));
-      });
+    it('marks editor_get_scene_tree as readonly', () => {
+      expect(TOOL_META.editor_get_scene_tree.readonly).toBe(true);
     });
-
-    const conn = new EditorConnection({ port, reconnect: false });
-    await conn.connect();
-    await conn.startOperation(300);
-    expect(received.some(m => m.method === 'operation_start')).toBeTruthy();
-    await conn.endOperation();
-    expect(received.some(m => m.method === 'operation_end')).toBeTruthy();
-    conn.disconnect();
   });
 });

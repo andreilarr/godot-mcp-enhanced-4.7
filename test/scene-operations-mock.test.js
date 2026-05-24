@@ -2,7 +2,7 @@
 import { expect, it, beforeEach, describe, vi } from 'vitest';
 
 // Mock the executor — hoisted to top by Vitest
-vi.mock('../../build/gdscript-executor.js', () => ({
+vi.mock('../build/gdscript-executor.js', () => ({
   executeGdscript: vi.fn(() => Promise.resolve({
     success: true, compile_success: true, compile_error: '',
     errors: [], run_success: true, run_error: '',
@@ -15,10 +15,10 @@ vi.mock('../../build/gdscript-executor.js', () => ({
   })),
 }));
 
-import { executeGdscript } from '../../build/gdscript-executor.js';
-import * as scene from '../../build/tools/scene.js';
-import { createToolContext, createTempProject, registerCleanup } from '../helpers/tool-context.js';
-import { MINIMAL_PROJECT } from '../helpers/fixtures.js';
+import { executeGdscript } from '../build/gdscript-executor.js';
+import * as scene from '../build/tools/scene.js';
+import { createToolContext, createTempProject, registerCleanup } from './helpers/tool-context.js';
+import { MINIMAL_PROJECT } from './helpers/fixtures.js';
 
 /**
  * 辅助函数：判断工具调用结果是否成功。

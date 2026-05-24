@@ -1,3 +1,4 @@
+/// <reference types="vitest/globals" />
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -8,7 +9,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov', 'html'],
       include: ['build/**/*.js'],
-      exclude: ['build/**/*.js.map', 'build/**/*.d.ts', 'build/**/*.gd'],
+      exclude: ['build/**/*.js.map', 'build/**/*.d.ts', 'build/**/*.gd', 'build/types.js'],
     },
     testTimeout: 30_000,
   },

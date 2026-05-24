@@ -2,6 +2,13 @@ import { expect } from 'vitest';
 import fc from 'fast-check';
 import { parseTscn, parseTscnSummary } from '../build/tscn-parser.js';
 
+function toSerializable(result) {
+  if (result.nodeMap instanceof Map) {
+    return { ...result, nodeMap: Object.fromEntries(result.nodeMap) };
+  }
+  return result;
+}
+
 describe('parseTscn', () => {
   it('parses a minimal scene with one node', () => {
     const content = `[gd_scene load_steps=2 format=3]
@@ -25,7 +32,7 @@ texture = ExtResource("1")
     expect(result.nodes[1].type).toBe('Sprite2D');
     expect(result.nodes[0].children.length).toBe(1);
     expect(result.nodes[0].children[0].name).toBe('Sprite');
-    expect(result).toMatchSnapshot('minimal-scene');
+    expect(toSerializable(result)).toMatchSnapshot('minimal-scene');
   });
 
   it('parses root node without parent', () => {
@@ -108,7 +115,7 @@ texture = ExtResource("1")
     expect(result.connections[0].from).toBe('Root/Button');
     expect(result.connections[0].to).toBe('Root');
     expect(result.connections[0].method).toBe('_on_pressed');
-    expect(result).toMatchSnapshot('scene-with-connections');
+    expect(toSerializable(result)).toMatchSnapshot('scene-with-connections');
   });
 });
 
@@ -156,7 +163,7 @@ layout_mode = 3
 [connection signal="pressed" from="UI/HUD" to="Root" method="_on_pressed"]
 `;
     const result = parseTscn(tscn);
-    expect(result).toMatchSnapshot('complex-nested-scene');
+    expect(toSerializable(result)).toMatchSnapshot('complex-nested-scene');
   });
 });
 

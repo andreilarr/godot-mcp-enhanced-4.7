@@ -94,9 +94,8 @@ describe('Property: guard', () => {
         (toolName, args) => {
           const token = createPendingToken(toolName, args);
           const consumed = consumeToken(token);
-          if (consumed) {
-            expect(consumed.toolName).toBe(toolName);
-          }
+          expect(consumed).not.toBeNull();
+          expect(consumed.toolName).toBe(toolName);
         }
       ),
       { numRuns: process.env.CI ? 200 : 1000 }

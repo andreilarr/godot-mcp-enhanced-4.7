@@ -3,7 +3,6 @@ import { EventEmitter } from 'events';
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 
-// Mock child_process.spawn
 const mockProc = () => {
   const proc = new EventEmitter();
   proc.stdout = new EventEmitter();
@@ -14,10 +13,8 @@ const mockProc = () => {
   return proc;
 };
 
-let _spawnResult = mockProc();
-
 vi.mock('child_process', () => ({
-  spawn: vi.fn(() => _spawnResult),
+  spawn: vi.fn(),
 }));
 
 vi.mock('../build/core/process-state.js', () => ({
@@ -64,6 +61,17 @@ function createMockCtx(overrides = {}) {
     parseGodotConfig: vi.fn(),
     ...overrides,
   };
+}
+
+function setupSpawnMock(proc) {
+  spawn.mockReturnValue(proc);
+}
+
+function emitProcessEvents(proc, stdoutData, exitCode = 0) {
+  process.nextTick(() => {
+    proc.stdout.emit('data', Buffer.from(stdoutData));
+    proc.emit('close', exitCode);
+  });
 }
 
 // ─── getToolDefinitions ─────────────────────────────────────────────────────
@@ -135,10 +143,11 @@ describe('runtime handleTool — unknown tool', () => {
 describe('runtime handleTool — launch_editor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    _spawnResult = mockProc();
   });
 
   it('launches Godot editor via spawn', async () => {
+    const proc = mockProc();
+    setupSpawnMock(proc);
     const ctx = createMockCtx();
     const result = await handleTool('launch_editor', {
       project_path: '/fake/project',
@@ -158,10 +167,11 @@ describe('runtime handleTool — launch_editor', () => {
 describe('runtime handleTool — run_project', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    _spawnResult = mockProc();
   });
 
   it('spawns Godot in debug mode and sets running process', async () => {
+    const proc = mockProc();
+    setupSpawnMock(proc);
     const ctx = createMockCtx();
     const result = await handleTool('run_project', {
       project_path: '/fake/project',
@@ -177,6 +187,8 @@ describe('runtime handleTool — run_project', () => {
   });
 
   it('kills existing process before starting new one', async () => {
+    const proc = mockProc();
+    setupSpawnMock(proc);
     const existingProc = mockProc();
     const ctx = createMockCtx({ runningProcess: existingProc });
     await handleTool('run_project', {
@@ -187,6 +199,8 @@ describe('runtime handleTool — run_project', () => {
   });
 
   it('clears output buffer and sets process start time', async () => {
+    const proc = mockProc();
+    setupSpawnMock(proc);
     const ctx = createMockCtx();
     await handleTool('run_project', {
       project_path: '/fake/project',
@@ -268,21 +282,17 @@ describe('runtime handleTool — get_debug_output', () => {
 describe('runtime handleTool — run_tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    _spawnResult = mockProc();
   });
 
   it('spawns Godot with GUT test runner', async () => {
+    const proc = mockProc();
+    setupSpawnMock(proc);
     const ctx = createMockCtx();
-    const proc = _spawnResult;
     const resultPromise = handleTool('run_tests', {
       project_path: '/fake/project',
     }, ctx);
 
-    // Simulate process close via the global mock proc
-    process.nextTick(() => {
-      proc.stdout.emit('data', Buffer.from('Tests: 5 Passed'));
-      proc.emit('close', 0);
-    });
+    emitProcessEvents(proc, 'Tests: 5 Passed');
 
     const result = await resultPromise;
     expect(result).not.toBeNull();
@@ -301,18 +311,15 @@ describe('runtime handleTool — run_tests', () => {
 describe('runtime handleTool — get_godot_version', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    _spawnResult = mockProc();
   });
 
   it('spawns Godot with --version flag', async () => {
+    const proc = mockProc();
+    setupSpawnMock(proc);
     const ctx = createMockCtx();
-    const proc = _spawnResult;
     const resultPromise = handleTool('get_godot_version', {}, ctx);
 
-    process.nextTick(() => {
-      proc.stdout.emit('data', Buffer.from('4.6.stable'));
-      proc.emit('close', 0);
-    });
+    emitProcessEvents(proc, '4.6.stable');
 
     const result = await resultPromise;
     expect(result).not.toBeNull();
