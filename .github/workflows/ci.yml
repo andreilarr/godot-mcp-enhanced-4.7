@@ -21,4 +21,8 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx tsc --noEmit
-      - run: npm test
+      - run: npx vitest run --coverage
+      - uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
