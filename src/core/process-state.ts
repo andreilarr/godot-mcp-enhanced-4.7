@@ -50,12 +50,24 @@ let _runningProcess: ChildProcess | null = null;
 let _outputBuffer: string[] = [];
 let _processStartTime = 0;
 let _projectDir = '';
+let _processBusy = false;
+
+export function isProcessBusy(): boolean {
+  return _processBusy;
+}
+
+export function setProcessBusy(busy: boolean): void {
+  _processBusy = busy;
+}
 
 export function getRunningProcess(): ChildProcess | null {
   return _runningProcess;
 }
 
 export function setRunningProcess(proc: ChildProcess | null): void {
+  if (_processBusy) {
+    throw new Error('Cannot replace process while another operation is using it');
+  }
   if (_runningProcess && !_runningProcess.killed && proc !== _runningProcess) {
     forceKillTree(_runningProcess);
   }
@@ -107,4 +119,5 @@ export function resetState(): void {
   _outputBuffer = [];
   _processStartTime = 0;
   _projectDir = '';
+  _processBusy = false;
 }
