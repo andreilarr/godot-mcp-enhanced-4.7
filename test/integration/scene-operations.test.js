@@ -1,7 +1,22 @@
 // Level B 集成测试：场景操作工具（scene.handleTool）
-import { expect } from 'vitest';
+import { expect, it, beforeEach, describe, vi } from 'vitest';
+
+// Mock the executor — hoisted to top by Vitest
+vi.mock('../../build/gdscript-executor.js', () => ({
+  executeGdscript: vi.fn(() => Promise.resolve({
+    success: true, compile_success: true, compile_error: '',
+    errors: [], run_success: true, run_error: '',
+    outputs: [{ key: 'result', value: '{"ok":true}' }],
+    raw_output: '', duration_ms: 100,
+  })),
+  parseMcpMarkers: vi.fn((raw) => ({
+    parsed: null,
+    logLines: raw.split('\n').map((l) => l.trim()).filter(Boolean),
+  })),
+}));
+
+import { executeGdscript } from '../../build/gdscript-executor.js';
 import * as scene from '../../build/tools/scene.js';
-import { ensureGodot, getGodotPath, itIfGodot } from '../helpers/integration-setup.js';
 import { createToolContext, createTempProject, registerCleanup } from '../helpers/tool-context.js';
 import { MINIMAL_PROJECT } from '../helpers/fixtures.js';
 
@@ -24,8 +39,7 @@ function isSuccessful(result) {
   return true;
 }
 
-describe('Level B: Scene Operations', async () => {
-  await ensureGodot();
+describe('Level B: Scene Operations', () => {
   const dirRef = { path: null };
   let ctx;
 
@@ -33,13 +47,14 @@ describe('Level B: Scene Operations', async () => {
   registerCleanup(dirRef);
 
   beforeEach(() => {
+    vi.mocked(executeGdscript).mockReset();
     dirRef.path = createTempProject(MINIMAL_PROJECT);
     ctx = createToolContext(dirRef.path);
-    ctx.findGodot = async () => getGodotPath();
+    ctx.findGodot = async () => 'godot';
   });
 
   // --- 用例 1: add_node — 添加 Sprite2D 到场景 ---
-  itIfGodot('add_node — 添加 Sprite2D 到 main.tscn', async () => {
+  it('add_node — 添加 Sprite2D 到 main.tscn', async () => {
     const result = await scene.handleTool('add_node', {
       project_path: dirRef.path,
       scene_path: 'res://scenes/main.tscn',
@@ -50,7 +65,7 @@ describe('Level B: Scene Operations', async () => {
   });
 
   // --- 用例 2: edit_node — 添加节点后修改位置 ---
-  itIfGodot('edit_node — add_node + edit_node position', async () => {
+  it('edit_node — add_node + edit_node position', async () => {
     await scene.handleTool('add_node', {
       project_path: dirRef.path,
       scene_path: 'res://scenes/main.tscn',
@@ -68,7 +83,7 @@ describe('Level B: Scene Operations', async () => {
   });
 
   // --- 用例 3: query_scene_tree — 查询场景树 ---
-  itIfGodot('query_scene_tree — 查询 main.tscn 场景树', async () => {
+  it('query_scene_tree — 查询 main.tscn 场景树', async () => {
     const result = await scene.handleTool('read_scene', {
       project_path: dirRef.path,
       scene_path: 'res://scenes/main.tscn',
@@ -79,7 +94,7 @@ describe('Level B: Scene Operations', async () => {
   });
 
   // --- 用例 4: full CRUD cycle — 创建 → 编辑 → 删除 ---
-  itIfGodot('full CRUD cycle — create, edit, remove', async () => {
+  it('full CRUD cycle — create, edit, remove', async () => {
     const scenePath = 'res://scenes/main.tscn';
 
     // 创建
@@ -110,7 +125,7 @@ describe('Level B: Scene Operations', async () => {
   });
 
   // --- 用例 5: remove_node confirmation token 流程 ---
-  itIfGodot('remove_node confirmation token — 无 token 时检查返回值', async () => {
+  it('remove_node confirmation token — 无 token 时检查返回值', async () => {
     // 先添加节点
     await scene.handleTool('add_node', {
       project_path: dirRef.path,
@@ -150,7 +165,7 @@ describe('Level B: Scene Operations', async () => {
   });
 
   // --- 用例 6: nonexistent scene — 读取不存在的场景 ---
-  itIfGodot('nonexistent scene — read_scene 不存在的 .tscn 应返回错误', async () => {
+  it('nonexistent scene — read_scene 不存在的 .tscn 应返回错误', async () => {
     const result = await scene.handleTool('read_scene', {
       project_path: dirRef.path,
       scene_path: 'res://scenes/DOES_NOT_EXIST.tscn',

@@ -1,14 +1,37 @@
-import { expect } from 'vitest';
-import { existsSync } from 'node:fs';
+import { expect, it, beforeEach, afterEach, describe, vi } from 'vitest';
+import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+
+// Mock the executor — hoisted to top by Vitest
+vi.mock('../../build/gdscript-executor.js', () => ({
+  executeGdscript: vi.fn(() => Promise.resolve({
+    success: true, compile_success: true, compile_error: '',
+    errors: [], run_success: true, run_error: '',
+    outputs: [],
+    raw_output: '', duration_ms: 100,
+  })),
+  parseMcpMarkers: vi.fn((raw) => ({
+    parsed: null,
+    logLines: raw.split('\n').map((l) => l.trim()).filter(Boolean),
+  })),
+}));
+
+// Mock batchValidateScripts so validate_scripts doesn't spawn Godot
+vi.mock('../../build/tools/validation.js', async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    batchValidateScripts: vi.fn(() => Promise.resolve([])),
+  };
+});
+
+import { executeGdscript } from '../../build/gdscript-executor.js';
 import * as project from '../../build/tools/project.js';
 import * as validation from '../../build/tools/validation.js';
-import { ensureGodot, itIfGodot, getGodotPath } from '../helpers/integration-setup.js';
 import { createToolContext, createTempProject } from '../helpers/tool-context.js';
 import { MINIMAL_PROJECT } from '../helpers/fixtures.js';
 
-describe('Level B: Project management', async () => {
-  await ensureGodot();
+describe('Level B: Project management', () => {
   const dirRef = { path: null };
   let ctx;
 
@@ -20,9 +43,10 @@ describe('Level B: Project management', async () => {
   });
 
   beforeEach(() => {
+    vi.mocked(executeGdscript).mockReset();
     dirRef.path = createTempProject(MINIMAL_PROJECT);
     ctx = createToolContext(dirRef.path);
-    ctx.findGodot = async () => getGodotPath();
+    ctx.findGodot = async () => 'godot';
   });
 
   // 用例 1: create_project — 创建完整项目结构
@@ -48,8 +72,8 @@ describe('Level B: Project management', async () => {
     expect(appSection['config/name']).toBe('TestProject');
   });
 
-  // 用例 3: validate_project — 最小项目应通过验证
-  itIfGodot('validate project', async () => {
+  // 用例 3: validate_project — 最小项目应通过验证（纯文件系统操作，不调用 Godot）
+  it('validate project', async () => {
     const result = await validation.handleTool('validate_project', {
       project_path: dirRef.path,
     }, ctx);
@@ -76,7 +100,9 @@ describe('Level B: Project management', async () => {
   });
 
   // 用例 5: validate_scripts 空数组不应崩溃
-  itIfGodot('validate scripts with empty array', async () => {
+  it('validate scripts with empty array', async () => {
+    vi.mocked(validation.batchValidateScripts).mockResolvedValueOnce([]);
+
     const result = await validation.handleTool('validate_scripts', {
       project_path: dirRef.path,
       scripts: [],

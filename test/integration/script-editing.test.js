@@ -1,14 +1,39 @@
-import { expect } from 'vitest';
+import { expect, it, beforeEach, afterEach, describe, vi } from 'vitest';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+
+// Mock the executor — hoisted to top by Vitest
+vi.mock('../../build/gdscript-executor.js', () => ({
+  executeGdscript: vi.fn(() => Promise.resolve({
+    success: true, compile_success: true, compile_error: '',
+    errors: [], run_success: true, run_error: '',
+    outputs: [{ key: 'result', value: '{"validated":1,"total_errors":0}' }],
+    raw_output: '', duration_ms: 100,
+  })),
+  parseMcpMarkers: vi.fn((raw) => ({
+    parsed: null,
+    logLines: raw.split('\n').map((l) => l.trim()).filter(Boolean),
+  })),
+}));
+
+// Mock batchValidateScripts so validate_scripts doesn't spawn Godot
+vi.mock('../../build/tools/validation.js', async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    batchValidateScripts: vi.fn(() => Promise.resolve([
+      { file: 'scripts/main.gd', errors: [], warnings: [] },
+    ])),
+  };
+});
+
+import { executeGdscript } from '../../build/gdscript-executor.js';
 import * as script from '../../build/tools/script.js';
 import * as validation from '../../build/tools/validation.js';
-import { ensureGodot, itIfGodot, getGodotPath } from '../helpers/integration-setup.js';
 import { createToolContext, createTempProject } from '../helpers/tool-context.js';
 import { MINIMAL_PROJECT } from '../helpers/fixtures.js';
 
-describe('Level B: Script editing', async () => {
-  await ensureGodot();
+describe('Level B: Script editing', () => {
   const dirRef = { path: null };
   let ctx;
 
@@ -20,13 +45,14 @@ describe('Level B: Script editing', async () => {
   });
 
   beforeEach(() => {
+    vi.mocked(executeGdscript).mockReset();
     dirRef.path = createTempProject(MINIMAL_PROJECT);
     ctx = createToolContext(dirRef.path);
-    ctx.findGodot = async () => getGodotPath();
+    ctx.findGodot = async () => 'godot';
   });
 
   // 用例 1: write_script — 创建新脚本文件
-  itIfGodot('write new script', async () => {
+  it('write new script', async () => {
     const result = await script.handleTool('write_script', {
       project_path: dirRef.path,
       script_path: 'scripts/new_script.gd',
@@ -37,7 +63,7 @@ describe('Level B: Script editing', async () => {
   });
 
   // 用例 2: edit_script — search_and_replace 模式替换内容
-  itIfGodot('search and replace edit', async () => {
+  it('search and replace edit', async () => {
     const scriptPath = 'scripts/main.gd';
     const result = await script.handleTool('edit_script', {
       project_path: dirRef.path,
@@ -53,7 +79,11 @@ describe('Level B: Script editing', async () => {
   });
 
   // 用例 3: validate_scripts — 合法脚本应通过验证
-  itIfGodot('validate scripts', async () => {
+  it('validate scripts', async () => {
+    vi.mocked(validation.batchValidateScripts).mockResolvedValueOnce([
+      { file: 'scripts/main.gd', errors: [], warnings: [] },
+    ]);
+
     const result = await validation.handleTool('validate_scripts', {
       project_path: dirRef.path,
       scripts: ['scripts/main.gd'],
@@ -66,7 +96,7 @@ describe('Level B: Script editing', async () => {
   });
 
   // 用例 4: edit_script — 不存在的文件应返回错误
-  itIfGodot('edit nonexistent script', async () => {
+  it('edit nonexistent script', async () => {
     const result = await script.handleTool('edit_script', {
       project_path: dirRef.path,
       script_path: 'scripts/DOES_NOT_EXIST.gd',
