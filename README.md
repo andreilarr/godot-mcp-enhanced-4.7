@@ -165,7 +165,7 @@ npm install
         "material_read", "material_write", "shader_edit",
         "game_bridge_install", "game_bridge_uninstall",
         "game_query", "game_input", "game_wait",
-        "dev_loop", "scene_snapshot", "batch_validate",
+        "dev_loop", "scene_snapshot", "batch_validate", "batch_create_files", "batch_run_verify",
         "animation", "profiler", "spatial_info",
         "get_class_info", "search_classes", "find_method", "get_inheritance",
         "test_assert", "test_stress", "export_list_presets", "export_get_preset", "export_build",
@@ -173,7 +173,15 @@ npm install
         "particles_load_preset", "particles_set_material",
         "nav_create_region", "nav_bake_mesh", "nav_create_agent", "nav_set_params", "nav_create_link",
         "animtree_create", "animtree_add_state", "animtree_add_transition",
-        "animtree_set_blend", "animtree_play"
+        "animtree_set_blend", "animtree_play",
+        "ik_modifier_create", "ik_modifier_get", "ik_modifier_set", "ik_list_bones",
+        "verify_delivery", "list_templates", "apply_template",
+        "ui_create_control", "ui_build_layout", "ui_set_layout", "ui_get_layout",
+        "ui_anchor_preset", "ui_set_theme", "ui_container_add", "ui_draw_recipe",
+        "theme_create", "theme_set_property",
+        "recording_start", "recording_stop", "recording_save", "recording_load", "recording_play",
+        "editor_sync_start", "editor_sync_stop",
+        "quick_scene", "diff_scenes", "detach_instance"
       ]
     }
   }
@@ -188,7 +196,7 @@ npm install
 | `DEBUG` | 启用详细日志 | `false` |
 | `ALLOW_OUTSIDE_PROJECT_PATHS` | 允许工具访问项目目录外的文件（如截图输出路径） | `false` |
 
-## 工具列表（共 96 个）
+## 工具列表（130+ 个）
 
 ### 执行工具
 
@@ -402,6 +410,60 @@ npm install
 | `animtree_set_blend` | 设置混合参数（float 用于 BlendTree，Vector2 用于 BlendSpace） |
 | `animtree_play` | 切换到目标状态（通过 playback.travel） |
 
+### IK 框架工具（运行时）
+
+| 工具 | 说明 |
+|------|------|
+| `ik_modifier_create` | 创建 IK 修改器节点（TwoBoneIK3D / FABRIK3D / CCDIK3D / SplineIK3D / JacobianIK3D） |
+| `ik_modifier_get` | 读取 IK 修改器属性 |
+| `ik_modifier_set` | 设置 IK 参数（active、influence、bone_name、target、magnet） |
+| `ik_list_bones` | 列出 Skeleton3D 骨骼 |
+
+### 验证交付工具
+
+| 工具 | 说明 |
+|------|------|
+| `verify_delivery` | 端到端交付验证：场景树完整性 + 脚本健康 + 性能 + 自定义断言 |
+
+### 代码模板工具
+
+| 工具 | 说明 |
+|------|------|
+| `list_templates` | 列出可用代码模板（内置 + 用户自定义） |
+| `apply_template` | 应用代码模板到指定脚本（支持变量替换） |
+
+### UI 布局工具（运行时）
+
+| 工具 | 说明 |
+|------|------|
+| `ui_create_control` | 创建 UI Control 节点 |
+| `ui_build_layout` | CSS Flexbox/Grid 翻译层，从声明式布局描述构建 Godot Container 树 |
+| `ui_set_layout` | 设置 Control 节点布局属性（锚点/偏移/最小尺寸） |
+| `ui_get_layout` | 查询 Control 节点布局信息 |
+| `ui_anchor_preset` | 应用锚点预设（full_rect/center/top_wide 等 16 种） |
+| `ui_set_theme` | 设置/创建/保存/加载 Theme |
+| `ui_container_add` | 向 Container 添加子 Control 节点 |
+| `ui_draw_recipe` | 声明式绘图操作（rect/circle/line/arc/polygon/string） |
+| `theme_create` | 创建空 Theme 或从节点提取 Theme |
+| `theme_set_property` | 设置 Theme 属性（font/color/constant/stylebox） |
+
+### 录制工具
+
+| 工具 | 说明 |
+|------|------|
+| `recording_start` | 开始录制输入事件（键盘/鼠标） |
+| `recording_stop` | 停止录制并返回事件数据 |
+| `recording_save` | 保存录制到 JSON 文件 |
+| `recording_load` | 加载录制文件 |
+| `recording_play` | 回放录制的输入事件 |
+
+### 编辑器同步工具
+
+| 工具 | 说明 |
+|------|------|
+| `editor_sync_start` | 启动场景树实时监听（推送 node_added/node_removed 事件） |
+| `editor_sync_stop` | 停止场景树监听 |
+
 ## MCP 资源（Resources）
 
 AI 客户端可通过 `godot://` URI 方案发现和读取项目上下文，无需显式工具调用。
@@ -435,100 +497,6 @@ Client: ReadResource("godot://project/info") → 项目配置 + 统计
 Client: ReadResource("godot://scene/scenes/main.tscn") → 节点树摘要
 Client: ReadResource("godot://script/scripts/player.gd") → GDScript 源码
 ```
-
-## v0.3.0 新增工具详解
-
-### `edit_script`
-
-按行范围或搜索替换编辑现有 GDScript 文件。自动保留 CRLF/LF 换行。
-
-> **推荐**：优先使用此工具（而非 Claude 内置 Edit）编辑 .gd 文件以保留行尾格式。使用 `search_and_replace` 模式可避免行号偏移问题。
-
-**参数：**
-
-| 参数 | 必填 | 说明 |
-|------|------|------|
-| `script_path` | 是 | .gd 文件路径（绝对路径或相对于项目） |
-| `start_line` | 是 | 起始行号（1-based，包含） |
-| `end_line` | 是 | 结束行号（1-based，包含） |
-| `new_content` | 是 | 替换内容 |
-| `indent_mode` | 否 | `"raw"`（默认）— 原样插入。`"smart"` — 自动调整缩进匹配 `start_line`。 |
-| `verify_content` | 否 | 预期内容，不匹配时中止编辑，防止过期行号误改。 |
-| `search_and_replace` | 否 | 搜索替换模式（提供后忽略 start_line/end_line）。详见下方。 |
-
-```json
-{
-  "script_path": "scripts/player.gd",
-  "start_line": 10,
-  "end_line": 12,
-  "new_content": "func get_health() -> int:\n\treturn hp",
-  "indent_mode": "raw",
-  "verify_content": "func get_hp():\n\treturn 0"
-}
-```
-
-**search_and_replace 模式：**
-
-```json
-{
-  "script_path": "scripts/player.gd",
-  "search_and_replace": {
-    "search": "func get_hp():\n\treturn 0",
-    "replace": "func get_health() -> int:\n\treturn hp"
-  }
-}
-```
-
-| 字段 | 说明 |
-|------|------|
-| `search` | 要搜索的文本（CRLF 会被规范化为 LF 匹配） |
-| `replace` | 替换文本 |
-| `occurrence` | 替换第几次出现（默认 1，设为 0 替换全部） |
-
-响应包含变更前后的 diff 对比。
-
-### `batch_add_nodes`
-
-一次 headless Godot 调用添加多个节点，避免逐个启动的开销：
-
-```json
-{
-  "project_path": "/path/to/project",
-  "scene_path": "scenes/main.tscn",
-  "nodes": [
-    { "node_type": "Label", "node_name": "Title", "properties": { "text": "Hello" } },
-    { "node_type": "Button", "node_name": "StartBtn", "parent_node_path": "root/UI" },
-    { "node_type": "Sprite2D", "node_name": "PlayerIcon" }
-  ]
-}
-```
-
-### `validate_project`
-
-静态分析项目常见问题：
-
-- `.tscn` 文件中 `ext_resource` 引用了不存在的文件
-- `.gd` 脚本中 `preload()`/`load()` 路径无效
-- 源资源已删除但 `.import` 文件残留
-
-支持 `exclude_paths` 排除目录（默认排除 `.godot`、`.import`、`tools`、`addons`）。包含 `.gdignore` 的目录会自动跳过。
-
-返回结构化报告，包含严重级别：`critical`、`error`、`warning`、`info`。
-
-### `import_resources`
-
-批量注册资源到项目，自动生成 `.import` 文件：
-
-```json
-{
-  "project_path": "/path/to/project",
-  "directory": "assets/ui",
-  "extensions": [".png", ".jpg", ".mp3"],
-  "recursive": true
-}
-```
-
-支持格式：`.png`、`.jpg`、`.jpeg`、`.webp`、`.svg`、`.mp3`、`.ogg`、`.wav`、`.ttf`、`.otf`、`.glb`、`.gltf`。
 
 ## 闭环开发示例
 
@@ -586,159 +554,23 @@ MIT
 
 ## 更新日志
 
-### v0.10.0（2026-05-16）
+> 完整变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
-场景实例化 + 编辑器实时同步 + 代码优化重构：
-
-**场景实例化（P1）：**
-
-| 工具 | 说明 |
-|------|------|
-| `instance_scene` | 实例化 .tscn 场景到指定父节点，支持 transform 和自定义属性覆盖 |
-| `get_scene_root` | 获取场景实例的根节点路径（支持 PackedScene 实例） |
-| `detach_node` | 从场景树分离节点（等效于 `remove_child`），返回序列化快照 |
-| `save_scene`（增强） | 新增 `selected_only` 选项，仅保存选中分支为独立 .tscn |
-
-**编辑器实时同步（P2）：**
-
-| 工具 | 说明 |
-|------|------|
-| `editor_sync` | 轻量级场景树同步（全量/增量/选中模式），双向属性 diff |
-| `editor_scene_state` | 获取编辑器当前场景状态（播放中/暂停/编辑中） |
-| `editor_undo_redo` | 编辑器操作撤销/重做，支持历史记录查询 |
-
-**代码优化重构（净删除 460 行）：**
-
-- `GodotServer.ts` 399→307 行：提取 `godot-finder.ts`（80 行）、`process-state.ts`（55 行），LITE_TOOLS 移入 `tool-registry.ts`
-- `animation-ops.ts` 1088→686 行：提取 `animation-shared.ts`（62 行）、`animation-track.ts`（414 行）
-- `outputBuffer` 新增 5000 行上限保护，`appendOutput()` 超限自动截断
-
-124 个工具，466 测试通过。
-
-### v0.9.0（2026-05-15）
-
-审查反馈修复 + 架构优化：
-
-| 变更 | 说明 |
-|------|------|
-| **批量工具** | `batch_add_nodes`、`batch_create_files`、`batch_run_verify`、`batch_validate` |
-| **UI 工具** | `ui_inspect`（Control 节点树检查）、`ui_edit`（Control 属性编辑） |
-| **录制工具** | `recording_start` / `recording_stop` / `recording_export` |
-| **编辑器同步** | `editor_sync` 初始版本（轻量场景树同步） |
-| **确认令牌** | 危险操作新增确认令牌机制 |
-| **Read-Only 模式** | `--read-only` 启动参数，仅暴露查询类工具 |
-| **Lite 模式** | `--mode lite` 启动参数，仅暴露核心工具子集 |
-| **性能分析** | `profiler` 工具增强 |
-
-118 个工具，463 测试通过。
-
-### v0.8.0（2026-05-13）
-
-架构升级 + 41 个新工具（P1 双模式架构 + P2 测试框架 + P3 高级工具集）：
-
-**P1 — 双模式架构：**
-
-| 变更 | 说明 |
-|------|------|
-| **Editor WebSocket 模式** | 新增 EditorConnection + EditorToolExecutor，通过 WebSocket JSON-RPC 2.0 连接编辑器内插件，实现实时场景操作 |
-| **GDScript 编辑器插件** | `addons/godot_mcp_server/` 提供 command_handler + 7 个命令模块（node/test/export/particle/nav/animtree/undo），在编辑器内直接操作场景 |
-| **UndoManager** | 编辑器操作支持撤销栈 |
-
-**P2 — 测试框架 + 导出管理（5 个工具）：**
-
-| 工具 | 说明 |
-|------|------|
-| `test_assert` | 断言场景树状态（node_exists / property_equals / signal_connected / node_count） |
-| `test_stress` | 压力测试：重复创建/销毁节点检测内存泄漏 |
-| `export_list_presets` | 列出项目导出预设 |
-| `export_get_preset` | 获取导出预设详情 |
-| `export_build` | 执行导出构建 |
-
-**P3 — 高级工具集（15 个工具）：**
-
-| 模块 | 工具 |
-|------|------|
-| **粒子系统** | `particles_create` / `set_emission` / `set_process` / `load_preset` / `set_material` — 完整 GPU 粒子控制，内置 6 种预设效果 |
-| **导航系统** | `nav_create_region` / `bake_mesh` / `create_agent` / `set_params` / `create_link` — NavigationRegion3D/Agent/Link 全链路 |
-| **AnimationTree** | `animtree_create` / `add_state` / `add_transition` / `set_blend` / `play` — 状态机创建/状态/转换/混合/播放 |
-
-**同步更新的编辑器命令（GDScript）：** particle_commands.gd、nav_commands.gd、animtree_commands.gd（各 5 个 handler），command_handler.gd 路由 15 个新命令。
-
-### v0.7.0（2026-05-08）
-
-全面代码审查修复 — 安全加固、资源泄漏、代码质量和类型安全：
-
-| 类别 | 修复内容 |
-|------|----------|
-| **CRITICAL: 输入转义** | `.tscn` 文件写入时对用户输入进行转义（`"`、`\`、`]`），防止注入损坏场景文件 |
-| **超时泄漏修复** | `spawn` + `setTimeout` 模式在进程退出/error 时正确 `clearTimeout`，防止内存泄漏 |
-| **代码去重** | 提取 `parseConfigValue`、`parseGodotConfig`、`checkVersionMismatch` 到 `helpers.ts`，消除 5 处重复实现 |
-| **类型安全** | `any` → `unknown` / 具体接口（`ExtendedAnalysisResult`），消除所有 `as any` 强转 |
-| **安全 ID 生成** | 临时文件名从 `Math.random()` 改为 `crypto.randomUUID()` |
-| **Game Bridge** | 移除未使用的认证代码，请求 ID 从 `Date.now()` 改为原子计数器 |
-| **tscn-parser** | 修复 nodeMap 键冲突（同名兄弟节点），改用唯一路径作为键 |
-| **工具描述国际化** | 28 个运行时工具描述从中文改为英文，保持 MCP 协议一致性 |
-
-涉及文件：`tscn-editor.ts`、`helpers.ts`、`scene.ts`、`runtime.ts`、`game-bridge.ts`、`GodotServer.ts`、`validation.ts`、`gdscript-executor.ts`、`resources.ts`、`project.ts`、`tscn-parser.ts`、`script.ts`、`material-ops.ts`、`godot-ops.ts`、`tilemap-ops.ts`。
-
-### v0.6.0（2026-05-03）
-
-新增 12 个运行时操作工具（4 个音频播放控制 + 8 个 TileMap 编辑）：
-
-**音频播放控制：**
-
-| 工具 | 说明 |
-|------|------|
-| `audio_play` | 播放音频，支持 AudioStreamPlayer / AudioStreamPlayer2D / AudioStreamPlayer3D |
-| `audio_stop` | 停止音频播放 |
-| `audio_set_param` | 设置音量（dB）、音调缩放、总线路由 |
-| `audio_query` | 查询播放状态、当前播放位置、总线信息 |
-
-**TileMap 编辑：**
-
-| 工具 | 说明 |
-|------|------|
-| `tilemap_read` | 读取 TileMap cell 数据 |
-| `tilemap_set_cell` | 设置单个 tile |
-| `tilemap_erase_cell` | 擦除单个 tile |
-| `tilemap_fill_rect` | 批量填充矩形区域 |
-| `tilemap_clear` | 清空 TileMap |
-| `tilemap_copy` | 复制区域为模板 |
-| `tilemap_paste` | 粘贴模板到目标位置 |
-| `tilemap_set_transform` | 设置 tile 翻转/旋转 |
-
-TileMap 工具同时支持 TileMap（旧版）和 TileMapLayer（Godot 4.3+ 新版）两种节点类型。所有 12 个新工具均为运行时操作（非持久化）。
-
-### v0.5.0（2026-05-02）
-
-新增 8 个运行时操作工具（信号控制 + 物理查询 + 3D 创建 + 导航寻路）：
-
-| 工具 | 说明 |
-|------|------|
-| `signal_connect` | 运行时连接信号，支持 flags 参数 |
-| `signal_disconnect` | 断开信号连接 |
-| `signal_emit` | 发射信号（仅基础类型参数） |
-| `signal_list` | 列出节点可用信号 |
-| `physics_raycast` | 3D 射线检测（Godot 4 PhysicsRayQueryParameters3D） |
-| `physics_body_info` | 物理体碰撞信息查询 |
-| `node_create_3d` | 运行时创建 3D 节点（16 种白名单类型） |
-| `nav_query_path` | NavigationServer3D 寻路查询 |
-
-统一返回格式 `{success, data, error, error_code, warnings}`，6 种错误码。
-
-### v0.4.0（2026-05-01）
-
-8 项增强 + 审查修复：
-
-| 功能 | 说明 |
-|------|------|
-| 版本不一致检测 | project.godot 与 Godot 二进制版本不匹配时自动警告，注入 run_and_verify / execute_gdscript / run_project 响应 |
-| 脚本预检查 | run_and_verify 运行前并行扫描前 10 个 .gd 文件语法，捕获 Parse Error |
-| `validate_scripts` 新工具 | 独立的脚本语法验证，并行执行，上限 50 文件 |
-| snippet 支持 func | execute_gdscript 自动将 func/var/const 声明放在类级别，语句放在 _initialize() |
-| search_and_replace | edit_script 新增内容搜索替换模式，支持指定第 N 次出现，CRLF 安全 |
-| 超时 15→20 | run_and_verify 默认超时增加 |
-| 截图稳定性 | frameDelay 10→15，失败后自动以 2x frameDelay 重试一次 |
-| CRLF 保护提示 | edit_script 描述提示优先使用此工具保护行尾格式 |
-
-审查修复：wrapSnippet func body 分类 bug、提取 extractScriptErrors() 消除重复、脚本验证并行化。
+| 版本 | 日期 | 要点 |
+|------|------|------|
+| **v0.14.0** | 2026-05-24 | 7 轴全维度审查（8 CRITICAL 修复）+ IK 框架 MVP + Vitest 迁移 1257 测试 |
+| **v0.13.0** | 2026-05-23 | Bridge 安全加固 20 项 + requestId 取模 + CSS Grid + EditorConnection 重连上限 |
+| **v0.12.0** | 2026-05-23 | 迭代 URL 解码防路径遍历 + verify_delivery 4 维度验证 + dev_loop acceptance |
+| **v0.11.1** | 2026-05-22 | Bridge TCP 绑定 127.0.0.1 + 密钥文件读后即删 + opsErrorResult isError 修复 |
+| **v0.11.0** | 2026-05-22 | CSS Flexbox 布局翻译层 + GDScript Lint 规则引擎 + 路径遍历防护增强 |
+| **v0.10.1** | 2026-05-21 | Bridge TCP 绑定本地地址 + 密钥文件生命周期管理 + opsErrorResult 修复 |
+| **v0.10.0** | 2026-05-19 | 场景实例化 + 编辑器实时同步 + 代码优化重构（124 工具） |
+| **v0.9.0** | 2026-05-16 | 批量工具 + UI 工具 + 录制系统 + 确认令牌 + Read-Only/Lite 模式（118 工具） |
+| **v0.8.0** | 2026-05-13 | 双模式架构 + 测试框架 + 粒子/导航/AnimationTree（96 工具） |
+| **v0.7.0** | 2026-05-08 | 安全加固 + 输入转义 + 类型安全 + tscn-parser 修复 |
+| **v0.6.0** | 2026-05-03 | 音频播放控制 4 工具 + TileMap 编辑 8 工具 |
+| **v0.5.0** | 2026-05-02 | 信号控制 + 物理查询 + 3D 创建 + 导航寻路（8 工具） |
+| **v0.4.0** | 2026-05-01 | 版本检测 + validate_scripts + search_and_replace + 截图稳定性 |
+| **v0.3.0** | — | edit_script + batch_add_nodes + validate_project + import_resources |
+| **v0.2.0** | — | read_scene + read/write_script + query_scene_tree + MCP Resources |
+| **v0.1.0** | — | 项目管理 + 场景操作 + 执行控制 + 截图 + execute_gdscript |
