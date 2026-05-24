@@ -1,4 +1,5 @@
 import { expect } from 'vitest';
+import fc from 'fast-check';
 import { isErrorFalsePositive, KNOWN_BASE_METHODS } from '../build/tools/validation.js';
 
 // ─── Helper: build a realistic Godot headless parser error line ──────────────
@@ -190,5 +191,26 @@ describe('validation-filter: no duplicate entries in whitelist', () => {
       seen.add(item);
     }
     expect(dupes.length).toBe(0);
+  });
+});
+
+describe('Property: validation-filter fuzz', () => {
+  it('isErrorFalsePositive never throws on arbitrary input', () => {
+    fc.assert(
+      fc.property(fc.string({ maxLength: 1000 }), (line) => {
+        expect(() => isErrorFalsePositive(line)).not.toThrow();
+      }),
+      { numRuns: process.env.CI ? 200 : 1000 }
+    );
+  });
+
+  it('isErrorFalsePositive returns boolean for any input', () => {
+    fc.assert(
+      fc.property(fc.string({ maxLength: 1000 }), (line) => {
+        const result = isErrorFalsePositive(line);
+        expect(typeof result).toBe('boolean');
+      }),
+      { numRuns: process.env.CI ? 200 : 1000 }
+    );
   });
 });

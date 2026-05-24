@@ -1,4 +1,5 @@
 import { expect } from 'vitest';
+import fc from 'fast-check';
 import {
   requiresConfirmation, createPendingToken, consumeToken, pendingCount, GUARDED_TOOLS,
 } from '../build/guard.js';
@@ -58,5 +59,47 @@ describe('createPendingToken + consumeToken', () => {
   it('unknown token returns null', () => {
     const result = consumeToken('nonexistent_token_12345');
     expect(result).toBe(null);
+  });
+});
+
+describe('Property: guard', () => {
+  it('requiresConfirmation is deterministic for any string', () => {
+    fc.assert(
+      fc.property(fc.string(), (toolName) => {
+        const result = requiresConfirmation(toolName);
+        // 调用两次返回相同结果
+        expect(requiresConfirmation(toolName)).toBe(result);
+        // 结果只能是 true 或 false
+        expect(typeof result).toBe('boolean');
+      }),
+      { numRuns: process.env.CI ? 200 : 1000 }
+    );
+  });
+
+  it('consumeToken with random string always returns null', () => {
+    fc.assert(
+      fc.property(fc.string({ maxLength: 100 }), (token) => {
+        // 任意字符串 token 不会匹配真实 token
+        expect(consumeToken(token)).toBe(null);
+      }),
+      { numRuns: process.env.CI ? 200 : 1000 }
+    );
+  });
+
+  it('createPendingToken + consumeToken roundtrip preserves toolName', () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 50 }),
+        fc.dictionary(fc.string({ minLength: 1, maxLength: 10 }), fc.anything()),
+        (toolName, args) => {
+          const token = createPendingToken(toolName, args);
+          const consumed = consumeToken(token);
+          if (consumed) {
+            expect(consumed.toolName).toBe(toolName);
+          }
+        }
+      ),
+      { numRuns: process.env.CI ? 200 : 1000 }
+    );
   });
 });

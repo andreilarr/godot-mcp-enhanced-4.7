@@ -1,4 +1,5 @@
 import { expect } from 'vitest';
+import fc from 'fast-check';
 import { lintGDScript } from '../build/tools/gdscript-lint.js';
 
 describe('GDScript Lint', () => {
@@ -252,5 +253,28 @@ describe('GDScript Lint', () => {
       const r = lintGDScript('var rb := RigidBody3D.new()\nrb.friction = 0.3');
       expect(r.meta.rules_count > 0).toBeTruthy();
     });
+  });
+});
+
+describe('Property: gdscript-lint fuzz', () => {
+  it('lintGDScript never throws on arbitrary code', () => {
+    fc.assert(
+      fc.property(fc.string({ maxLength: 5000 }), (code) => {
+        // lint 不应抛错
+        expect(() => lintGDScript(code)).not.toThrow();
+      }),
+      { numRuns: process.env.CI ? 200 : 1000 }
+    );
+  });
+
+  it('lintGDScript returns arrays for any input', () => {
+    fc.assert(
+      fc.property(fc.string({ maxLength: 5000 }), (code) => {
+        const result = lintGDScript(code);
+        expect(Array.isArray(result.errors)).toBe(true);
+        expect(Array.isArray(result.warnings)).toBe(true);
+      }),
+      { numRuns: process.env.CI ? 200 : 1000 }
+    );
   });
 });

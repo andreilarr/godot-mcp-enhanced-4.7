@@ -1,4 +1,5 @@
 import { expect } from 'vitest';
+import fc from 'fast-check';
 import { parseTscn, parseTscnSummary } from '../build/tscn-parser.js';
 
 describe('parseTscn', () => {
@@ -156,5 +157,27 @@ layout_mode = 3
 `;
     const result = parseTscn(tscn);
     expect(result).toMatchSnapshot('complex-nested-scene');
+  });
+});
+
+describe('Property: parseTscn fuzz', () => {
+  it('never crashes on arbitrary string input', () => {
+    fc.assert(
+      fc.property(fc.string({ maxLength: 5000 }), (input) => {
+        // parseTscn 不应抛错，应优雅处理任意输入
+        expect(() => parseTscn(input)).not.toThrow();
+      }),
+      { numRuns: process.env.CI ? 200 : 1000 }
+    );
+  });
+
+  it('returns array for nodes on any input', () => {
+    fc.assert(
+      fc.property(fc.string({ maxLength: 5000 }), (input) => {
+        const result = parseTscn(input);
+        expect(Array.isArray(result.nodes)).toBe(true);
+      }),
+      { numRuns: process.env.CI ? 200 : 1000 }
+    );
   });
 });
