@@ -7,7 +7,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov', 'html'],
-      include: ['src/'],
+      include: ['build/**/*.js'],
+      exclude: ['build/**/*.js.map', 'build/**/*.d.ts', 'build/**/*.gd'],
     },
     testTimeout: 30_000,
   },
