@@ -3,7 +3,8 @@ extends Node
 const BASE_PORT := 9090
 const MAX_PORT := 9094
 const MAX_AUTH_FAILS := 5
-const LOCKOUT_SECONDS := 30.0
+const LOCKOUT_BASE_SECONDS := 30.0
+const LOCKOUT_MAX_SECONDS := 300.0
 const _LOCKOUT_KEY := "localhost"  # All connections are localhost; single global rate limit
 const MAX_PEERS := 5
 const MAX_MESSAGE_SIZE := 1048576  # 1MB
@@ -57,6 +58,8 @@ func _generate_and_write_secret() -> void:
 	else:
 		push_warning("[MCP] Failed to write auth secret to %s" % _secret_file)
 
+# DUPLICATE: Keep in sync with src/scripts/mcp_bridge.gd:_generate_secret
+# Cannot share because editor plugin and game autoload have separate script contexts.
 func _generate_secret() -> String:
 	var chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	var result := ""
@@ -182,7 +185,8 @@ func _handle_message(text: String, peer: WebSocketPeer) -> void:
 			var fails: int = int(_auth_fail_count.get(_LOCKOUT_KEY, 0)) + 1
 			_auth_fail_count[_LOCKOUT_KEY] = fails
 			if fails >= MAX_AUTH_FAILS:
-				_auth_locked_until[_LOCKOUT_KEY] = Time.get_ticks_msec() / 1000.0 + LOCKOUT_SECONDS
+				var lockout_time := minf(LOCKOUT_BASE_SECONDS * pow(2.0, (fails / MAX_AUTH_FAILS) - 1.0), LOCKOUT_MAX_SECONDS)
+				_auth_locked_until[_LOCKOUT_KEY] = Time.get_ticks_msec() / 1000.0 + lockout_time
 			peer.send_text(JSON.stringify({"jsonrpc": "2.0", "id": parsed.get("id"), "error": {"code": -32001, "message": "Authentication failed"}}))
 			peer.close()
 		return

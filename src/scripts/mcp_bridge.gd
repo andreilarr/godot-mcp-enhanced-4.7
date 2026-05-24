@@ -7,7 +7,8 @@ extends Node
 
 const PORT := 9081
 const MAX_AUTH_FAILS := 5
-const LOCKOUT_SECONDS := 30.0
+const LOCKOUT_BASE_SECONDS := 30.0
+const LOCKOUT_MAX_SECONDS := 300.0
 const _LOCKOUT_KEY := "localhost"
 const MAX_MESSAGE_SIZE := 1048576  # 1MB
 const MAX_PEERS := 5
@@ -138,6 +139,7 @@ func _start_server() -> void:
 		else:
 			return
 	_secret_file = OS.get_temp_dir().path_join("mcp_bridge_%d.secret" % PORT)
+	push_warning("[MCP Bridge][SECURITY] Writing secret to tmpdir — file may be readable by other users. Prefer project .godot/ directory.")
 	if not _write_secret_to_file(_secret_file):
 		push_warning("[MCP Bridge] Failed to write secret to %s" % _secret_file)
 
@@ -161,6 +163,8 @@ func _constant_time_compare(a: String, b: String) -> bool:
 		result = result | (ca ^ cb)
 	return result == 0
 
+# DUPLICATE: Keep in sync with addons/godot_mcp_server/websocket_server.gd:_generate_secret
+# Cannot share because editor plugin and game autoload have separate script contexts.
 func _generate_secret() -> String:
 	var chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	var result := ""
@@ -264,7 +268,8 @@ func _process_buffer_bytes(peer: StreamPeerTCP, pid: int) -> bool:
 				var fails: int = int(_auth_fail_count.get(_LOCKOUT_KEY, 0)) + 1
 				_auth_fail_count[_LOCKOUT_KEY] = fails
 				if fails >= MAX_AUTH_FAILS:
-					_auth_locked_until[_LOCKOUT_KEY] = Time.get_ticks_msec() / 1000.0 + LOCKOUT_SECONDS
+					var lockout_time := minf(LOCKOUT_BASE_SECONDS * pow(2.0, (fails / MAX_AUTH_FAILS) - 1.0), LOCKOUT_MAX_SECONDS)
+					_auth_locked_until[_LOCKOUT_KEY] = Time.get_ticks_msec() / 1000.0 + lockout_time
 				peer.put_data((JSON.stringify({"id": null, "error": {"code": -32001, "message": "Authentication required"}}) + "\n").to_utf8_buffer())
 				peer.disconnect_from_host()
 				return true
@@ -353,12 +358,17 @@ func _cmd_get_tree(params: Dictionary) -> Variant:
 	return {"tree": [_serialize_node(root_node, max_depth, 0)], "scene": scene_path}
 
 
-func _serialize_node(node: Node, max_depth: int, depth: int) -> Dictionary:
+func _serialize_node(node: Node, max_depth: int, depth: int, counter: Array = [0], max_nodes: int = 2000) -> Dictionary:
+	if counter[0] >= max_nodes:
+		return _node_info(node)
+	counter[0] += 1
 	var info := _node_info(node)
 	if depth < max_depth:
 		var children: Array = []
 		for child in node.get_children():
-			children.append(_serialize_node(child, max_depth, depth + 1))
+			if counter[0] >= max_nodes:
+				break
+			children.append(_serialize_node(child, max_depth, depth + 1, counter, max_nodes))
 		if children.size() > 0:
 			info["children"] = children
 	return info
@@ -383,26 +393,31 @@ func _cmd_find_nodes(params: Dictionary) -> Dictionary:
 	var pattern: String = str(params.get("pattern", ""))
 	var type_filter: String = str(params.get("type", ""))
 	var group: String = str(params.get("group", ""))
+	var max_results: int = int(params.get("limit", 100))
+	if max_results > 500:
+		max_results = 500
 	var results: Array = []
-	var nodes := _all_nodes(get_tree().root)
-	for node in nodes:
+	var stack: Array[Node] = [get_tree().root]
+	while stack.size() > 0 and results.size() < max_results:
+		var node: Node = stack.pop_back()
+		if node == null:
+			continue
+		var match_found := true
 		if pattern != "" and not node.name.match(pattern):
-			continue
-		if type_filter != "" and not node.is_class(type_filter):
-			continue
-		if group != "" and not node.is_in_group(group):
-			continue
-		results.append(_node_info(node))
-		if results.size() >= 100:
-			break
+			match_found = false
+		if match_found and type_filter != "" and not node.is_class(type_filter):
+			match_found = false
+		if match_found and group != "" and not node.is_in_group(group):
+			match_found = false
+		if match_found:
+			results.append(_node_info(node))
+		var children := node.get_children()
+		for i in range(children.size() - 1, -1, -1):
+			stack.append(children[i])
 	return {"nodes": results, "count": results.size()}
 
 
-func _all_nodes(node: Node) -> Array[Node]:
-	var result: Array[Node] = [node]
-	for child in node.get_children():
-		result.append_array(_all_nodes(child))
-	return result
+
 
 
 func _cmd_get_node_properties(params: Dictionary) -> Variant:
@@ -427,7 +442,9 @@ func _cmd_get_node_properties(params: Dictionary) -> Variant:
 func _cmd_set_node_property(params: Dictionary) -> Variant:
 	var path: String = str(params.get("path", ""))
 	var prop: String = str(params.get("property", ""))
-	var value: Variant = params.get("value")
+	if not params.has("value"):
+		return {"error": {"code": -6, "message": "Missing required parameter: value"}}
+	var value: Variant = params["value"]
 	var node := get_node_or_null(path)
 	if node == null:
 		return {"error": {"code": -1, "message": "Node not found: %s" % path}}
@@ -454,6 +471,9 @@ func _cmd_call_method(params: Dictionary) -> Variant:
 		return {"error": {"code": -3, "message": "Method not found: %s" % method}}
 	if args.size() > 8:
 		return {"error": {"code": -4, "message": "Too many arguments (max 8)"}}
+	if method == "get" and args.size() > 0 and args[0] is String:
+		if _is_blocked_property(args[0]):
+			return {"error": {"code": -5, "message": "Blocked property via get(): %s" % args[0]}}
 	var result: Variant = node.callv(method, args)
 	return {"result": _jsonify(result)}
 
@@ -461,12 +481,22 @@ func _cmd_call_method(params: Dictionary) -> Variant:
 func _jsonify(val: Variant) -> Variant:
 	if val is Vector2:
 		return {"x": val.x, "y": val.y}
+	if val is Vector2i:
+		return {"x": val.x, "y": val.y}
 	if val is Vector3:
+		return {"x": val.x, "y": val.y, "z": val.z}
+	if val is Vector3i:
 		return {"x": val.x, "y": val.y, "z": val.z}
 	if val is Color:
 		return {"r": val.r, "g": val.g, "b": val.b, "a": val.a}
 	if val is Rect2:
 		return {"x": val.position.x, "y": val.position.y, "w": val.size.x, "h": val.size.y}
+	if val is Rect2i:
+		return {"x": val.position.x, "y": val.position.y, "w": val.size.x, "h": val.size.y}
+	if val is Transform2D:
+		return {"x": val.origin.x, "y": val.origin.y}
+	if val is Transform3D:
+		return {"x": val.origin.x, "y": val.origin.y, "z": val.origin.z}
 	if val is Resource:
 		return {"type": val.get_class(), "path": val.resource_path if val.resource_path else ""}
 	if val is Node:
@@ -475,9 +505,30 @@ func _jsonify(val: Variant) -> Variant:
 
 
 func _is_safe_value(val: Variant) -> bool:
-	if val is Script or val is Resource or val is Callable or val is Signal:
-		return false
-	return true
+	# Whitelist: only allow safe value types for set_node_property
+	if val == null:
+		return true
+	if val is bool or val is int or val is float or val is String:
+		return true
+	if val is Vector2 or val is Vector2i or val is Vector3 or val is Vector3i:
+		return true
+	if val is Color or val is Rect2 or val is Rect2i:
+		return true
+	if val is Transform2D or val is Transform3D or val is Basis or val is Quaternion:
+		return true
+	if val is Plane or val is AABB:
+		return true
+	if val is Array:
+		for item in val:
+			if not _is_safe_value(item):
+				return false
+		return true
+	if val is Dictionary:
+		for key in val:
+			if not _is_safe_value(val[key]):
+				return false
+		return true
+	return false
 
 
 func _is_blocked_property(prop: String) -> bool:
@@ -556,6 +607,8 @@ func _cmd_send_mouse_move(params: Dictionary) -> Variant:
 
 func _cmd_send_text(params: Dictionary) -> Variant:
 	var text: String = str(params.get("text", ""))
+	if text.length() > 1000:
+		return {"error": {"code": -1, "message": "Text too long: %d chars (max 1000)" % text.length()}}
 	for ch in text:
 		var event := InputEventKey.new()
 		event.unicode = ch.unicode_at(0)
@@ -596,7 +649,9 @@ func _cmd_take_screenshot(params: Dictionary) -> Variant:
 		return {"error": {"code": -1, "message": "Screenshot path must be user:// and contain no traversal"}}
 	var viewport := get_viewport()
 	var img := viewport.get_texture().get_image()
-	img.save_png(path)
+	var err := img.save_png(path)
+	if err != OK:
+		return {"error": {"code": -2, "message": "Failed to save screenshot: error %d" % err}}
 	return {"success": true, "path": path, "size": {"x": img.get_width(), "y": img.get_height()}}
 
 

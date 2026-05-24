@@ -1,4 +1,4 @@
-import { createConnection } from 'net';
+import { createConnection, Socket } from 'net';
 import { readFileSync, writeFileSync, existsSync, copyFileSync, unlinkSync, chmodSync, statSync, renameSync } from 'fs';
 import { join, dirname } from 'path';
 import { tmpdir } from 'os';
@@ -16,7 +16,7 @@ const DEFAULT_TIMEOUT = 10000;
 // ─── TCP client for Bridge communication ────────────────────────────────────
 
 interface BridgeResponse {
-  id: number;
+  id: number | null;
   result?: unknown;
   error?: { code: number; message: string };
 }
@@ -25,6 +25,13 @@ let _nextRequestId = 1;
 let _permWarned = false;
 let _cachedSecret: string | null = null;
 let _cachedSecretPath: string | null = null;
+let _cachedSecretAt: number = 0;
+const SECRET_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Persistent connection state
+let _socket: Socket | null = null;
+let _socketAuthenticated = false;
+let _socketBuffer = '';
 
 /** Find the bridge secret file — prefer project .godot dir, fallback to tmpdir. */
 function findBridgeSecretPath(): string {
@@ -41,7 +48,8 @@ function findBridgeSecretPath(): string {
 }
 
 function readBridgeSecret(): string | null {
-  if (_cachedSecret !== null) return _cachedSecret;
+  if (_cachedSecret !== null && Date.now() - _cachedSecretAt < SECRET_CACHE_TTL) return _cachedSecret;
+  _cachedSecret = null;
   const secretPath = findBridgeSecretPath();
   try {
     // Tighten permissions: owner-only read
@@ -56,71 +64,158 @@ function readBridgeSecret(): string | null {
       console.error(`[SECURITY] Bridge secret file ${secretPath} is world-readable. Attempted chmod 0600.`);
     }
     _cachedSecret = readFileSync(secretPath, 'utf-8').trim();
+    _cachedSecretAt = Date.now();
     return _cachedSecret;
   } catch {
     return null;
   }
 }
 
-function sendToBridge(method: string, params: Record<string, unknown> = {}, timeout = DEFAULT_TIMEOUT): Promise<BridgeResponse> {
+function _invalidateSocket(): void {
+  if (_socket) {
+    try { _socket.destroy(); } catch { /* ignore */ }
+    _socket = null;
+  }
+  _socketAuthenticated = false;
+  _socketBuffer = '';
+}
+
+/** Ensure we have an authenticated persistent connection. */
+function _ensureConnection(timeout: number): Promise<Socket> {
+  if (_socket && _socketAuthenticated && !_socket.destroyed && _socket.writable) {
+    return Promise.resolve(_socket);
+  }
+  _invalidateSocket();
+
+  const secret = readBridgeSecret();
+  if (!secret) {
+    return Promise.reject(new Error('Bridge secret not found. Ensure the game is running with the MCP Bridge autoload.'));
+  }
+
   return new Promise((resolve, reject) => {
-    const id = _nextRequestId++;
-    const secret = readBridgeSecret();
-    let settled = false;
-
-    function doResolve(resp: BridgeResponse) { if (!settled) { settled = true; clearTimeout(timer); resolve(resp); } }
-    function doReject(err: Error) { if (!settled) { settled = true; clearTimeout(timer); reject(err); } }
-
-    const socket = createConnection({ port: BRIDGE_PORT, host: BRIDGE_HOST }, () => {
-      if (secret) {
-        socket.write(JSON.stringify({ id: 0, method: 'auth', params: { secret } }) + '\n');
-        // Command sent after auth succeeds (in data handler);
-      } else {
-        socket.destroy();
-        doReject(new Error('Bridge secret not found. Ensure the game is running with the MCP Bridge autoload.'));
-        return;
-      }
+    const sock = createConnection({ port: BRIDGE_PORT, host: BRIDGE_HOST }, () => {
+      sock.write(JSON.stringify({ id: 0, method: 'auth', params: { secret } }) + '\n');
     });
 
-    let buffer = '';
     let authDone = false;
     const timer = setTimeout(() => {
-      socket.destroy();
-      doReject(new Error(`Bridge request timed out after ${timeout}ms`));
+      sock.destroy();
+      reject(new Error(`Bridge auth timed out after ${timeout}ms`));
     }, timeout);
 
-    socket.on('data', (data: Buffer) => {
-      buffer += data.toString();
+    sock.on('data', (data: Buffer) => {
+      _socketBuffer += data.toString();
       let idx: number;
-      while ((idx = buffer.indexOf('\n')) !== -1) {
-        const line = buffer.substring(0, idx).trim();
-        buffer = buffer.substring(idx + 1);
+      while ((idx = _socketBuffer.indexOf('\n')) !== -1) {
+        const line = _socketBuffer.substring(0, idx).trim();
+        _socketBuffer = _socketBuffer.substring(idx + 1);
         if (!line) continue;
         try {
           const resp = JSON.parse(line);
           if (!authDone && resp.result?.authenticated) {
             authDone = true;
-            socket.write(JSON.stringify({ id, method, params }) + '\n');
-            continue;
+            clearTimeout(timer);
+            _socket = sock;
+            _socketAuthenticated = true;
+            // Detach per-request handlers — response handling moves to sendToBridge
+            sock.removeAllListeners('data');
+            sock.removeAllListeners('error');
+            sock.removeAllListeners('close');
+            resolve(sock);
+            return;
           }
-          socket.destroy();
-          doResolve(resp);
+          // Auth failure response
+          clearTimeout(timer);
+          sock.destroy();
+          if (resp.error?.code === -32001 || resp.error?.code === -32002) {
+            _cachedSecret = null;
+          }
+          reject(new Error(`Bridge auth failed (${resp.error?.code}): ${resp.error?.message}`));
           return;
         } catch {
-          socket.destroy();
-          doReject(new Error(`Invalid JSON from bridge: ${line}`));
+          clearTimeout(timer);
+          sock.destroy();
+          reject(new Error(`Invalid JSON from bridge: ${line}`));
           return;
         }
       }
     });
 
-    socket.on('error', (err) => {
-      doReject(new Error(`Bridge connection error: ${err.message}`));
+    sock.on('error', (err) => {
+      clearTimeout(timer);
+      reject(new Error(`Bridge connection error: ${err.message}`));
     });
 
-    socket.on('close', () => {
-      doReject(new Error('Bridge connection closed before response'));
+    sock.on('close', () => {
+      clearTimeout(timer);
+      if (!authDone) reject(new Error('Bridge connection closed during auth'));
     });
+  });
+}
+
+function sendToBridge(method: string, params: Record<string, unknown> = {}, timeout = DEFAULT_TIMEOUT): Promise<BridgeResponse> {
+  return _ensureConnection(timeout).then(sock => {
+    return new Promise<BridgeResponse>((resolve, reject) => {
+      const id = _nextRequestId++;
+      let settled = false;
+      let buffer = '';
+
+      function doResolve(resp: BridgeResponse) { if (!settled) { settled = true; clearTimeout(timer); resolve(resp); } }
+      function doReject(err: Error) { if (!settled) { settled = true; clearTimeout(timer); reject(err); } }
+
+      const timer = setTimeout(() => {
+        _invalidateSocket();
+        doReject(new Error(`Bridge request timed out after ${timeout}ms`));
+      }, timeout);
+
+      const onData = (data: Buffer) => {
+        buffer += data.toString();
+        let idx: number;
+        while ((idx = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.substring(0, idx).trim();
+          buffer = buffer.substring(idx + 1);
+          if (!line) continue;
+          try {
+            const resp = JSON.parse(line) as BridgeResponse;
+            sock.removeListener('data', onData);
+            // If bridge returns auth error, invalidate cached secret
+            if (resp.error?.code === -32001 || resp.error?.code === -32002) {
+              _cachedSecret = null;
+              _invalidateSocket();
+            }
+            doResolve(resp);
+            return;
+          } catch {
+            _invalidateSocket();
+            doReject(new Error(`Invalid JSON from bridge: ${line}`));
+            return;
+          }
+        }
+      };
+
+      const onError = (err: Error) => {
+        _invalidateSocket();
+        doReject(new Error(`Bridge connection error: ${err.message}`));
+      };
+
+      const onClose = () => {
+        _invalidateSocket();
+        doReject(new Error('Bridge connection closed before response'));
+      };
+
+      sock.on('data', onData);
+      sock.once('error', onError);
+      sock.once('close', onClose);
+
+      sock.write(JSON.stringify({ id, method, params }) + '\n');
+    });
+  }).catch(err => {
+    // Connection-level errors — map to user-friendly messages
+    const msg = (err as Error).message;
+    if (msg.includes('ECONNREFUSED')) {
+      return Promise.reject(new Error('Cannot connect to MCP Bridge. Is the game running with the bridge autoload installed?'));
+    }
+    return Promise.reject(err);
   });
 }
 
@@ -135,7 +230,7 @@ export function getToolDefinitions(): Tool[] {
         type: 'object' as const,
         properties: {
           project_path: { type: 'string', description: 'Path to Godot project directory' },
-          port: { type: 'number', description: 'Port for bridge to listen on (default: 9081)', default: 9081 },
+          port: { type: 'number', description: 'Port for bridge to listen on (currently ignored, always 9081)', default: 9081 },
         },
         required: ['project_path'],
       },
@@ -153,18 +248,37 @@ export function getToolDefinitions(): Tool[] {
     },
     {
       name: 'game_query',
-      description: 'Query the running game state via MCP Bridge. Supports: ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info.',
+      description: 'Query the running game state via MCP Bridge. Supports: ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info, take_screenshot.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           method: {
             type: 'string',
-            description: 'Query method: ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info',
+            description: 'Query method: ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info, take_screenshot',
           },
           params: { type: 'object', description: 'Method parameters (varies by method)' },
           timeout: { type: 'number', description: 'Timeout in ms (default: 10000)' },
         },
         required: ['method'],
+      },
+    },
+    {
+      name: 'game_write',
+      description: 'Modify the running game state via MCP Bridge. Supports: set_node_property, call_method.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          method: {
+            type: 'string',
+            description: 'Write method: set_node_property, call_method',
+          },
+          params: {
+            type: 'object',
+            description: 'Method parameters. set_node_property: {path, property, value}. call_method: {path, method, args}.',
+          },
+          timeout: { type: 'number', description: 'Timeout in ms (default: 10000)' },
+        },
+        required: ['method', 'params'],
       },
     },
     {
@@ -214,14 +328,18 @@ const TOOL_NAMES = [
   'game_bridge_install',
   'game_bridge_uninstall',
   'game_query',
+  'game_write',
   'game_input',
   'game_wait',
 ] as const;
 
 const QUERY_METHODS = new Set([
   'ping', 'get_tree', 'find_nodes', 'get_node_properties',
-  'get_performance', 'get_viewport_info', 'set_node_property',
-  'call_method', 'take_screenshot',
+  'get_performance', 'get_viewport_info', 'take_screenshot',
+]);
+
+const WRITE_METHODS = new Set([
+  'set_node_property', 'call_method',
 ]);
 
 const INPUT_METHODS = new Set([
@@ -307,6 +425,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
 
       case 'game_query':
+      case 'game_write':
       case 'game_input':
       case 'game_wait': {
         // Ensure bridge secret lookup finds .godot/ before tmpdir
@@ -316,6 +435,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         }
         const methodSets: Record<string, Set<string>> = {
           game_query: QUERY_METHODS,
+          game_write: WRITE_METHODS,
           game_input: INPUT_METHODS,
           game_wait: WAIT_METHODS,
         };
@@ -325,7 +445,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           return textResult(`Error: Unknown method "${method}". Supported: ${[...allowed].join(', ')}`);
         }
         const params = (args.params as Record<string, unknown>) || {};
-        const timeout = (args.timeout as number) || DEFAULT_TIMEOUT;
+        const rawTimeout = (args.timeout as number) || DEFAULT_TIMEOUT;
+        const timeout = Math.min(rawTimeout, 60000);
         const response = await sendToBridge(method, params, timeout);
         if (response.error) {
           // Clear cached secret on auth failure so next call re-reads from disk
@@ -354,6 +475,7 @@ export const TOOL_META: Record<string, { readonly: boolean; long_running: boolea
   game_bridge_install: { readonly: false, long_running: false },
   game_bridge_uninstall: { readonly: false, long_running: false },
   game_query: { readonly: true, long_running: false },
+  game_write: { readonly: false, long_running: false },
   game_input: { readonly: false, long_running: false },
   game_wait: { readonly: true, long_running: false },
 };
