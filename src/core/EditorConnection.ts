@@ -226,6 +226,7 @@ export class EditorConnection {
       }
       const authTimeout = setTimeout(() => {
         this.pending.delete(AUTH_REQUEST_ID);
+        this.connectAttempt = true; // Prevent close handler from scheduling reconnect
         reject(new Error('Auth handshake timeout'));
         this.ws?.close();
       }, 10000);
