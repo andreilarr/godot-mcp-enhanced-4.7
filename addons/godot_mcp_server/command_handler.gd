@@ -64,6 +64,8 @@ func setup(plugin: EditorPlugin) -> void:
 func cleanup() -> void:
 	if _sync_commands:
 		_sync_commands.cleanup()
+	if _recording_commands:
+		_recording_commands.cleanup()
 
 func handle(method: String, params: Dictionary, request_id: int) -> Dictionary:
 	match method:
@@ -154,6 +156,10 @@ func handle(method: String, params: Dictionary, request_id: int) -> Dictionary:
 			return _ui_commands.handle_theme_create(params)
 		"theme_set_property":
 			return _ui_commands.handle_theme_set_property(params)
+		# Tools NOT routed here (headless-only via TS/GDScript executor):
+		#   animation (play/stop/seek/list_players) - runtime AnimationPlayer control
+		#   recording_save / recording_load - file I/O handled by TS side
+		#   ui_draw_recipe / ui_build_layout - complex declarative ops via GDScript exec
 		_:
 			return {"error": {"code": -32601, "message": "Unknown method: %s" % method}}
 

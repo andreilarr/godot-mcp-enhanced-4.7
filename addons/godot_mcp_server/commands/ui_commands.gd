@@ -4,7 +4,9 @@ var _plugin: EditorPlugin
 
 const BLOCKED_PROPS: Array = ["script", "owner", "name", "parent", "children", "tree", "meta", "process_mode", "process_priority",
 	"process_input", "process_unhandled_input", "process_unhandled_key_input",
-	"process_internal", "physics_process_mode", "input_event", "ready"]
+	"process_internal", "physics_process_mode", "input_event", "ready",
+	"material", "texture", "mesh", "collision_layer", "collision_mask",
+	"collision_priority", "transform", "global_transform"]
 
 func setup(plugin: EditorPlugin) -> void:
 	_plugin = plugin
@@ -38,7 +40,12 @@ func handle_ui_create_control(params: Dictionary, request_id: int) -> Dictionary
 				continue
 			if not key is String:
 				continue
-			node.set(key, properties[key])
+			if ":" in key or "/" in key:
+				continue
+			var val = properties[key]
+			if val is Object:
+				continue
+			node.set(key, val)
 
 	parent_node.add_child(node)
 	node.owner = root
@@ -210,7 +217,14 @@ func handle_ui_set_theme(params: Dictionary) -> Dictionary:
 			var p = params.get("params")
 			if p != null and p is Dictionary:
 				for key in p:
-					theme.set(key, p[key])
+					if not key is String:
+						continue
+					if ":" in key or "/" in key:
+						continue
+					var val = p[key]
+					if val is Object:
+						continue
+					theme.set(key, val)
 		"save":
 			var theme = ctrl.theme
 			if theme == null:
@@ -263,7 +277,12 @@ func handle_ui_container_add(params: Dictionary, request_id: int) -> Dictionary:
 				continue
 			if not key is String:
 				continue
-			child.set(key, child_properties[key])
+			if ":" in key or "/" in key:
+				continue
+			var cval = child_properties[key]
+			if cval is Object:
+				continue
+			child.set(key, cval)
 
 	container.add_child(child)
 	child.owner = root

@@ -83,3 +83,7 @@ func handle_recording_play(params: Dictionary) -> Dictionary:
 		played_count += 1
 
 	return {"result": {"events_played": played_count, "speed": speed_val, "status": "playback_complete"}}
+
+func cleanup() -> void:
+	_recording = false
+	_recorded_events = []

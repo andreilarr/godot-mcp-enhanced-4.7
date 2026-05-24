@@ -214,6 +214,7 @@ func _process_buffer_bytes(peer: StreamPeerTCP, pid: int) -> void:
 				if fails >= MAX_AUTH_FAILS:
 					_auth_locked_until[_LOCKOUT_KEY] = Time.get_ticks_msec() / 1000.0 + LOCKOUT_SECONDS
 				peer.put_utf8_string(JSON.stringify({"id": null, "error": {"code": -32001, "message": "Authentication required"}}) + "\n")
+				peer.disconnect_from_host()
 				continue
 		var response := _handle_message(line)
 		peer.put_utf8_string(response + "\n")
@@ -431,6 +432,8 @@ func _is_blocked_property(prop: String) -> bool:
 		for segment in prop.split("."):
 			if segment.begins_with("_") or segment in BLOCKED_PROPERTIES:
 				return true
+	if ":" in prop or "/" in prop:
+		return true
 	return false
 
 
