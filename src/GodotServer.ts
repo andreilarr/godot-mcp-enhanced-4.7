@@ -354,6 +354,7 @@ export class GodotServer {
     const proc = ps.getRunningProcess();
     if (proc && !proc.killed) {
       await killProcess(proc);
+      ps.setProcessBusy(false);
       ps.setRunningProcess(null);
       log('Running Godot process killed');
     }

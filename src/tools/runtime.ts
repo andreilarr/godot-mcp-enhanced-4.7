@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { appendOutput, clearOutputBuffer, killProcess } from '../core/process-state.js';
+import { appendOutput, clearOutputBuffer, killProcess, setProcessBusy } from '../core/process-state.js';
 import { validatePath, checkVersionMismatch } from '../helpers.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -126,6 +126,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       // Stop existing
       if (ctx.runningProcess) {
+        setProcessBusy(false);
         await killProcess(ctx.runningProcess);
         ctx.setRunningProcess(null);
       }
@@ -150,6 +151,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       if (timeout > 0) {
         autoStopTimer = setTimeout(() => {
           if (ctx.runningProcess === proc) {
+            setProcessBusy(false);
             void killProcess(proc);
             ctx.setRunningProcess(null);
           }
@@ -157,17 +159,20 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
 
       proc.on('close', () => {
+        setProcessBusy(false);
         ctx.setRunningProcess(null);
         if (autoStopTimer) clearTimeout(autoStopTimer);
       });
 
       proc.on('error', (err) => {
+        setProcessBusy(false);
         ctx.setRunningProcess(null);
         if (autoStopTimer) clearTimeout(autoStopTimer);
         appendOutput([`Spawn error: ${err.message}`]);
       });
 
       ctx.setRunningProcess(proc);
+      setProcessBusy(true);
 
       return textResult(warnPrefix + `Running project at ${p} (timeout: ${timeout}s). Use get_debug_output or stop_project to check.`);
     }
@@ -177,6 +182,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         return textResult('No project is currently running.');
       }
       await killProcess(ctx.runningProcess);
+      setProcessBusy(false);
       ctx.setRunningProcess(null);
 
       const classified = classifyOutput(ctx.outputBuffer);

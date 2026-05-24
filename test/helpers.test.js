@@ -2,7 +2,7 @@ import { expect } from 'vitest';
 import { resolve, sep } from 'node:path';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 
-import { validatePath, resolveWithinRoot, ensureDir, normalizeUserProjectPath, allowOutsideProjectPaths } from '../build/helpers.js';
+import { validatePath, resolveWithinRoot, ensureDir, normalizeUserProjectPath, allowOutsideProjectPaths, parseConfigValue } from '../build/helpers.js';
 
 describe('validatePath', () => {
   it('resolves relative paths to absolute', () => {
@@ -120,5 +120,52 @@ describe('allowOutsideProjectPaths', () => {
       expect(allowOutsideProjectPaths()).toBe(false);
     }
     process.env.ALLOW_OUTSIDE_PROJECT_PATHS = orig;
+  });
+});
+
+// ─── parseConfigValue ──────────────────────────────────────────────────────────
+
+describe('parseConfigValue (I-06)', () => {
+  it('parses integers', () => {
+    expect(parseConfigValue('42')).toBe(42);
+  });
+
+  it('parses floats', () => {
+    expect(parseConfigValue('3.14')).toBe(3.14);
+  });
+
+  it('parses negative numbers', () => {
+    expect(parseConfigValue('-1')).toBe(-1);
+  });
+
+  it('parses zero', () => {
+    expect(parseConfigValue('0')).toBe(0);
+  });
+
+  it('returns string for non-numeric text', () => {
+    expect(parseConfigValue('hello')).toBe('hello');
+  });
+
+  it('returns string for whitespace-only input (I-06 fix)', () => {
+    expect(parseConfigValue(' ')).toBe(' ');
+    expect(parseConfigValue('  ')).toBe('  ');
+    expect(parseConfigValue('\t')).toBe('\t');
+  });
+
+  it('parses booleans', () => {
+    expect(parseConfigValue('true')).toBe(true);
+    expect(parseConfigValue('false')).toBe(false);
+  });
+
+  it('parses null', () => {
+    expect(parseConfigValue('null')).toBe(null);
+  });
+
+  it('strips double quotes', () => {
+    expect(parseConfigValue('"hello"')).toBe('hello');
+  });
+
+  it('parses empty array', () => {
+    expect(parseConfigValue('[]')).toEqual([]);
   });
 });

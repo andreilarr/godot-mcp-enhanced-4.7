@@ -21,6 +21,7 @@ vi.mock('../build/core/process-state.js', () => ({
   appendOutput: vi.fn(),
   clearOutputBuffer: vi.fn(),
   killProcess: vi.fn(async () => {}),
+  setProcessBusy: vi.fn(),
 }));
 
 vi.mock('../build/helpers.js', () => ({

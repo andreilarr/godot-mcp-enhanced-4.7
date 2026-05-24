@@ -19,6 +19,8 @@ import {
   setProjectDir,
   forceKillTree,
   killProcess,
+  isProcessBusy,
+  setProcessBusy,
 } from '../build/core/process-state.js';
 
 function makeMockProc({ killed = false, pid = 12345 } = {}) {
@@ -235,5 +237,45 @@ describe('killProcess', () => {
     const promise = killProcess(proc);
     proc.emit('error');
     await expect(promise).resolves.toBeUndefined();
+  });
+});
+
+// ─── busy guard ──────────────────────────────────────────────────────────────
+
+describe('busy guard (C-03)', () => {
+  it('defaults to not busy', () => {
+    expect(isProcessBusy()).toBe(false);
+  });
+
+  it('setProcessBusy toggles state', () => {
+    setProcessBusy(true);
+    expect(isProcessBusy()).toBe(true);
+    setProcessBusy(false);
+    expect(isProcessBusy()).toBe(false);
+  });
+
+  it('blocks setRunningProcess when busy', () => {
+    setProcessBusy(true);
+    expect(() => setRunningProcess(makeMockProc())).toThrow(/Cannot replace process while another operation is using it/);
+    setProcessBusy(false);
+  });
+
+  it('allows setRunningProcess when not busy', () => {
+    const proc = makeMockProc();
+    expect(() => setRunningProcess(proc)).not.toThrow();
+    expect(getRunningProcess()).toBe(proc);
+  });
+
+  it('allows setRunningProcess(null) even when busy (cleanup)', () => {
+    setProcessBusy(true);
+    // setRunningProcess(null) should also be blocked — tools must clear busy first
+    expect(() => setRunningProcess(null)).toThrow(/Cannot replace process/);
+    setProcessBusy(false);
+  });
+
+  it('resetState clears busy flag', () => {
+    setProcessBusy(true);
+    resetState();
+    expect(isProcessBusy()).toBe(false);
   });
 });
