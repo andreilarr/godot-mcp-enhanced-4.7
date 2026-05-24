@@ -24,6 +24,7 @@ texture = ExtResource("1")
     expect(result.nodes[1].type).toBe('Sprite2D');
     expect(result.nodes[0].children.length).toBe(1);
     expect(result.nodes[0].children[0].name).toBe('Sprite');
+    expect(result).toMatchSnapshot('minimal-scene');
   });
 
   it('parses root node without parent', () => {
@@ -106,6 +107,7 @@ texture = ExtResource("1")
     expect(result.connections[0].from).toBe('Root/Button');
     expect(result.connections[0].to).toBe('Root');
     expect(result.connections[0].method).toBe('_on_pressed');
+    expect(result).toMatchSnapshot('scene-with-connections');
   });
 });
 
@@ -123,5 +125,36 @@ text = "Hello"
     expect(typeof summary === 'string').toBeTruthy();
     expect(summary.includes('Main')).toBeTruthy();
     expect(summary.includes('Nodes (2 total)')).toBeTruthy();
+    expect(summary).toMatchSnapshot('scene-summary');
+  });
+});
+
+describe('parseTscn snapshots', () => {
+  it('snapshots complex nested scene', () => {
+    const tscn = `[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://main.gd" id="1"]
+[ext_resource type="Texture2D" path="res://icon.svg" id="2"]
+
+[node name="Root" type="Node2D"]
+
+[node name="Player" type="CharacterBody2D" parent="."]
+position = Vector2(100, 200)
+
+[node name="Sprite" type="Sprite2D" parent="Player"]
+texture = ExtResource("2")
+
+[node name="Camera" type="Camera2D" parent="Player"]
+zoom = Vector2(2, 2)
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="HUD" type="Control" parent="UI"]
+layout_mode = 3
+
+[connection signal="pressed" from="UI/HUD" to="Root" method="_on_pressed"]
+`;
+    const result = parseTscn(tscn);
+    expect(result).toMatchSnapshot('complex-nested-scene');
   });
 });

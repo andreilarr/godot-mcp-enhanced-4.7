@@ -113,6 +113,7 @@ describe('tscn-editor detachInstance', () => {
     expect(result.includes('parent="Player"')).toBeTruthy();
     expect(result.includes('Sprite2D')).toBeTruthy();
     expect(result.includes('CollisionShape2D')).toBeTruthy();
+    expect(result).toMatchSnapshot('detach-instance-basic');
   });
 
   it('should preserve property overrides from target', () => {
@@ -339,6 +340,7 @@ shape = SubResource("1")
     expect(result.includes('SubResource("2")')).toBeTruthy();
     // Target sub_resource should be untouched
     expect(result.includes('[sub_resource type="CircleShape2D" id="1"]')).toBeTruthy();
+    expect(result).toMatchSnapshot('detach-with-sub-resources');
   });
 
   it('should remap sub_resource IDs that conflict with multiple target IDs', () => {
@@ -409,6 +411,7 @@ script = ExtResource("1")
     expect(result.includes('signal="pressed"')).toBeTruthy();
     expect(result.includes('from="Player/Button"')).toBeTruthy();
     expect(result.includes('to="Player"')).toBeTruthy();
+    expect(result).toMatchSnapshot('detach-with-connections');
   });
 
   it('should remap connection with nested child paths', () => {

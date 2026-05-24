@@ -1,0 +1,514 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`parseTscn > handles connections > scene-with-connections 1`] = `
+{
+  "connections": [
+    {
+      "from": "Root/Button",
+      "method": "_on_pressed",
+      "signal": "pressed",
+      "to": "Root",
+    },
+  ],
+  "extResources": [],
+  "header": {},
+  "nodeMap": Map {
+    "Root" => {
+      "children": [],
+      "name": "Root",
+      "parent": "",
+      "properties": [],
+      "type": "Node",
+    },
+  },
+  "nodes": [
+    {
+      "children": [],
+      "name": "Root",
+      "parent": "",
+      "properties": [],
+      "type": "Node",
+    },
+  ],
+  "subResources": [],
+}
+`;
+
+exports[`parseTscn > parses a minimal scene with one node > minimal-scene 1`] = `
+{
+  "connections": [],
+  "extResources": [
+    {
+      "id": 1,
+      "path": "res://main.gd",
+      "type": "Script",
+    },
+  ],
+  "header": {},
+  "nodeMap": Map {
+    "Player" => {
+      "children": [
+        {
+          "children": [],
+          "name": "Sprite",
+          "parent": ".",
+          "properties": [
+            {
+              "name": "texture = ExtResource("1")",
+              "type": "unknown",
+              "value": "texture = ExtResource("1")",
+            },
+          ],
+          "type": "Sprite2D",
+        },
+      ],
+      "name": "Player",
+      "parent": "",
+      "properties": [
+        {
+          "name": "script = ExtResource("1")",
+          "type": "unknown",
+          "value": "script = ExtResource("1")",
+        },
+      ],
+      "type": "CharacterBody2D",
+    },
+    "Player/Sprite" => {
+      "children": [],
+      "name": "Sprite",
+      "parent": ".",
+      "properties": [
+        {
+          "name": "texture = ExtResource("1")",
+          "type": "unknown",
+          "value": "texture = ExtResource("1")",
+        },
+      ],
+      "type": "Sprite2D",
+    },
+  },
+  "nodes": [
+    {
+      "children": [
+        {
+          "children": [],
+          "name": "Sprite",
+          "parent": ".",
+          "properties": [
+            {
+              "name": "texture = ExtResource("1")",
+              "type": "unknown",
+              "value": "texture = ExtResource("1")",
+            },
+          ],
+          "type": "Sprite2D",
+        },
+      ],
+      "name": "Player",
+      "parent": "",
+      "properties": [
+        {
+          "name": "script = ExtResource("1")",
+          "type": "unknown",
+          "value": "script = ExtResource("1")",
+        },
+      ],
+      "type": "CharacterBody2D",
+    },
+    {
+      "children": [],
+      "name": "Sprite",
+      "parent": ".",
+      "properties": [
+        {
+          "name": "texture = ExtResource("1")",
+          "type": "unknown",
+          "value": "texture = ExtResource("1")",
+        },
+      ],
+      "type": "Sprite2D",
+    },
+  ],
+  "subResources": [],
+}
+`;
+
+exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-scene 1`] = `
+{
+  "connections": [
+    {
+      "from": "UI/HUD",
+      "method": "_on_pressed",
+      "signal": "pressed",
+      "to": "Root",
+    },
+  ],
+  "extResources": [
+    {
+      "id": 1,
+      "path": "res://main.gd",
+      "type": "Script",
+    },
+    {
+      "id": 2,
+      "path": "res://icon.svg",
+      "type": "Texture2D",
+    },
+  ],
+  "header": {},
+  "nodeMap": Map {
+    "Root" => {
+      "children": [
+        {
+          "children": [
+            {
+              "children": [],
+              "name": "Sprite",
+              "parent": "Player",
+              "properties": [
+                {
+                  "name": "texture = ExtResource("2")",
+                  "type": "unknown",
+                  "value": "texture = ExtResource("2")",
+                },
+              ],
+              "type": "Sprite2D",
+            },
+            {
+              "children": [],
+              "name": "Camera",
+              "parent": "Player",
+              "properties": [
+                {
+                  "name": "zoom = Vector2(2, 2)",
+                  "type": "unknown",
+                  "value": "zoom = Vector2(2, 2)",
+                },
+              ],
+              "type": "Camera2D",
+            },
+          ],
+          "name": "Player",
+          "parent": ".",
+          "properties": [
+            {
+              "name": "position = Vector2(100, 200)",
+              "type": "unknown",
+              "value": "position = Vector2(100, 200)",
+            },
+          ],
+          "type": "CharacterBody2D",
+        },
+        {
+          "children": [
+            {
+              "children": [],
+              "name": "HUD",
+              "parent": "UI",
+              "properties": [
+                {
+                  "name": "layout_mode = 3",
+                  "type": "unknown",
+                  "value": "layout_mode = 3",
+                },
+              ],
+              "type": "Control",
+            },
+          ],
+          "name": "UI",
+          "parent": ".",
+          "properties": [],
+          "type": "CanvasLayer",
+        },
+      ],
+      "name": "Root",
+      "parent": "",
+      "properties": [],
+      "type": "Node2D",
+    },
+    "Root/Player" => {
+      "children": [
+        {
+          "children": [],
+          "name": "Sprite",
+          "parent": "Player",
+          "properties": [
+            {
+              "name": "texture = ExtResource("2")",
+              "type": "unknown",
+              "value": "texture = ExtResource("2")",
+            },
+          ],
+          "type": "Sprite2D",
+        },
+        {
+          "children": [],
+          "name": "Camera",
+          "parent": "Player",
+          "properties": [
+            {
+              "name": "zoom = Vector2(2, 2)",
+              "type": "unknown",
+              "value": "zoom = Vector2(2, 2)",
+            },
+          ],
+          "type": "Camera2D",
+        },
+      ],
+      "name": "Player",
+      "parent": ".",
+      "properties": [
+        {
+          "name": "position = Vector2(100, 200)",
+          "type": "unknown",
+          "value": "position = Vector2(100, 200)",
+        },
+      ],
+      "type": "CharacterBody2D",
+    },
+    "Root/Player/Sprite" => {
+      "children": [],
+      "name": "Sprite",
+      "parent": "Player",
+      "properties": [
+        {
+          "name": "texture = ExtResource("2")",
+          "type": "unknown",
+          "value": "texture = ExtResource("2")",
+        },
+      ],
+      "type": "Sprite2D",
+    },
+    "Root/Player/Camera" => {
+      "children": [],
+      "name": "Camera",
+      "parent": "Player",
+      "properties": [
+        {
+          "name": "zoom = Vector2(2, 2)",
+          "type": "unknown",
+          "value": "zoom = Vector2(2, 2)",
+        },
+      ],
+      "type": "Camera2D",
+    },
+    "Root/UI" => {
+      "children": [
+        {
+          "children": [],
+          "name": "HUD",
+          "parent": "UI",
+          "properties": [
+            {
+              "name": "layout_mode = 3",
+              "type": "unknown",
+              "value": "layout_mode = 3",
+            },
+          ],
+          "type": "Control",
+        },
+      ],
+      "name": "UI",
+      "parent": ".",
+      "properties": [],
+      "type": "CanvasLayer",
+    },
+    "Root/UI/HUD" => {
+      "children": [],
+      "name": "HUD",
+      "parent": "UI",
+      "properties": [
+        {
+          "name": "layout_mode = 3",
+          "type": "unknown",
+          "value": "layout_mode = 3",
+        },
+      ],
+      "type": "Control",
+    },
+  },
+  "nodes": [
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "children": [],
+              "name": "Sprite",
+              "parent": "Player",
+              "properties": [
+                {
+                  "name": "texture = ExtResource("2")",
+                  "type": "unknown",
+                  "value": "texture = ExtResource("2")",
+                },
+              ],
+              "type": "Sprite2D",
+            },
+            {
+              "children": [],
+              "name": "Camera",
+              "parent": "Player",
+              "properties": [
+                {
+                  "name": "zoom = Vector2(2, 2)",
+                  "type": "unknown",
+                  "value": "zoom = Vector2(2, 2)",
+                },
+              ],
+              "type": "Camera2D",
+            },
+          ],
+          "name": "Player",
+          "parent": ".",
+          "properties": [
+            {
+              "name": "position = Vector2(100, 200)",
+              "type": "unknown",
+              "value": "position = Vector2(100, 200)",
+            },
+          ],
+          "type": "CharacterBody2D",
+        },
+        {
+          "children": [
+            {
+              "children": [],
+              "name": "HUD",
+              "parent": "UI",
+              "properties": [
+                {
+                  "name": "layout_mode = 3",
+                  "type": "unknown",
+                  "value": "layout_mode = 3",
+                },
+              ],
+              "type": "Control",
+            },
+          ],
+          "name": "UI",
+          "parent": ".",
+          "properties": [],
+          "type": "CanvasLayer",
+        },
+      ],
+      "name": "Root",
+      "parent": "",
+      "properties": [],
+      "type": "Node2D",
+    },
+    {
+      "children": [
+        {
+          "children": [],
+          "name": "Sprite",
+          "parent": "Player",
+          "properties": [
+            {
+              "name": "texture = ExtResource("2")",
+              "type": "unknown",
+              "value": "texture = ExtResource("2")",
+            },
+          ],
+          "type": "Sprite2D",
+        },
+        {
+          "children": [],
+          "name": "Camera",
+          "parent": "Player",
+          "properties": [
+            {
+              "name": "zoom = Vector2(2, 2)",
+              "type": "unknown",
+              "value": "zoom = Vector2(2, 2)",
+            },
+          ],
+          "type": "Camera2D",
+        },
+      ],
+      "name": "Player",
+      "parent": ".",
+      "properties": [
+        {
+          "name": "position = Vector2(100, 200)",
+          "type": "unknown",
+          "value": "position = Vector2(100, 200)",
+        },
+      ],
+      "type": "CharacterBody2D",
+    },
+    {
+      "children": [],
+      "name": "Sprite",
+      "parent": "Player",
+      "properties": [
+        {
+          "name": "texture = ExtResource("2")",
+          "type": "unknown",
+          "value": "texture = ExtResource("2")",
+        },
+      ],
+      "type": "Sprite2D",
+    },
+    {
+      "children": [],
+      "name": "Camera",
+      "parent": "Player",
+      "properties": [
+        {
+          "name": "zoom = Vector2(2, 2)",
+          "type": "unknown",
+          "value": "zoom = Vector2(2, 2)",
+        },
+      ],
+      "type": "Camera2D",
+    },
+    {
+      "children": [
+        {
+          "children": [],
+          "name": "HUD",
+          "parent": "UI",
+          "properties": [
+            {
+              "name": "layout_mode = 3",
+              "type": "unknown",
+              "value": "layout_mode = 3",
+            },
+          ],
+          "type": "Control",
+        },
+      ],
+      "name": "UI",
+      "parent": ".",
+      "properties": [],
+      "type": "CanvasLayer",
+    },
+    {
+      "children": [],
+      "name": "HUD",
+      "parent": "UI",
+      "properties": [
+        {
+          "name": "layout_mode = 3",
+          "type": "unknown",
+          "value": "layout_mode = 3",
+        },
+      ],
+      "type": "Control",
+    },
+  ],
+  "subResources": [],
+}
+`;
+
+exports[`parseTscnSummary > returns human-readable summary > scene-summary 1`] = `
+"=== Scene Summary ===
+
+External Resources: 0
+Sub Resources: 0
+
+Nodes (2 total):
+  Main [Node2D]
+    Label [Label]"
+`;

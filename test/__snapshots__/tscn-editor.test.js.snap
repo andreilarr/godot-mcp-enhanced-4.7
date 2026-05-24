@@ -1,0 +1,62 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`tscn-editor C2: connection handling > should preserve and remap connections from source > detach-with-connections 1`] = `
+"[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/player.gd" id="2"]
+
+[node name="Main" type="Node2D"]
+
+[node name="Player" type="CharacterBody2D" parent="."]
+script = ExtResource("2")
+
+[node name="Button" type="Button" parent="Player"]
+
+[connection signal="pressed" from="Player/Button" to="Player" method="_on_button_pressed"]
+"
+`;
+
+exports[`tscn-editor C2: sub_resource handling > should remap sub_resource IDs to avoid conflicts with target > detach-with-sub-resources 1`] = `
+"[gd_scene load_steps=3 format=3]
+
+
+[sub_resource type="CircleShape2D" id="1"]
+radius = 10.0
+
+
+[sub_resource type="RectangleShape2D" id="2"]
+size = Vector2(50, 50)
+
+[node name="Main" type="Node2D"]
+
+[node name="Player" type="CharacterBody2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Player"]
+shape = SubResource("2")
+
+"
+`;
+
+exports[`tscn-editor detachInstance > should replace instance reference with inlined subtree > detach-instance-basic 1`] = `
+"[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/player.gd" id="3"]
+
+[node name="Main" type="Node2D"]
+
+[node name="Player" type="CharacterBody2D" parent="."]
+script = ExtResource("3")
+speed = 200.0
+
+position = Vector2(100, 200)
+visible = false
+[node name="Sprite2D" type="Sprite2D" parent="Player"]
+texture = null
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Player"]
+
+
+[node name="Camera2D" type="Camera2D" parent="."]
+"
+`;

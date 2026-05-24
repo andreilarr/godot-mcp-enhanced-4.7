@@ -17,6 +17,7 @@ describe('tscn-parser instance_of', () => {
     expect(player).toBeTruthy();
     expect(player.instance).toBe(1);
     expect(player.instance_of).toBe('res://scenes/player.tscn');
+    expect(result.nodes).toMatchSnapshot('instance-nodes');
   });
 
   it('should not set instance_of for non-instance nodes', () => {

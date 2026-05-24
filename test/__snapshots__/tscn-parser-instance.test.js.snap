@@ -1,0 +1,55 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`tscn-parser instance_of > should resolve instance_of path from ext_resources > instance-nodes 1`] = `
+[
+  {
+    "children": [
+      {
+        "children": [
+          {
+            "children": [],
+            "name": "Label",
+            "parent": "Player",
+            "properties": [],
+            "type": "Label",
+          },
+        ],
+        "instance": 1,
+        "instance_of": "res://scenes/player.tscn",
+        "name": "Player",
+        "parent": ".",
+        "properties": [],
+        "type": "Node",
+      },
+    ],
+    "name": "Main",
+    "parent": "",
+    "properties": [],
+    "type": "Node2D",
+  },
+  {
+    "children": [
+      {
+        "children": [],
+        "name": "Label",
+        "parent": "Player",
+        "properties": [],
+        "type": "Label",
+      },
+    ],
+    "instance": 1,
+    "instance_of": "res://scenes/player.tscn",
+    "name": "Player",
+    "parent": ".",
+    "properties": [],
+    "type": "Node",
+  },
+  {
+    "children": [],
+    "name": "Label",
+    "parent": "Player",
+    "properties": [],
+    "type": "Label",
+  },
+]
+`;
