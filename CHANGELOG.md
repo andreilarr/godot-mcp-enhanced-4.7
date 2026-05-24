@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **C-01**: EditorConnection 认证超时不再意外调度重连 — 在 `ws.close()` 前设置 `connectAttempt=true`
+- **C-02**: Autoload loader 脚本的错误标记随机化 — `randomizeMarkers` 应用到 loader，防止用户代码伪造错误输出
+- **C-03**: 进程替换保护 — `setProcessBusy` 守卫机制，运行中的进程不会被其他工具意外 kill
+- **T-01/T-02/T-03**: test-framework 和 validation 的 GDScript 使用 `_initialize()` 替代 `_init()`，修复场景树未就绪时节点查找失败；修复 stress test `await process_frame` 缩进
+- **T-04/T-05**: physics-ops raycast 添加 `World3D` null 检查，ik-tools owner 设置添加 root null 检查
+- **S-02**: 确认令牌不再截断代码 — 用户可审查完整待执行内容
+- **I-03**: 参数键只保留 snake_case 版本，消除 camelCase/snake_case 双键冲突
+- **T-09/T-10**: ui-tools 生成的 GDScript 统一使用 tab 缩进；`draw_arc` 补充 `point_count` 参数
+- **I-06**: `parseConfigValue` 空白字符串不再被错误解析为数字 0
+
+### Added
+
+- `process-state` 新增 `isProcessBusy()` / `setProcessBusy()` 导出
+- 新增 17 个测试：busy guard (6)、parseConfigValue (10)、auth timeout reconnect (1)
+
 ## [0.12.0] - 2026-05-23
 
 ### Added
