@@ -1,5 +1,4 @@
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 
 import { clearGodotPathCache, getCachedGodotPath } from '../build/GodotServer.js';
 
@@ -9,25 +8,25 @@ describe('Godot path cache', () => {
   });
 
   it('returns null before any findGodot call', () => {
-    assert.strictEqual(getCachedGodotPath(), null);
+    expect(getCachedGodotPath()).toBe(null);
   });
 
   it('clearGodotPathCache resets cache to null', () => {
     // Even if a test previously set the cache, clearing should yield null
     clearGodotPathCache();
-    assert.strictEqual(getCachedGodotPath(), null);
+    expect(getCachedGodotPath()).toBe(null);
   });
 
   it('getCachedGodotPath returns same value on repeated calls without clearing', () => {
     const first = getCachedGodotPath();
     const second = getCachedGodotPath();
-    assert.strictEqual(first, second);
+    expect(first).toBe(second);
   });
 
   it('clearGodotPathCache is idempotent', () => {
     clearGodotPathCache();
     clearGodotPathCache();
     clearGodotPathCache();
-    assert.strictEqual(getCachedGodotPath(), null);
+    expect(getCachedGodotPath()).toBe(null);
   });
 });

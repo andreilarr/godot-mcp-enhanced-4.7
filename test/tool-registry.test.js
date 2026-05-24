@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import {
   registerTools,
   clearRegistry,
@@ -19,15 +18,15 @@ describe('tool-registry', () => {
       { name: 'add_node', readonly: false, long_running: false },
       { name: 'nav_bake_mesh', readonly: false, long_running: true },
     ]);
-    assert.equal(isReadOnly('read_scene'), true);
-    assert.equal(isReadOnly('add_node'), false);
-    assert.equal(isLongRunning('nav_bake_mesh'), true);
-    assert.equal(isLongRunning('add_node'), false);
+    expect(isReadOnly('read_scene')).toBe(true);
+    expect(isReadOnly('add_node')).toBe(false);
+    expect(isLongRunning('nav_bake_mesh')).toBe(true);
+    expect(isLongRunning('add_node')).toBe(false);
   });
 
   it('returns false for unknown tools', () => {
-    assert.equal(isReadOnly('nonexistent_tool'), false);
-    assert.equal(isLongRunning('nonexistent_tool'), false);
+    expect(isReadOnly('nonexistent_tool')).toBe(false);
+    expect(isLongRunning('nonexistent_tool')).toBe(false);
   });
 
   it('lists all readonly tools', () => {
@@ -37,9 +36,9 @@ describe('tool-registry', () => {
       { name: 'get_project_info', readonly: true, long_running: false },
     ]);
     const ro = getReadOnlyTools();
-    assert.ok(ro.includes('read_scene'));
-    assert.ok(ro.includes('get_project_info'));
-    assert.ok(!ro.includes('add_node'));
+    expect(ro.includes('read_scene')).toBeTruthy();
+    expect(ro.includes('get_project_info')).toBeTruthy();
+    expect(!ro.includes('add_node')).toBeTruthy();
   });
 
   it('lists all write tools', () => {
@@ -49,9 +48,9 @@ describe('tool-registry', () => {
       { name: 'write_script', readonly: false, long_running: false },
     ]);
     const wr = getWriteTools();
-    assert.ok(wr.includes('add_node'));
-    assert.ok(wr.includes('write_script'));
-    assert.ok(!wr.includes('read_scene'));
+    expect(wr.includes('add_node')).toBeTruthy();
+    expect(wr.includes('write_script')).toBeTruthy();
+    expect(!wr.includes('read_scene')).toBeTruthy();
   });
 
   it('getAllToolNames returns all registered names', () => {
@@ -61,27 +60,27 @@ describe('tool-registry', () => {
       { name: 'b', readonly: false, long_running: false },
     ]);
     const names = getAllToolNames();
-    assert.deepEqual(names.sort(), ['a', 'b']);
+    expect(names.sort()).toEqual(['a', 'b']);
   });
 });
 
 describe('L1 verify eligible tools', () => {
   it('VERIFY_ELIGIBLE_TOOLS contains expected write tools', () => {
-    assert.ok(VERIFY_ELIGIBLE_TOOLS.has('add_node'));
-    assert.ok(VERIFY_ELIGIBLE_TOOLS.has('edit_node'));
-    assert.ok(VERIFY_ELIGIBLE_TOOLS.has('write_script'));
-    assert.ok(VERIFY_ELIGIBLE_TOOLS.has('edit_script'));
-    assert.ok(VERIFY_ELIGIBLE_TOOLS.has('ui_build_layout'));
-    assert.ok(VERIFY_ELIGIBLE_TOOLS.has('load_sprite'));
+    expect(VERIFY_ELIGIBLE_TOOLS.has('add_node')).toBeTruthy();
+    expect(VERIFY_ELIGIBLE_TOOLS.has('edit_node')).toBeTruthy();
+    expect(VERIFY_ELIGIBLE_TOOLS.has('write_script')).toBeTruthy();
+    expect(VERIFY_ELIGIBLE_TOOLS.has('edit_script')).toBeTruthy();
+    expect(VERIFY_ELIGIBLE_TOOLS.has('ui_build_layout')).toBeTruthy();
+    expect(VERIFY_ELIGIBLE_TOOLS.has('load_sprite')).toBeTruthy();
   });
 
   it('isVerifyEligible returns true for add_node', () => {
-    assert.strictEqual(isVerifyEligible('add_node'), true);
+    expect(isVerifyEligible('add_node')).toBe(true);
   });
 
   it('isVerifyEligible returns false for read-only tools', () => {
-    assert.strictEqual(isVerifyEligible('read_scene'), false);
-    assert.strictEqual(isVerifyEligible('execute_gdscript'), false);
-    assert.strictEqual(isVerifyEligible('profiler'), false);
+    expect(isVerifyEligible('read_scene')).toBe(false);
+    expect(isVerifyEligible('execute_gdscript')).toBe(false);
+    expect(isVerifyEligible('profiler')).toBe(false);
   });
 });

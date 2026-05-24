@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import { analyzeOutput } from '../build/error-analyzer.js';
 
 describe('error-analyzer', () => {
@@ -9,12 +8,12 @@ describe('error-analyzer', () => {
         'SCRIPT ERROR: Parse Error: Unexpected token.',
         'at: res://scripts/player.gd:42',
       ]);
-      assert.equal(result.errors.length, 1);
-      assert.equal(result.errors[0].type, 'parse_error');
-      assert.equal(result.errors[0].file, 'res://scripts/player.gd');
-      assert.equal(result.errors[0].line, 42);
-      assert.ok(result.errors[0].suggestion.includes('Syntax error'));
-      assert.ok(result.hasErrors);
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].type).toBe('parse_error');
+      expect(result.errors[0].file).toBe('res://scripts/player.gd');
+      expect(result.errors[0].line).toBe(42);
+      expect(result.errors[0].suggestion.includes('Syntax error')).toBeTruthy();
+      expect(result.hasErrors).toBeTruthy();
     });
   });
 
@@ -24,9 +23,9 @@ describe('error-analyzer', () => {
         'SCRIPT ERROR: Parameter "position" is null.',
         'at: res://scripts/enemy.gd:15',
       ]);
-      assert.equal(result.errors.length, 1);
-      assert.equal(result.errors[0].type, 'null_reference');
-      assert.ok(result.errors[0].suggestion.includes('position'));
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].type).toBe('null_reference');
+      expect(result.errors[0].suggestion.includes('position')).toBeTruthy();
     });
   });
 
@@ -35,9 +34,9 @@ describe('error-analyzer', () => {
       const result = analyzeOutput([
         'SCRIPT ERROR: Invalid type in function "move". Expected Vector2. Got int.',
       ]);
-      assert.equal(result.errors.length, 1);
-      assert.equal(result.errors[0].type, 'type_error');
-      assert.ok(result.errors[0].suggestion.includes('move'));
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].type).toBe('type_error');
+      expect(result.errors[0].suggestion.includes('move')).toBeTruthy();
     });
   });
 
@@ -46,9 +45,9 @@ describe('error-analyzer', () => {
       const result = analyzeOutput([
         'SCRIPT ERROR: Identifier "health" not found in the current scope.',
       ]);
-      assert.equal(result.errors.length, 1);
-      assert.equal(result.errors[0].type, 'script_error');
-      assert.ok(result.errors[0].suggestion.includes('health'));
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].type).toBe('script_error');
+      expect(result.errors[0].suggestion.includes('health')).toBeTruthy();
     });
   });
 
@@ -57,17 +56,18 @@ describe('error-analyzer', () => {
       const result = analyzeOutput([
         'SCRIPT ERROR: Too few arguments for function "set_position".',
       ]);
-      assert.equal(result.errors.length, 1);
-      assert.equal(result.errors[0].type, 'script_error');
-      assert.ok(result.errors[0].suggestion.includes('set_position'));
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].type).toBe('script_error');
+      expect(result.errors[0].suggestion.includes('set_position')).toBeTruthy();
     });
 
     it('parses too many arguments', () => {
       const result = analyzeOutput([
         'SCRIPT ERROR: Too many arguments for function "set_position".',
       ]);
-      assert.equal(result.errors.length, 1);
-      assert.ok(result.errors[0].suggestion.includes('Too many'));
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].type).toBe('script_error');
+      expect(result.errors[0].suggestion.includes('Too many')).toBeTruthy();
     });
   });
 
@@ -76,9 +76,9 @@ describe('error-analyzer', () => {
       const result = analyzeOutput([
         'ERROR: Index out of bounds.',
       ]);
-      assert.equal(result.errors.length, 1);
-      assert.equal(result.errors[0].type, 'runtime_error');
-      assert.ok(result.errors[0].suggestion.includes('bounds'));
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].type).toBe('runtime_error');
+      expect(result.errors[0].suggestion.includes('bounds')).toBeTruthy();
     });
   });
 
@@ -87,9 +87,9 @@ describe('error-analyzer', () => {
       const result = analyzeOutput([
         'ERROR: File not found: res://assets/missing.png.',
       ]);
-      assert.equal(result.errors.length, 1);
-      assert.equal(result.errors[0].type, 'runtime_error');
-      assert.ok(result.errors[0].suggestion.includes('missing.png'));
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].type).toBe('runtime_error');
+      expect(result.errors[0].suggestion.includes('missing.png')).toBeTruthy();
     });
   });
 
@@ -98,26 +98,26 @@ describe('error-analyzer', () => {
       const result = analyzeOutput([
         'ERROR: texture_2d_get returned null.',
       ]);
-      assert.equal(result.errors.length, 1);
-      assert.equal(result.errors[0].type, 'headless_limitation');
-      assert.ok(!result.hasErrors);
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].type).toBe('headless_limitation');
+      expect(!result.hasErrors).toBeTruthy();
     });
 
     it('parses get_image() null', () => {
       const result = analyzeOutput([
         'ERROR: get_image() returned null.',
       ]);
-      assert.equal(result.errors.length, 1);
-      assert.equal(result.errors[0].type, 'headless_limitation');
-      assert.ok(!result.hasErrors);
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].type).toBe('headless_limitation');
+      expect(!result.hasErrors).toBeTruthy();
     });
 
     it('parses canvas_item condition', () => {
       const result = analyzeOutput([
         'ERROR: Condition "!p_canvas_item" is true.',
       ]);
-      assert.equal(result.errors.length, 1);
-      assert.equal(result.errors[0].type, 'headless_limitation');
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].type).toBe('headless_limitation');
     });
   });
 
@@ -126,9 +126,9 @@ describe('error-analyzer', () => {
       const result = analyzeOutput([
         'ERROR: Condition "node != null" is true.',
       ]);
-      assert.equal(result.errors.length, 1);
-      assert.equal(result.errors[0].type, 'runtime_error');
-      assert.ok(result.errors[0].suggestion.includes('assertion'));
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0].type).toBe('runtime_error');
+      expect(result.errors[0].suggestion.includes('assertion')).toBeTruthy();
     });
   });
 
@@ -138,11 +138,11 @@ describe('error-analyzer', () => {
         'WARNING: Useless call to set_position.',
         'at: res://scripts/player.gd:10',
       ]);
-      assert.equal(result.warnings.length, 1);
-      assert.equal(result.warnings[0].file, 'res://scripts/player.gd');
-      assert.equal(result.warnings[0].line, 10);
-      assert.equal(result.errors.length, 0);
-      assert.ok(!result.hasErrors);
+      expect(result.warnings.length).toBe(1);
+      expect(result.warnings[0].file).toBe('res://scripts/player.gd');
+      expect(result.warnings[0].line).toBe(10);
+      expect(result.errors.length).toBe(0);
+      expect(!result.hasErrors).toBeTruthy();
     });
   });
 
@@ -155,21 +155,21 @@ describe('error-analyzer', () => {
         'at: res://scripts/player.gd:25',
         'Game started',
       ]);
-      assert.equal(result.errors.length, 1);
-      assert.equal(result.warnings.length, 1);
-      assert.equal(result.prints.length, 3);
-      assert.ok(result.hasErrors);
-      assert.ok(result.summary.includes('1 error'));
-      assert.ok(result.summary.includes('1 warning'));
-      assert.ok(result.summary.includes('3 print'));
+      expect(result.errors.length).toBe(1);
+      expect(result.warnings.length).toBe(1);
+      expect(result.prints.length).toBe(3);
+      expect(result.hasErrors).toBeTruthy();
+      expect(result.summary.includes('1 error')).toBeTruthy();
+      expect(result.summary.includes('1 warning')).toBeTruthy();
+      expect(result.summary.includes('3 print')).toBeTruthy();
     });
   });
 
   describe('summary', () => {
     it('returns "No errors" for empty output', () => {
       const result = analyzeOutput([]);
-      assert.equal(result.summary, 'No errors, warnings, or output found.');
-      assert.ok(!result.hasErrors);
+      expect(result.summary).toBe('No errors, warnings, or output found.');
+      expect(!result.hasErrors).toBeTruthy();
     });
 
     it('separates headless limitations from real errors', () => {
@@ -177,9 +177,9 @@ describe('error-analyzer', () => {
         'ERROR: texture_2d_get returned null.',
         'SCRIPT ERROR: Identifier "x" not found.',
       ]);
-      assert.equal(result.errors.length, 2);
-      assert.ok(result.hasErrors);
-      assert.ok(result.summary.includes('headless limitation'));
+      expect(result.errors.length).toBe(2);
+      expect(result.hasErrors).toBeTruthy();
+      expect(result.summary.includes('headless limitation')).toBeTruthy();
     });
   });
 
@@ -189,8 +189,8 @@ describe('error-analyzer', () => {
         'SCRIPT ERROR: Index out of bounds.',
         'SCRIPT ERROR: Index out of bounds.',
       ]);
-      assert.equal(result.errors.length, 2);
-      assert.equal(result.suggestions.length, 1);
+      expect(result.errors.length).toBe(2);
+      expect(result.suggestions.length).toBe(1);
     });
   });
 
@@ -200,8 +200,8 @@ describe('error-analyzer', () => {
         'SCRIPT ERROR: Something wrong.',
         'at: res://main.gd:100',
       ]);
-      assert.equal(result.errors[0].file, 'res://main.gd');
-      assert.equal(result.errors[0].line, 100);
+      expect(result.errors[0].file).toBe('res://main.gd');
+      expect(result.errors[0].line).toBe(100);
     });
 
     it('parses at: file(line) format', () => {
@@ -211,8 +211,8 @@ describe('error-analyzer', () => {
       ]);
       // Note: first regex greedily matches before atMatch2 can fire
       // so file includes (100) and line is undefined — known limitation
-      assert.ok(result.errors[0].file);
-      assert.ok(result.errors[0].file.includes('main.gd'));
+      expect(result.errors[0].file).toBeTruthy();
+      expect(result.errors[0].file.includes('main.gd')).toBeTruthy();
     });
 
     it('parses function context', () => {
@@ -220,7 +220,7 @@ describe('error-analyzer', () => {
         'SCRIPT ERROR: Something wrong.',
         'in function \'_ready\'',
       ]);
-      assert.equal(result.errors[0].function, '_ready');
+      expect(result.errors[0].function).toBe('_ready');
     });
   });
 });

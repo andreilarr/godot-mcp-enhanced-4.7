@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import { parseMcpMarkers } from '../build/gdscript-executor.js';
 
 // C-2 fix: import actual function instead of inline copy
@@ -12,38 +11,38 @@ describe('parseMcpMarkers', () => {
     const raw = `Hello world
 ${MARKER_RESULT}{"success":true,"outputs":[{"key":"x","value":"42"}]}`;
     const { parsed, logLines } = parseMcpMarkers(raw);
-    assert.deepStrictEqual(parsed, { success: true, outputs: [{ key: 'x', value: '42' }] });
-    assert.deepStrictEqual(logLines, ['Hello world']);
+    expect(parsed).toEqual({ success: true, outputs: [{ key: 'x', value: '42' }] });
+    expect(logLines).toEqual(['Hello world']);
   });
 
   it('parses error marker', () => {
     const raw = `${MARKER_ERROR}{"success":false,"error":"compile failed"}`;
     const { parsed } = parseMcpMarkers(raw);
-    assert.deepStrictEqual(parsed, { success: false, error: 'compile failed' });
+    expect(parsed).toEqual({ success: false, error: 'compile failed' });
   });
 
   it('returns null when no marker found', () => {
     const raw = 'Just some output\nNo markers here';
     const { parsed, logLines } = parseMcpMarkers(raw);
-    assert.strictEqual(parsed, null);
-    assert.strictEqual(logLines.length, 2);
+    expect(parsed).toBe(null);
+    expect(logLines.length).toBe(2);
   });
 
   it('handles malformed JSON in marker', () => {
     const raw = `${MARKER_RESULT}{broken json}`;
     const { parsed } = parseMcpMarkers(raw);
-    assert.strictEqual(parsed.success, false);
+    expect(parsed.success).toBe(false);
   });
 });
 
 describe('wrapSnippet code detection', () => {
   it('detects full class with extends', () => {
     const code = 'extends SceneTree\n\nfunc _initialize():\n\tprint("hi")';
-    assert.ok(/^\s*extends\s+/m.test(code));
+    expect(/^\s*extends\s+/m.test(code)).toBeTruthy();
   });
 
   it('snippet without extends is not full class', () => {
     const code = 'var x = 1\nprint(x)';
-    assert.ok(!/^\s*extends\s+/m.test(code));
+    expect(/^\s*extends\s+/m.test(code)).toBeFalsy();
   });
 });

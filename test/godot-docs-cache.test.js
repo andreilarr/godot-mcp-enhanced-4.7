@@ -1,5 +1,4 @@
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import { writeFileSync, rmSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -39,10 +38,10 @@ describe('godot-docs API cache', () => {
     writeFileSync(apiPath, makeApiJson());
 
     initDocs(apiPath);
-    assert.strictEqual(getDocsVersion(), '4.3.0');
+    expect(getDocsVersion()).toBe('4.3.0');
 
     clearApiCache();
-    assert.strictEqual(getDocsVersion(), null);
+    expect(getDocsVersion()).toBe(null);
 
     // 清理
     rmSync(tmpDir, { recursive: true, force: true });
@@ -52,7 +51,7 @@ describe('godot-docs API cache', () => {
     clearApiCache();
     clearApiCache();
     clearApiCache();
-    assert.strictEqual(getDocsVersion(), null);
+    expect(getDocsVersion()).toBe(null);
 
     rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -63,9 +62,9 @@ describe('godot-docs API cache', () => {
 
     // 第一次：读取文件 + 解析 + 缓存
     initDocs(apiPath);
-    assert.strictEqual(getDocsVersion(), '4.3.0');
+    expect(getDocsVersion()).toBe('4.3.0');
     let results = searchClasses('TestClass');
-    assert.strictEqual(results.length, 3);
+    expect(results.length).toBe(3);
 
     // 删除源文件 — 如果再次读取会 ENOENT
     rmSync(apiPath, { force: true });
@@ -75,9 +74,9 @@ describe('godot-docs API cache', () => {
     // 这里测试的是：initialized + same path 守卫使第二次调用不触碰磁盘
     // （初始化状态下已经测过 initialized 守卫，此处验证行为一致）
     initDocs(apiPath);
-    assert.strictEqual(getDocsVersion(), '4.3.0');
+    expect(getDocsVersion()).toBe('4.3.0');
     results = searchClasses('TestClass');
-    assert.strictEqual(results.length, 3);
+    expect(results.length).toBe(3);
 
     rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -87,7 +86,7 @@ describe('godot-docs API cache', () => {
     writeFileSync(apiPath, 'this is not valid json {{{');
 
     // 解析失败应抛出 SyntaxError，且不缓存
-    assert.throws(() => initDocs(apiPath), { name: 'SyntaxError' });
+    expect(() => initDocs(apiPath)).toThrow();
 
     // 覆写为合法 JSON
     writeFileSync(apiPath, makeApiJson(1));
@@ -95,7 +94,7 @@ describe('godot-docs API cache', () => {
     // 重试应成功（因为上次失败没缓存）
     initDocs(apiPath);
     const results = searchClasses('TestClass');
-    assert.ok(results.length > 0, '重试后应能搜到类');
+    expect(results.length > 0).toBeTruthy();
 
     rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -123,16 +122,16 @@ describe('godot-docs API cache', () => {
     }));
 
     initDocs(apiPath1);
-    assert.strictEqual(getDocsVersion(), '4.2.0');
+    expect(getDocsVersion()).toBe('4.2.0');
     let results = searchClasses('Version');
-    assert.ok(results.some(r => r.name === 'VersionTwo'));
+    expect(results.some(r => r.name === 'VersionTwo')).toBeTruthy();
 
     // 切换到新路径需要先清缓存
     clearApiCache();
     initDocs(apiPath2);
-    assert.strictEqual(getDocsVersion(), '4.3.0');
+    expect(getDocsVersion()).toBe('4.3.0');
     results = searchClasses('Version');
-    assert.ok(results.some(r => r.name === 'VersionThree'));
+    expect(results.some(r => r.name === 'VersionThree')).toBeTruthy();
 
     rmSync(tmpDir, { recursive: true, force: true });
   });

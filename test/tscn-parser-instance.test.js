@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import { parseTscn } from '../build/tscn-parser.js';
 
 describe('tscn-parser instance_of', () => {
@@ -15,9 +14,9 @@ describe('tscn-parser instance_of', () => {
 `;
     const result = parseTscn(tscn);
     const player = result.nodes.find(n => n.name === 'Player');
-    assert.ok(player);
-    assert.equal(player.instance, 1);
-    assert.equal(player.instance_of, 'res://scenes/player.tscn');
+    expect(player).toBeTruthy();
+    expect(player.instance).toBe(1);
+    expect(player.instance_of).toBe('res://scenes/player.tscn');
   });
 
   it('should not set instance_of for non-instance nodes', () => {
@@ -27,7 +26,7 @@ describe('tscn-parser instance_of', () => {
 `;
     const result = parseTscn(tscn);
     const label = result.nodes.find(n => n.name === 'Label');
-    assert.ok(label);
-    assert.equal(label.instance_of, undefined);
+    expect(label).toBeTruthy();
+    expect(label.instance_of).toBe(undefined);
   });
 });

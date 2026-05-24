@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import { isErrorFalsePositive, KNOWN_BASE_METHODS } from '../build/tools/validation.js';
 
 // ─── Helper: build a realistic Godot headless parser error line ──────────────
@@ -28,7 +27,7 @@ describe('validation-filter: KNOWN_BASE_METHODS coverage', () => {
 
     for (const method of originalMethods) {
       it(`filters "${method}" as method call`, () => {
-        assert.ok(isErrorFalsePositive(notFoundInBase(method)), `Should filter .${method}()`);
+        expect(isErrorFalsePositive(notFoundInBase(method))).toBeTruthy();
       });
     }
   });
@@ -41,7 +40,7 @@ describe('validation-filter: KNOWN_BASE_METHODS coverage', () => {
     for (const method of inputMethods) {
       it(`filters "${method}" (Input.is_action_pressed pattern)`, () => {
         const line = parseError(`Function "${method}()" not found in base self.`);
-        assert.ok(isErrorFalsePositive(line), `Should filter Input.${method}`);
+        expect(isErrorFalsePositive(line)).toBeTruthy();
       });
     }
   });
@@ -55,7 +54,7 @@ describe('validation-filter: KNOWN_BASE_METHODS coverage', () => {
     for (const item of collisionItems) {
       it(`filters "${item}"`, () => {
         const line = propNotFoundInBase(item);
-        assert.ok(isErrorFalsePositive(line), `Should filter .${item}`);
+        expect(isErrorFalsePositive(line)).toBeTruthy();
       });
     }
   });
@@ -68,7 +67,7 @@ describe('validation-filter: KNOWN_BASE_METHODS coverage', () => {
     for (const item of animItems) {
       it(`filters "${item}"`, () => {
         const line = notFoundInBase(item);
-        assert.ok(isErrorFalsePositive(line), `Should filter .${item}`);
+        expect(isErrorFalsePositive(line)).toBeTruthy();
       });
     }
   });
@@ -78,7 +77,7 @@ describe('validation-filter: KNOWN_BASE_METHODS coverage', () => {
     for (const item of audioItems) {
       it(`filters "${item}"`, () => {
         const line = propNotFoundInBase(item);
-        assert.ok(isErrorFalsePositive(line), `Should filter .${item}`);
+        expect(isErrorFalsePositive(line)).toBeTruthy();
       });
     }
   });
@@ -88,7 +87,7 @@ describe('validation-filter: KNOWN_BASE_METHODS coverage', () => {
     for (const item of tileItems) {
       it(`filters "${item}"`, () => {
         const line = notFoundInBase(item);
-        assert.ok(isErrorFalsePositive(line), `Should filter .${item}`);
+        expect(isErrorFalsePositive(line)).toBeTruthy();
       });
     }
   });
@@ -98,7 +97,7 @@ describe('validation-filter: KNOWN_BASE_METHODS coverage', () => {
     for (const item of spriteItems) {
       it(`filters "${item}"`, () => {
         const line = propNotFoundInBase(item);
-        assert.ok(isErrorFalsePositive(line), `Should filter .${item}`);
+        expect(isErrorFalsePositive(line)).toBeTruthy();
       });
     }
   });
@@ -111,7 +110,7 @@ describe('validation-filter: KNOWN_BASE_METHODS coverage', () => {
     for (const item of labelItems) {
       it(`filters "${item}"`, () => {
         const line = propNotFoundInBase(item);
-        assert.ok(isErrorFalsePositive(line), `Should filter .${item}`);
+        expect(isErrorFalsePositive(line)).toBeTruthy();
       });
     }
   });
@@ -121,7 +120,7 @@ describe('validation-filter: KNOWN_BASE_METHODS coverage', () => {
     for (const item of timerItems) {
       it(`filters "${item}"`, () => {
         const line = propNotFoundInBase(item);
-        assert.ok(isErrorFalsePositive(line), `Should filter .${item}`);
+        expect(isErrorFalsePositive(line)).toBeTruthy();
       });
     }
   });
@@ -131,7 +130,7 @@ describe('validation-filter: KNOWN_BASE_METHODS coverage', () => {
     for (const item of tweenItems) {
       it(`filters "${item}"`, () => {
         const line = notFoundInBase(item);
-        assert.ok(isErrorFalsePositive(line), `Should filter .${item}`);
+        expect(isErrorFalsePositive(line)).toBeTruthy();
       });
     }
   });
@@ -141,7 +140,7 @@ describe('validation-filter: KNOWN_BASE_METHODS coverage', () => {
     for (const item of windowItems) {
       it(`filters "${item}"`, () => {
         const line = propNotFoundInBase(item);
-        assert.ok(isErrorFalsePositive(line), `Should filter .${item}`);
+        expect(isErrorFalsePositive(line)).toBeTruthy();
       });
     }
   });
@@ -150,35 +149,35 @@ describe('validation-filter: KNOWN_BASE_METHODS coverage', () => {
 describe('validation-filter: await rule', () => {
   it('filters lines containing await keyword', () => {
     const line = parseError('Identifier "some_coroutine" not found in base self. at: await some_coroutine()');
-    assert.ok(isErrorFalsePositive(line));
+    expect(isErrorFalsePositive(line)).toBeTruthy();
   });
 
   it('does NOT filter real await parse errors without "not found in base self"', () => {
     // Real parse errors about await syntax should NOT be filtered
     const line = 'SCRIPT ERROR: Parse Error: Cannot use await outside of a coroutine function.';
-    assert.ok(!isErrorFalsePositive(line));
+    expect(isErrorFalsePositive(line)).toBeFalsy();
   });
 
   it('does NOT filter a real error line without await or whitelist match', () => {
     const line = parseError('Identifier "unknown_variable" not found in the current scope.');
-    assert.ok(!isErrorFalsePositive(line));
+    expect(isErrorFalsePositive(line)).toBeFalsy();
   });
 });
 
 describe('validation-filter: non-whitelist items pass through', () => {
   it('does NOT filter unknown method "foobar_custom"', () => {
     const line = notFoundInBase('foobar_custom');
-    assert.ok(!isErrorFalsePositive(line));
+    expect(isErrorFalsePositive(line)).toBeFalsy();
   });
 
   it('does NOT filter unknown property "xyz_private"', () => {
     const line = propNotFoundInBase('xyz_private');
-    assert.ok(!isErrorFalsePositive(line));
+    expect(isErrorFalsePositive(line)).toBeFalsy();
   });
 
   it('does NOT filter real syntax errors', () => {
     const line = parseError('Unexpected token ".".');
-    assert.ok(!isErrorFalsePositive(line));
+    expect(isErrorFalsePositive(line)).toBeFalsy();
   });
 });
 
@@ -190,6 +189,6 @@ describe('validation-filter: no duplicate entries in whitelist', () => {
       if (seen.has(item)) dupes.push(item);
       seen.add(item);
     }
-    assert.equal(dupes.length, 0, `Duplicate entries found: ${dupes.join(', ')}`);
+    expect(dupes.length).toBe(0);
   });
 });

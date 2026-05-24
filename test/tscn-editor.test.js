@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import { findInstanceNode, detachInstance, nodePathToNameAndParent } from '../build/tscn-editor.js';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -50,27 +49,27 @@ describe('tscn-editor findInstanceNode', () => {
   it('should find instance node by name at root level', () => {
     // node_path "root/Player" → nodeName="Player", tscnParent="."
     const info = findInstanceNode(TARGET_TSCN, 'Player', '.');
-    assert.ok(info, 'should find the instance node');
-    assert.equal(info.instanceId, 1);
-    assert.equal(info.sourcePath, 'res://scenes/player.tscn');
-    assert.equal(info.propertyOverrides.length, 2);
-    assert.ok(info.propertyOverrides[0].includes('position'));
-    assert.ok(info.propertyOverrides[1].includes('visible'));
+    expect(info).toBeTruthy();
+    expect(info.instanceId).toBe(1);
+    expect(info.sourcePath).toBe('res://scenes/player.tscn');
+    expect(info.propertyOverrides.length).toBe(2);
+    expect(info.propertyOverrides[0].includes('position')).toBeTruthy();
+    expect(info.propertyOverrides[1].includes('visible')).toBeTruthy();
   });
 
   it('should return null for non-instance node', () => {
     const info = findInstanceNode(TARGET_TSCN, 'Camera2D', '.');
-    assert.equal(info, null);
+    expect(info).toBe(null);
   });
 
   it('should return null for non-existent node', () => {
     const info = findInstanceNode(TARGET_TSCN, 'NonExistent', '.');
-    assert.equal(info, null);
+    expect(info).toBe(null);
   });
 
   it('should return null for wrong parent', () => {
     const info = findInstanceNode(TARGET_TSCN, 'Player', 'WrongParent');
-    assert.equal(info, null);
+    expect(info).toBe(null);
   });
 });
 
@@ -79,24 +78,24 @@ describe('tscn-editor findInstanceNode', () => {
 describe('tscn-editor nodePathToNameAndParent', () => {
   it('should parse root-level node', () => {
     const { nodeName, parent } = nodePathToNameAndParent('/root/Player');
-    assert.equal(nodeName, 'Player');
-    assert.equal(parent, '.');
+    expect(nodeName).toBe('Player');
+    expect(parent).toBe('.');
   });
 
   it('should parse nested node', () => {
     const { nodeName, parent } = nodePathToNameAndParent('/root/Level/Player');
-    assert.equal(nodeName, 'Player');
-    assert.equal(parent, 'Level');
+    expect(nodeName).toBe('Player');
+    expect(parent).toBe('Level');
   });
 
   it('should parse deeply nested node', () => {
     const { nodeName, parent } = nodePathToNameAndParent('/root/Level/Sub/Enemy');
-    assert.equal(nodeName, 'Enemy');
-    assert.equal(parent, 'Level/Sub');
+    expect(nodeName).toBe('Enemy');
+    expect(parent).toBe('Level/Sub');
   });
 
   it('should throw for root node', () => {
-    assert.throws(() => nodePathToNameAndParent('/root'), /Cannot detach the root node/);
+    expect(() => nodePathToNameAndParent('/root')).toThrow(/Cannot detach the root node/);
   });
 });
 
@@ -107,25 +106,25 @@ describe('tscn-editor detachInstance', () => {
     const result = detachInstance(TARGET_TSCN, SOURCE_TSCN, 'Player', '.');
 
     // Should contain the expanded root node (CharacterBody2D) instead of instance=ExtResource
-    assert.ok(result.includes('[node name="Player" type="CharacterBody2D"'), 'should have root node with type');
-    assert.ok(!result.includes('instance=ExtResource'), 'should not have instance reference');
+    expect(result.includes('[node name="Player" type="CharacterBody2D"')).toBeTruthy();
+    expect(!result.includes('instance=ExtResource')).toBeTruthy();
 
     // Should contain child nodes with adjusted parent
-    assert.ok(result.includes('parent="Player"'), 'child nodes should have Player as parent');
-    assert.ok(result.includes('Sprite2D'));
-    assert.ok(result.includes('CollisionShape2D'));
+    expect(result.includes('parent="Player"')).toBeTruthy();
+    expect(result.includes('Sprite2D')).toBeTruthy();
+    expect(result.includes('CollisionShape2D')).toBeTruthy();
   });
 
   it('should preserve property overrides from target', () => {
     const result = detachInstance(TARGET_TSCN, SOURCE_TSCN, 'Player', '.');
 
     // Property overrides should be present
-    assert.ok(result.includes('position = Vector2(100, 200)'), 'should preserve position override');
-    assert.ok(result.includes('visible = false'), 'should preserve visible override');
+    expect(result.includes('position = Vector2(100, 200)')).toBeTruthy();
+    expect(result.includes('visible = false')).toBeTruthy();
 
     // Source properties should also be present
-    assert.ok(result.includes('speed = 200.0'), 'should preserve source property');
-    assert.ok(result.includes('script = ExtResource'), 'should preserve source script');
+    expect(result.includes('speed = 200.0')).toBeTruthy();
+    expect(result.includes('script = ExtResource')).toBeTruthy();
   });
 
   it('should remap ext_resource IDs to avoid conflicts', () => {
@@ -138,22 +137,22 @@ describe('tscn-editor detachInstance', () => {
 [node name="Player" parent="." instance=ExtResource("5")]
 `;
     const info = findInstanceNode(targetWithHighIds, 'Player', '.');
-    assert.ok(info);
+    expect(info).toBeTruthy();
 
     const result = detachInstance(targetWithHighIds, SOURCE_WITH_EXT_CONFLICT, 'Player', '.');
 
     // Source had id="1" and id="2" — should be remapped to 6, 7 (target max was 5)
-    assert.ok(result.includes('id="6"'), 'source ext_resource should be remapped to id 6');
-    assert.ok(result.includes('id="7"'), 'second source ext_resource should be remapped to id 7');
+    expect(result.includes('id="6"')).toBeTruthy();
+    expect(result.includes('id="7"')).toBeTruthy();
     // ExtResource("6") and ExtResource("7") should appear in node property lines
-    assert.ok(result.includes('ExtResource("6")'), 'node should reference remapped ExtResource 6');
+    expect(result.includes('ExtResource("6")')).toBeTruthy();
   });
 
   it('should remove unused ext_resource for the instance', () => {
     const result = detachInstance(TARGET_TSCN, SOURCE_TSCN, 'Player', '.');
 
     // The PackedScene ext_resource (id="1") should be removed since no other node uses it
-    assert.ok(!result.includes('path="res://scenes/player.tscn"'), 'unused PackedScene ext_resource should be removed');
+    expect(!result.includes('path="res://scenes/player.tscn"')).toBeTruthy();
   });
 
   it('should keep ext_resource if still referenced by other nodes', () => {
@@ -171,24 +170,21 @@ position = Vector2(100, 200)
     const result = detachInstance(targetMultiRef, SOURCE_TSCN, 'Player', '.');
 
     // The PackedScene ext_resource should be kept because Player2 still references it
-    assert.ok(result.includes('path="res://scenes/player.tscn"'), 'ext_resource should be kept when still referenced');
+    expect(result.includes('path="res://scenes/player.tscn"')).toBeTruthy();
   });
 
   it('should update load_steps in header', () => {
     const result = detachInstance(TARGET_TSCN, SOURCE_TSCN, 'Player', '.');
     const headerMatch = result.match(/load_steps=(\d+)/);
-    assert.ok(headerMatch, 'should have load_steps');
+    expect(headerMatch).toBeTruthy();
     const steps = parseInt(headerMatch[1]);
     // After detach: 1 ext_resource (script from source) + 1 ext_resource (main.gd) + 1 = 3
     // Removed PackedScene ext_resource. So: main.gd + player.gd + 1 = 3
-    assert.ok(steps >= 2, `load_steps should be reasonable, got ${steps}`);
+    expect(steps >= 2).toBeTruthy();
   });
 
   it('should throw for non-instance node', () => {
-    assert.throws(
-      () => detachInstance(TARGET_TSCN, SOURCE_TSCN, 'Camera2D', '.'),
-      /Instance node not found/,
-    );
+    expect(() => detachInstance(TARGET_TSCN, SOURCE_TSCN, 'Camera2D', '.')).toThrow(/Instance node not found/);
   });
 
   it('should handle source with no ext_resources', () => {
@@ -200,9 +196,9 @@ speed = 100.0
 [node name="Sprite2D" type="Sprite2D" parent="."]
 `;
     const result = detachInstance(TARGET_TSCN, sourceNoExt, 'Player', '.');
-    assert.ok(result.includes('speed = 100.0'));
-    assert.ok(result.includes('Sprite2D'));
-    assert.ok(result.includes('parent="Player"'));
+    expect(result.includes('speed = 100.0')).toBeTruthy();
+    expect(result.includes('Sprite2D')).toBeTruthy();
+    expect(result.includes('parent="Player"')).toBeTruthy();
   });
 
   it('should handle nested parent paths', () => {
@@ -218,10 +214,10 @@ speed = 100.0
 `;
     const result = detachInstance(targetNested, SOURCE_TSCN, 'Enemy', 'Level');
     // Root of source should have parent="Level" and name="Enemy"
-    assert.ok(result.includes('name="Enemy"'));
-    assert.ok(result.includes('parent="Level"'));
+    expect(result.includes('name="Enemy"')).toBeTruthy();
+    expect(result.includes('parent="Level"')).toBeTruthy();
     // Child nodes should have parent="Enemy"
-    assert.ok(result.includes('parent="Enemy"'));
+    expect(result.includes('parent="Enemy"')).toBeTruthy();
   });
 });
 
@@ -248,11 +244,11 @@ health = 100.0
     const result = detachInstance(target, source, 'Player', '.');
 
     // The override value should be present
-    assert.ok(result.includes('speed = 300.0'), 'should have override value 300.0');
+    expect(result.includes('speed = 300.0')).toBeTruthy();
     // The source value should NOT be present (deduplicated)
-    assert.ok(!result.includes('speed = 200.0'), 'should NOT have source value 200.0');
+    expect(!result.includes('speed = 200.0')).toBeTruthy();
     // Non-overridden source property should still be present
-    assert.ok(result.includes('health = 100.0'), 'should preserve non-overridden source property');
+    expect(result.includes('health = 100.0')).toBeTruthy();
   });
 
   it('should keep source properties that are not overridden', () => {
@@ -274,10 +270,10 @@ health = 100.0
     const result = detachInstance(target, source, 'Player', '.');
 
     // Both source properties should remain since neither is overridden
-    assert.ok(result.includes('speed = 200.0'), 'should preserve speed');
-    assert.ok(result.includes('health = 100.0'), 'should preserve health');
+    expect(result.includes('speed = 200.0')).toBeTruthy();
+    expect(result.includes('health = 100.0')).toBeTruthy();
     // Override should also be present
-    assert.ok(result.includes('position = Vector2(100, 200)'), 'should preserve position override');
+    expect(result.includes('position = Vector2(100, 200)')).toBeTruthy();
   });
 });
 
@@ -309,8 +305,8 @@ shape = SubResource("1")
     const result = detachInstance(target, source, 'Player', '.');
 
     // sub_resource should be preserved
-    assert.ok(result.includes('[sub_resource type="RectangleShape2D"'), 'should have sub_resource header');
-    assert.ok(result.includes('size = Vector2(50, 50)'), 'should have sub_resource properties');
+    expect(result.includes('[sub_resource type="RectangleShape2D"')).toBeTruthy();
+    expect(result.includes('size = Vector2(50, 50)')).toBeTruthy();
   });
 
   it('should remap sub_resource IDs to avoid conflicts with target', () => {
@@ -338,11 +334,11 @@ shape = SubResource("1")
     const result = detachInstance(target, source, 'Player', '.');
 
     // Target has sub_resource id="1", source id="1" should be remapped to id="2"
-    assert.ok(result.includes('[sub_resource type="RectangleShape2D" id="2"]'), 'source sub_resource should be remapped to id 2');
+    expect(result.includes('[sub_resource type="RectangleShape2D" id="2"]')).toBeTruthy();
     // Node reference should be updated to match
-    assert.ok(result.includes('SubResource("2")'), 'node should reference remapped SubResource 2');
+    expect(result.includes('SubResource("2")')).toBeTruthy();
     // Target sub_resource should be untouched
-    assert.ok(result.includes('[sub_resource type="CircleShape2D" id="1"]'), 'target sub_resource id 1 should be preserved');
+    expect(result.includes('[sub_resource type="CircleShape2D" id="1"]')).toBeTruthy();
   });
 
   it('should remap sub_resource IDs that conflict with multiple target IDs', () => {
@@ -379,10 +375,10 @@ shape = SubResource("2")
     const result = detachInstance(target, source, 'Player', '.');
 
     // Target max sub_resource id is 2, source ids 1,2 should become 3,4
-    assert.ok(result.includes('[sub_resource type="RectangleShape2D" id="3"]'), 'source sub_resource 1 should remap to 3');
-    assert.ok(result.includes('[sub_resource type="ConvexPolygonShape2D" id="4"]'), 'source sub_resource 2 should remap to 4');
-    assert.ok(result.includes('SubResource("3")'), 'node should reference remapped SubResource 3');
-    assert.ok(result.includes('SubResource("4")'), 'node should reference remapped SubResource 4');
+    expect(result.includes('[sub_resource type="RectangleShape2D" id="3"]')).toBeTruthy();
+    expect(result.includes('[sub_resource type="ConvexPolygonShape2D" id="4"]')).toBeTruthy();
+    expect(result.includes('SubResource("3")')).toBeTruthy();
+    expect(result.includes('SubResource("4")')).toBeTruthy();
   });
 });
 
@@ -410,9 +406,9 @@ script = ExtResource("1")
     const result = detachInstance(target, source, 'Player', '.');
 
     // Connection should be present with remapped paths
-    assert.ok(result.includes('signal="pressed"'), 'should have connection signal');
-    assert.ok(result.includes('from="Player/Button"'), 'from path should be remapped to Player/Button');
-    assert.ok(result.includes('to="Player"'), 'to path "." should be remapped to Player');
+    expect(result.includes('signal="pressed"')).toBeTruthy();
+    expect(result.includes('from="Player/Button"')).toBeTruthy();
+    expect(result.includes('to="Player"')).toBeTruthy();
   });
 
   it('should remap connection with nested child paths', () => {
@@ -439,7 +435,7 @@ script = ExtResource("1")
 `;
     const result = detachInstance(target, source, 'UI', '.');
 
-    assert.ok(result.includes('from="UI/Panel/CloseBtn"'), 'nested from path should be remapped');
-    assert.ok(result.includes('to="UI"'), 'to path should be remapped to UI');
+    expect(result.includes('from="UI/Panel/CloseBtn"')).toBeTruthy();
+    expect(result.includes('to="UI"')).toBeTruthy();
   });
 });

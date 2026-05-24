@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import { resolve, sep } from 'node:path';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 
@@ -8,12 +7,12 @@ import { validatePath, resolveWithinRoot, ensureDir, normalizeUserProjectPath, a
 describe('validatePath', () => {
   it('resolves relative paths to absolute', () => {
     const result = validatePath('some/relative/path');
-    assert.strictEqual(result, resolve('some/relative/path'));
+    expect(result).toBe(resolve('some/relative/path'));
   });
 
   it('passes through absolute paths unchanged', () => {
     const abs = resolve('/tmp/test');
-    assert.strictEqual(validatePath(abs), abs);
+    expect(validatePath(abs)).toBe(abs);
   });
 });
 
@@ -22,45 +21,33 @@ describe('resolveWithinRoot', () => {
 
   it('resolves a simple relative path within root', () => {
     const result = resolveWithinRoot(root, 'scripts/player.gd');
-    assert.strictEqual(result, resolve(root, 'scripts/player.gd'));
+    expect(result).toBe(resolve(root, 'scripts/player.gd'));
   });
 
   it('rejects parent traversal with ..', () => {
-    assert.throws(
-      () => resolveWithinRoot(root, '../../../etc/passwd'),
-      { message: /Path traversal detected/ }
-    );
+    expect(() => resolveWithinRoot(root, '../../../etc/passwd')).toThrow(/Path traversal detected/);
   });
 
   it('rejects absolute path outside root', () => {
-    assert.throws(
-      () => resolveWithinRoot(root, '/etc/passwd'),
-      { message: /Path traversal detected/ }
-    );
+    expect(() => resolveWithinRoot(root, '/etc/passwd')).toThrow(/Path traversal detected/);
   });
 
   it('accepts paths after stripping res:// prefix', () => {
     const result = resolveWithinRoot(root, 'res://scenes/main.tscn'.replace('res://', ''));
-    assert.ok(result.startsWith(root));
+    expect(result.startsWith(root)).toBeTruthy();
   });
 
   it('handles deep relative paths within root', () => {
     const result = resolveWithinRoot(root, 'a/b/c/d/file.gd');
-    assert.ok(result.startsWith(root + sep));
+    expect(result.startsWith(root + sep)).toBeTruthy();
   });
 
   it('rejects path with .. on Windows-style traversal', () => {
-    assert.throws(
-      () => resolveWithinRoot(root, '..\\..\\etc\\passwd'),
-      { message: /Path traversal detected/ }
-    );
+    expect(() => resolveWithinRoot(root, '..\\..\\etc\\passwd')).toThrow(/Path traversal detected/);
   });
 
   it('rejects mixed slash traversal', () => {
-    assert.throws(
-      () => resolveWithinRoot(root, 'valid/../../etc/passwd'),
-      { message: /Path traversal detected/ }
-    );
+    expect(() => resolveWithinRoot(root, 'valid/../../etc/passwd')).toThrow(/Path traversal detected/);
   });
 });
 
@@ -70,7 +57,7 @@ describe('ensureDir', () => {
   it('creates parent directories if missing', () => {
     const target = `${testBase}/a/b/c/file.gd`;
     ensureDir(target);
-    assert.ok(existsSync(`${testBase}/a/b/c`));
+    expect(existsSync(`${testBase}/a/b/c`)).toBeTruthy();
     // cleanup
     rmSync(testBase, { recursive: true, force: true });
   });
@@ -78,51 +65,51 @@ describe('ensureDir', () => {
   it('does not throw when directory already exists', () => {
     mkdirSync(`${testBase}/existing`, { recursive: true });
     writeFileSync(`${testBase}/existing/file.txt`, 'test');
-    assert.doesNotThrow(() => ensureDir(`${testBase}/existing/other.txt`));
+    expect(() => ensureDir(`${testBase}/existing/other.txt`)).not.toThrow();
     rmSync(testBase, { recursive: true, force: true });
   });
 });
 
 describe('normalizeUserProjectPath', () => {
   it('strips res:// prefix', () => {
-    assert.strictEqual(normalizeUserProjectPath('res://scenes/main.tscn'), 'scenes/main.tscn');
+    expect(normalizeUserProjectPath('res://scenes/main.tscn')).toBe('scenes/main.tscn');
   });
 
   it('returns plain relative path unchanged', () => {
-    assert.strictEqual(normalizeUserProjectPath('assets/ui'), 'assets/ui');
+    expect(normalizeUserProjectPath('assets/ui')).toBe('assets/ui');
   });
 
   it('returns empty string for empty input', () => {
-    assert.strictEqual(normalizeUserProjectPath(''), '');
-    assert.strictEqual(normalizeUserProjectPath(undefined), '');
+    expect(normalizeUserProjectPath('')).toBe('');
+    expect(normalizeUserProjectPath(undefined)).toBe('');
   });
 
   it('returns empty string for null', () => {
-    assert.strictEqual(normalizeUserProjectPath(null), '');
+    expect(normalizeUserProjectPath(null)).toBe('');
   });
 
   it('returns empty string for whitespace-only input', () => {
-    assert.strictEqual(normalizeUserProjectPath('   '), '');
+    expect(normalizeUserProjectPath('   ')).toBe('');
   });
 
   it('trims whitespace', () => {
-    assert.strictEqual(normalizeUserProjectPath('  res://foo  '), 'foo');
+    expect(normalizeUserProjectPath('  res://foo  ')).toBe('foo');
   });
 
   it('does not strip nested res:// in path body', () => {
-    assert.strictEqual(normalizeUserProjectPath('res://res://foo'), 'res://foo');
+    expect(normalizeUserProjectPath('res://res://foo')).toBe('res://foo');
   });
 });
 
 describe('allowOutsideProjectPaths', () => {
   it('returns false by default', () => {
-    assert.strictEqual(allowOutsideProjectPaths(), false);
+    expect(allowOutsideProjectPaths()).toBe(false);
   });
 
   it('returns true when env var is exactly "true"', () => {
     const orig = process.env.ALLOW_OUTSIDE_PROJECT_PATHS;
     process.env.ALLOW_OUTSIDE_PROJECT_PATHS = 'true';
-    assert.strictEqual(allowOutsideProjectPaths(), true);
+    expect(allowOutsideProjectPaths()).toBe(true);
     process.env.ALLOW_OUTSIDE_PROJECT_PATHS = orig;
   });
 
@@ -130,7 +117,7 @@ describe('allowOutsideProjectPaths', () => {
     const orig = process.env.ALLOW_OUTSIDE_PROJECT_PATHS;
     for (const val of ['TRUE', 'True', '1', 'yes']) {
       process.env.ALLOW_OUTSIDE_PROJECT_PATHS = val;
-      assert.strictEqual(allowOutsideProjectPaths(), false, `should reject "${val}"`);
+      expect(allowOutsideProjectPaths()).toBe(false);
     }
     process.env.ALLOW_OUTSIDE_PROJECT_PATHS = orig;
   });
