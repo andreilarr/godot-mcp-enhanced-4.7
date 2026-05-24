@@ -24,9 +24,11 @@
     "install-plugin": "node scripts/install-plugin.js",
     "generate-docs": "node scripts/generate-doc-db.js",
     "build": "tsc && node -e \"const fs=require('fs'),p=require('path');const src=p.join(__dirname,'src','scripts');const dst=p.join(__dirname,'build','scripts');fs.mkdirSync(dst,{recursive:true});fs.readdirSync(src).filter(f=>f.endsWith('.gd')).forEach(f=>{fs.copyFileSync(p.join(src,f),p.join(dst,f));console.log('Copied',f)})\"",
-    "test": "npm run build && node --test test/*.test.js",
-    "test:integration": "npm run build && node --test test/integration/*.test.js",
-    "test:all": "npm run build && node --test test/*.test.js test/integration/*.test.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run test/integration",
+    "test:all": "vitest run",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
     "prepare": "npm run build",
     "watch": "tsc --watch"
@@ -38,7 +40,10 @@
   "devDependencies": {
     "@types/node": "^20.11.24",
     "@types/ws": "^8.18.1",
-    "typescript": "^5.3.3"
+    "@vitest/coverage-v8": "^4.1.7",
+    "fast-check": "^4.8.0",
+    "typescript": "^5.3.3",
+    "vitest": "^4.1.7"
   },
   "engines": {
     "node": ">=18.0.0"
