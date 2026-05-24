@@ -101,7 +101,8 @@ func _process(_delta: float) -> void:
 						to_remove.append(i)
 						continue
 					_peer_buffers[key] = combined
-					_process_buffer_bytes(p, pid)
+					if _process_buffer_bytes(p, pid):
+						to_remove.append(i)
 
 	# Remove disconnected peers (reverse order to preserve indices)
 	for idx in range(to_remove.size() - 1, -1, -1):
@@ -132,10 +133,13 @@ func _start_server() -> void:
 		if not DirAccess.dir_exists_absolute(godot_dir):
 			DirAccess.make_dir_recursive_absolute(godot_dir)
 		_secret_file = godot_dir + "/mcp_bridge_%d.secret" % PORT
-		if _write_secret_to_file(_secret_file):
+		if not _write_secret_to_file(_secret_file):
+			push_warning("[MCP Bridge] Failed to write secret to .godot/, falling back to tmpdir")
+		else:
 			return
 	_secret_file = OS.get_temp_dir().path_join("mcp_bridge_%d.secret" % PORT)
-	_write_secret_to_file(_secret_file)
+	if not _write_secret_to_file(_secret_file):
+		push_warning("[MCP Bridge] Failed to write secret to %s" % _secret_file)
 
 ## Compat: Godot 4.6 renamed TCPServer.accept() to take_connection()
 func _server_take_connection() -> StreamPeerTCP:
@@ -220,7 +224,7 @@ func _stop_server() -> void:
 
 # ─── Protocol handling ─────────────────────────────────────────────────────
 
-func _process_buffer_bytes(peer: StreamPeerTCP, pid: int) -> void:
+func _process_buffer_bytes(peer: StreamPeerTCP, pid: int) -> bool:
 	var key := "buf_" + str(pid)
 	var raw: PackedByteArray = _peer_buffers.get(key, PackedByteArray()) as PackedByteArray
 	while true:
@@ -235,7 +239,7 @@ func _process_buffer_bytes(peer: StreamPeerTCP, pid: int) -> void:
 		if line == "" and line_bytes.size() > 0:
 			push_warning("[MCP Bridge] Invalid UTF-8 in message from peer %d, disconnecting" % pid)
 			peer.disconnect_from_host()
-			break
+			return true
 		if not _authenticated_peers.has(pid):
 			
 			if _auth_locked_until.has(_LOCKOUT_KEY):
@@ -243,7 +247,7 @@ func _process_buffer_bytes(peer: StreamPeerTCP, pid: int) -> void:
 				if Time.get_ticks_msec() / 1000.0 < locked_until:
 					peer.put_data((JSON.stringify({"id": null, "error": {"code": -32002, "message": "Too many auth failures, temporarily locked"}}) + "\n").to_utf8_buffer())
 					peer.disconnect_from_host()
-					continue
+					return true
 				else:
 					_auth_locked_until.erase(_LOCKOUT_KEY)
 					_auth_fail_count[_LOCKOUT_KEY] = 0
@@ -263,10 +267,11 @@ func _process_buffer_bytes(peer: StreamPeerTCP, pid: int) -> void:
 					_auth_locked_until[_LOCKOUT_KEY] = Time.get_ticks_msec() / 1000.0 + LOCKOUT_SECONDS
 				peer.put_data((JSON.stringify({"id": null, "error": {"code": -32001, "message": "Authentication required"}}) + "\n").to_utf8_buffer())
 				peer.disconnect_from_host()
-				continue
+				return true
 		var response := _handle_message(line)
 		peer.put_data((response + "\n").to_utf8_buffer())
 	_peer_buffers[key] = raw
+	return false
 
 func _handle_message(raw: String) -> String:
 	var parsed: Variant
