@@ -1,5 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import { WebSocketServer } from 'ws';
 import { EditorConnection } from '../../build/core/EditorConnection.js';
 import { EditorToolExecutor } from '../../build/core/EditorToolExecutor.js';
@@ -31,18 +30,18 @@ describe('Editor mode integration', () => {
 
     const conn = new EditorConnection({ port, reconnect: false });
     await conn.connect();
-    assert.ok(conn.isConnected());
+    expect(conn.isConnected()).toBeTruthy();
 
     const executor = new EditorToolExecutor(conn);
     const result = await executor.execute('add_node', { project_path: '/test', node_type: 'Sprite2D', node_name: 'Player' });
-    assert.ok(!result.isError);
+    expect(!result.isError).toBeTruthy();
 
     const guard = new ReadOnlyGuard(true);
-    assert.equal(guard.check('add_node').blocked, true);
-    assert.equal(guard.check('read_scene').blocked, false);
+    expect(guard.check('add_node').blocked).toBe(true);
+    expect(guard.check('read_scene').blocked).toBe(false);
 
     conn.disconnect();
-    assert.ok(!conn.isConnected());
+    expect(!conn.isConnected()).toBeTruthy();
   });
 
   it('handles concurrent requests with unique IDs', async () => {
@@ -62,8 +61,8 @@ describe('Editor mode integration', () => {
       executor.execute('read_scene', {}),
       executor.execute('add_node', {}),
     ]);
-    assert.equal(results.length, 2);
-    assert.equal(new Set(received).size, 2);
+    expect(results.length).toBe(2);
+    expect(new Set(received).size).toBe(2);
     conn.disconnect();
   });
 });

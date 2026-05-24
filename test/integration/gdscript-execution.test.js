@@ -1,15 +1,10 @@
 // test/integration/gdscript-execution.test.js
 
-import { describe, it, beforeEach, afterEach } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import { executeGdscript } from '../../build/gdscript-executor.js';
 import { ensureGodot, getGodotPath, itIfGodot } from '../helpers/integration-setup.js';
 import { createTempProject, registerCleanup } from '../helpers/tool-context.js';
 import { MINIMAL_PROJECT } from '../helpers/fixtures.js';
-
-// integration-setup.js 和 tool-context.js 依赖全局 it/afterEach
-globalThis.it = it;
-globalThis.afterEach = afterEach;
 
 describe('Level A: GDScript Execution Pipeline', async () => {
   await ensureGodot();
@@ -29,10 +24,10 @@ describe('Level A: GDScript Execution Pipeline', async () => {
       timeout: 10,
     });
 
-    assert.ok(result.compile_success, 'Should compile');
-    assert.ok(result.run_success, 'Should run');
-    assert.equal(result.outputs.length, 1);
-    assert.equal(result.outputs[0].value, '42');
+    expect(result.compile_success).toBeTruthy();
+    expect(result.run_success).toBeTruthy();
+    expect(result.outputs.length).toBe(1);
+    expect(result.outputs[0].value).toBe('42');
   });
 
   itIfGodot('2. JSON structured output', async () => {
@@ -44,10 +39,10 @@ describe('Level A: GDScript Execution Pipeline', async () => {
       timeout: 10,
     });
 
-    assert.ok(result.compile_success);
-    assert.ok(result.run_success);
+    expect(result.compile_success).toBeTruthy();
+    expect(result.run_success).toBeTruthy();
     const parsed = JSON.parse(result.outputs[0].value);
-    assert.deepEqual(parsed, { a: 1, b: 'hello' });
+    expect(parsed).toEqual({ a: 1, b: 'hello' });
   });
 
   itIfGodot('3. compile error detection', async () => {
@@ -58,8 +53,8 @@ describe('Level A: GDScript Execution Pipeline', async () => {
       timeout: 10,
     });
 
-    assert.equal(result.compile_success, false, 'Should NOT compile');
-    assert.ok(result.compile_error, 'Should have compile_error');
+    expect(result.compile_success).toBe(false);
+    expect(result.compile_error).toBeTruthy();
   });
 
   itIfGodot('4. runtime error capture', async () => {
@@ -71,9 +66,9 @@ x.call("hello")`,
       timeout: 10,
     });
 
-    assert.ok(result.compile_success, 'Should compile');
-    assert.equal(result.run_success, false, 'Should fail at runtime');
-    assert.ok(result.run_error, 'Should have run_error');
+    expect(result.compile_success).toBeTruthy();
+    expect(result.run_success).toBe(false);
+    expect(result.run_error).toBeTruthy();
   });
 
   itIfGodot('5. timeout interrupts infinite loop', async () => {
@@ -86,7 +81,7 @@ x.call("hello")`,
     });
     const elapsed = Date.now() - start;
 
-    assert.ok(elapsed < 10000, `Should terminate within 10s (took ${elapsed}ms)`);
-    assert.equal(result.run_success, false, 'Should report failure');
+    expect(elapsed < 10000).toBeTruthy();
+    expect(result.run_success).toBe(false);
   });
 });

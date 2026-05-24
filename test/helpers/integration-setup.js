@@ -23,11 +23,11 @@ export function getGodotPath() { return _godotPath; }
 
 /**
  * 条件执行：Godot 可用时跑测试，不可用时 skip。
- * node:test 没有 describe.skip，用 it({ skip }) 替代。
+ * Vitest 使用 it.skip() 实现 skip。
  */
 export function itIfGodot(name, fn) {
   if (_godotAvailable) {
     return it(name, fn);
   }
-  return it(name, { skip: 'Godot not available' }, fn);
+  return it.skip(name, fn);
 }

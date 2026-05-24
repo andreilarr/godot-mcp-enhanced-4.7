@@ -1,14 +1,9 @@
 // Level B 集成测试：场景操作工具（scene.handleTool）
-import { describe, it, beforeEach, afterEach } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import * as scene from '../../build/tools/scene.js';
 import { ensureGodot, getGodotPath, itIfGodot } from '../helpers/integration-setup.js';
 import { createToolContext, createTempProject, registerCleanup } from '../helpers/tool-context.js';
 import { MINIMAL_PROJECT } from '../helpers/fixtures.js';
-
-// itIfGodot 和 registerCleanup 通过全局变量引用 it/afterEach
-globalThis.it = it;
-globalThis.afterEach = afterEach;
 
 /**
  * 辅助函数：判断工具调用结果是否成功。
@@ -51,7 +46,7 @@ describe('Level B: Scene Operations', async () => {
       node_type: 'Sprite2D',
       node_name: 'TestSprite',
     }, ctx);
-    assert.ok(isSuccessful(result), `应成功: ${result.content?.[0]?.text || ''}`);
+    expect(isSuccessful(result)).toBeTruthy();
   });
 
   // --- 用例 2: edit_node — 添加节点后修改位置 ---
@@ -69,7 +64,7 @@ describe('Level B: Scene Operations', async () => {
       node_path: 'root/Root/MovableNode',
       properties: { position: [100, 200] },
     }, ctx);
-    assert.ok(isSuccessful(editResult), `编辑应成功: ${editResult.content?.[0]?.text || ''}`);
+    expect(isSuccessful(editResult)).toBeTruthy();
   });
 
   // --- 用例 3: query_scene_tree — 查询场景树 ---
@@ -78,9 +73,9 @@ describe('Level B: Scene Operations', async () => {
       project_path: dirRef.path,
       scene_path: 'res://scenes/main.tscn',
     }, ctx);
-    assert.ok(isSuccessful(result), '读取场景树应成功');
+    expect(isSuccessful(result)).toBeTruthy();
     const text = result.content[0].text;
-    assert.ok(text.includes('Root'), '场景树应包含 Root 节点');
+    expect(text.includes('Root')).toBeTruthy();
   });
 
   // --- 用例 4: full CRUD cycle — 创建 → 编辑 → 删除 ---
@@ -94,7 +89,7 @@ describe('Level B: Scene Operations', async () => {
       node_type: 'Node2D',
       node_name: 'CRUDNode',
     }, ctx);
-    assert.ok(isSuccessful(addResult), '创建节点应成功');
+    expect(isSuccessful(addResult)).toBeTruthy();
 
     // 编辑
     const editResult = await scene.handleTool('edit_node', {
@@ -103,7 +98,7 @@ describe('Level B: Scene Operations', async () => {
       node_path: 'root/Root/CRUDNode',
       properties: { position: [50, 75] },
     }, ctx);
-    assert.ok(isSuccessful(editResult), '编辑节点应成功');
+    expect(isSuccessful(editResult)).toBeTruthy();
 
     // 删除
     const removeResult = await scene.handleTool('remove_node', {
@@ -111,7 +106,7 @@ describe('Level B: Scene Operations', async () => {
       scene_path: scenePath,
       node_path: 'root/Root/CRUDNode',
     }, ctx);
-    assert.ok(isSuccessful(removeResult), '删除节点应成功');
+    expect(isSuccessful(removeResult)).toBeTruthy();
   });
 
   // --- 用例 5: remove_node confirmation token 流程 ---
@@ -144,14 +139,14 @@ describe('Level B: Scene Operations', async () => {
             node_path: 'root/Root/TokenNode',
             confirmation_token: parsed.confirmation_token,
           }, ctx);
-          assert.ok(isSuccessful(confirmResult), '使用 confirmation_token 删除应成功');
+          expect(isSuccessful(confirmResult)).toBeTruthy();
           return;
         }
       } catch { /* 非 JSON 格式，继续 */ }
     }
 
     // 无 confirmation_token 时，直接删除应成功
-    assert.ok(isSuccessful(result), `删除应成功: ${text}`);
+    expect(isSuccessful(result)).toBeTruthy();
   });
 
   // --- 用例 6: nonexistent scene — 读取不存在的场景 ---
@@ -161,9 +156,8 @@ describe('Level B: Scene Operations', async () => {
       scene_path: 'res://scenes/DOES_NOT_EXIST.tscn',
     }, ctx);
     const text = result.content?.[0]?.text || '';
-    assert.ok(
+    expect(
       text.includes('not found') || text.includes('NOT_EXIST') || result.isError,
-      `应指示文件未找到: ${text}`,
-    );
+    ).toBeTruthy();
   });
 });

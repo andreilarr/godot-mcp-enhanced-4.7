@@ -1,5 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import * as project from '../../build/tools/project.js';
@@ -7,9 +6,6 @@ import * as validation from '../../build/tools/validation.js';
 import { ensureGodot, itIfGodot, getGodotPath } from '../helpers/integration-setup.js';
 import { createToolContext, createTempProject } from '../helpers/tool-context.js';
 import { MINIMAL_PROJECT } from '../helpers/fixtures.js';
-
-// itIfGodot 通过全局变量引用 it
-globalThis.it = it;
 
 describe('Level B: Project management', async () => {
   await ensureGodot();
@@ -35,8 +31,8 @@ describe('Level B: Project management', async () => {
     const result = await project.handleTool('create_project', {
       project_path: newDir,
     }, ctx);
-    assert.ok(!result.isError, `Should succeed: ${result.content?.[0]?.text || ''}`);
-    assert.ok(existsSync(join(newDir, 'project.godot')), 'project.godot should exist');
+    expect(!result.isError).toBeTruthy();
+    expect(existsSync(join(newDir, 'project.godot'))).toBeTruthy();
   });
 
   // 用例 2: read_project_config — 解析项目配置
@@ -44,12 +40,12 @@ describe('Level B: Project management', async () => {
     const result = await project.handleTool('read_project_config', {
       project_path: dirRef.path,
     }, ctx);
-    assert.ok(!result.isError);
+    expect(!result.isError).toBeTruthy();
     const text = result.content[0].text;
     const parsed = JSON.parse(text);
     const appSection = parsed.application || parsed['application'];
-    assert.ok(appSection, 'Should have application section');
-    assert.equal(appSection['config/name'], 'TestProject', 'Should contain TestProject');
+    expect(appSection).toBeTruthy();
+    expect(appSection['config/name']).toBe('TestProject');
   });
 
   // 用例 3: validate_project — 最小项目应通过验证
@@ -57,10 +53,10 @@ describe('Level B: Project management', async () => {
     const result = await validation.handleTool('validate_project', {
       project_path: dirRef.path,
     }, ctx);
-    assert.ok(!result.isError);
+    expect(!result.isError).toBeTruthy();
     const text = result.content[0].text;
     const parsed = JSON.parse(text);
-    assert.ok(parsed.valid !== false, `Minimal project should pass validation, got: ${text}`);
+    expect(parsed.valid !== false).toBeTruthy();
   });
 
   // 用例 4: list_files 带 .gd 扩展名过滤
@@ -69,13 +65,13 @@ describe('Level B: Project management', async () => {
       project_path: dirRef.path,
       extensions: ['.gd'],
     }, ctx);
-    assert.ok(!result.isError);
+    expect(!result.isError).toBeTruthy();
     const text = result.content[0].text;
     const parsed = JSON.parse(text);
     const files = parsed.files || [];
-    assert.ok(files.length > 0, 'Should find at least one .gd file');
+    expect(files.length > 0).toBeTruthy();
     for (const f of files) {
-      assert.ok(f.endsWith('.gd'), `File ${f} should end with .gd`);
+      expect(f.endsWith('.gd')).toBeTruthy();
     }
   });
 
@@ -85,9 +81,8 @@ describe('Level B: Project management', async () => {
       project_path: dirRef.path,
       scripts: [],
     }, ctx);
-    assert.ok(!result.isError, 'Should not crash on empty scripts array');
+    expect(!result.isError).toBeTruthy();
     const parsed = JSON.parse(result.content[0].text);
-    assert.ok(typeof parsed.validated === 'number',
-      'Should return valid structured result');
+    expect(typeof parsed.validated === 'number').toBeTruthy();
   });
 });
