@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import {
   TOOL_NAMES,
   getToolDefinitions,
@@ -13,19 +12,19 @@ import {
 
 describe('audio-ops TOOL_NAMES', () => {
   it('contains exactly 4 tool names', () => {
-    assert.strictEqual(TOOL_NAMES.length, 4);
+    expect(TOOL_NAMES.length).toBe(4);
   });
   it('includes audio_play', () => {
-    assert.ok(TOOL_NAMES.includes('audio_play'));
+    expect(TOOL_NAMES.includes('audio_play')).toBeTruthy();
   });
   it('includes audio_stop', () => {
-    assert.ok(TOOL_NAMES.includes('audio_stop'));
+    expect(TOOL_NAMES.includes('audio_stop')).toBeTruthy();
   });
   it('includes audio_set_param', () => {
-    assert.ok(TOOL_NAMES.includes('audio_set_param'));
+    expect(TOOL_NAMES.includes('audio_set_param')).toBeTruthy();
   });
   it('includes audio_query', () => {
-    assert.ok(TOOL_NAMES.includes('audio_query'));
+    expect(TOOL_NAMES.includes('audio_query')).toBeTruthy();
   });
 });
 
@@ -34,13 +33,13 @@ describe('audio-ops TOOL_NAMES', () => {
 describe('audio-ops getToolDefinitions', () => {
   it('returns 4 tool definitions', () => {
     const defs = getToolDefinitions();
-    assert.strictEqual(defs.length, 4);
+    expect(defs.length).toBe(4);
   });
   it('each definition has a name from TOOL_NAMES', () => {
     const defs = getToolDefinitions();
     const names = defs.map(d => d.name);
     for (const tn of TOOL_NAMES) {
-      assert.ok(names.includes(tn), `missing tool definition for ${tn}`);
+      expect(names.includes(tn)).toBeTruthy();
     }
   });
 });
@@ -50,21 +49,21 @@ describe('audio-ops getToolDefinitions', () => {
 describe('genAudioPlayScript', () => {
   it('generates play script with stream_path', () => {
     const script = genAudioPlayScript('/root/BGMPlayer', 'res://audio/bgm.ogg', -10, 1.0, 'Master');
-    assert.ok(script.includes('get_node("/root/BGMPlayer")'));
-    assert.ok(script.includes('res://audio/bgm.ogg'));
-    assert.ok(script.includes('volume_db = -10'));
-    assert.ok(script.includes('pitch_scale = 1.0'));
-    assert.ok(script.includes('AudioStreamPlayer'));
-    assert.ok(script.includes('.play()'));
+    expect(script.includes('get_node("/root/BGMPlayer")')).toBeTruthy();
+    expect(script.includes('res://audio/bgm.ogg')).toBeTruthy();
+    expect(script.includes('volume_db = -10')).toBeTruthy();
+    expect(script.includes('pitch_scale = 1.0')).toBeTruthy();
+    expect(script.includes('AudioStreamPlayer')).toBeTruthy();
+    expect(script.includes('.play()')).toBeTruthy();
   });
   it('generates play script without stream_path', () => {
     const script = genAudioPlayScript('/root/SFX');
-    assert.ok(script.includes('.play()'));
-    assert.ok(!script.includes('node.stream ='));
+    expect(script.includes('.play()')).toBeTruthy();
+    expect(script.includes('node.stream =')).toBeFalsy();
   });
   it('generates play script with from_position', () => {
     const script = genAudioPlayScript('/root/BGM', undefined, undefined, undefined, undefined, 5.0);
-    assert.ok(script.includes('.play(5.0)'));
+    expect(script.includes('.play(5.0)')).toBeTruthy();
   });
 });
 
@@ -73,8 +72,8 @@ describe('genAudioPlayScript', () => {
 describe('genAudioStopScript', () => {
   it('generates stop script', () => {
     const script = genAudioStopScript('/root/BGMPlayer');
-    assert.ok(script.includes('get_node("/root/BGMPlayer")'));
-    assert.ok(script.includes('.stop()'));
+    expect(script.includes('get_node("/root/BGMPlayer")')).toBeTruthy();
+    expect(script.includes('.stop()')).toBeTruthy();
   });
 });
 
@@ -83,15 +82,15 @@ describe('genAudioStopScript', () => {
 describe('genAudioSetParamScript', () => {
   it('generates volume_db param script', () => {
     const script = genAudioSetParamScript('/root/BGM', 'volume_db', -5);
-    assert.ok(script.includes('volume_db = -5'));
+    expect(script.includes('volume_db = -5')).toBeTruthy();
   });
   it('generates pitch_scale param script', () => {
     const script = genAudioSetParamScript('/root/BGM', 'pitch_scale', 1.5);
-    assert.ok(script.includes('pitch_scale = 1.5'));
+    expect(script.includes('pitch_scale = 1.5')).toBeTruthy();
   });
   it('generates bus param script', () => {
     const script = genAudioSetParamScript('/root/BGM', 'bus', 'SFX');
-    assert.ok(script.includes('bus = "SFX"'));
+    expect(script.includes('bus = "SFX"')).toBeTruthy();
   });
 });
 
@@ -100,11 +99,11 @@ describe('genAudioSetParamScript', () => {
 describe('genAudioQueryScript', () => {
   it('generates query script', () => {
     const script = genAudioQueryScript('/root/BGM');
-    assert.ok(script.includes('get_node("/root/BGM")'));
-    assert.ok(script.includes('playing'));
-    assert.ok(script.includes('volume_db'));
-    assert.ok(script.includes('pitch_scale'));
-    assert.ok(script.includes('bus'));
-    assert.ok(script.includes('get_playback_position'));
+    expect(script.includes('get_node("/root/BGM")')).toBeTruthy();
+    expect(script.includes('playing')).toBeTruthy();
+    expect(script.includes('volume_db')).toBeTruthy();
+    expect(script.includes('pitch_scale')).toBeTruthy();
+    expect(script.includes('bus')).toBeTruthy();
+    expect(script.includes('get_playback_position')).toBeTruthy();
   });
 });

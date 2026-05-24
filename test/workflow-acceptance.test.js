@@ -1,15 +1,14 @@
 // test/workflow-acceptance.test.js
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 
 describe('dev_loop acceptance parameter', () => {
   it('dev_loop definition includes acceptance parameter', async () => {
     const mod = await import('../build/tools/workflow.js');
     const tools = mod.getToolDefinitions();
     const devLoop = tools.find(t => t.name === 'dev_loop');
-    assert.ok(devLoop);
+    expect(devLoop).toBeTruthy();
     const props = devLoop.inputSchema.properties;
-    assert.ok('acceptance' in props, 'acceptance parameter missing');
+    expect('acceptance' in props).toBeTruthy();
   });
 
   it('acceptance has assertions array with required fields', async () => {
@@ -17,13 +16,13 @@ describe('dev_loop acceptance parameter', () => {
     const tools = mod.getToolDefinitions();
     const devLoop = tools.find(t => t.name === 'dev_loop');
     const acceptanceProps = devLoop.inputSchema.properties.acceptance.properties;
-    assert.ok('assertions' in acceptanceProps);
+    expect('assertions' in acceptanceProps).toBeTruthy();
     const items = acceptanceProps.assertions.items;
-    assert.ok(items.properties.description);
-    assert.ok(items.properties.gdscript);
-    assert.ok(items.properties.expect);
-    assert.ok(items.required.includes('description'));
-    assert.ok(items.required.includes('gdscript'));
+    expect(items.properties.description).toBeTruthy();
+    expect(items.properties.gdscript).toBeTruthy();
+    expect(items.properties.expect).toBeTruthy();
+    expect(items.required.includes('description')).toBeTruthy();
+    expect(items.required.includes('gdscript')).toBeTruthy();
   });
 
   it('acceptance does not expose max_retries (removed until implemented)', async () => {
@@ -31,6 +30,6 @@ describe('dev_loop acceptance parameter', () => {
     const tools = mod.getToolDefinitions();
     const devLoop = tools.find(t => t.name === 'dev_loop');
     const acceptanceProps = devLoop.inputSchema.properties.acceptance.properties;
-    assert.ok(!('max_retries' in acceptanceProps));
+    expect('max_retries' in acceptanceProps).toBeFalsy();
   });
 });

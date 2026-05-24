@@ -1,5 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import { EditorToolExecutor } from '../build/core/EditorToolExecutor.js';
 import { EditorConnection } from '../build/core/EditorConnection.js';
 import { WebSocketServer } from 'ws';
@@ -34,7 +33,7 @@ describe('EditorToolExecutor', () => {
       node_type: 'Sprite2D',
       node_name: 'Player',
     });
-    assert.deepEqual(JSON.parse(result.content[0].text), { node_path: 'root/Player' });
+    expect(JSON.parse(result.content[0].text)).toEqual({ node_path: 'root/Player' });
     conn.disconnect();
   });
 
@@ -50,7 +49,7 @@ describe('EditorToolExecutor', () => {
     await conn.connect();
     const executor = new EditorToolExecutor(conn);
     const result = await executor.execute('edit_node', { node_path: 'root/Missing' });
-    assert.equal(result.isError, true);
+    expect(result.isError).toBe(true);
     conn.disconnect();
   });
 });

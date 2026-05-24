@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import { getToolDefinitions } from '../build/tools/workflow.js';
 
 describe('workflow tool definitions', () => {
@@ -7,25 +6,25 @@ describe('workflow tool definitions', () => {
   const names = tools.map(t => t.name);
 
   it('has 3 tools', () => {
-    assert.strictEqual(tools.length, 3);
+    expect(tools.length).toBe(3);
   });
 
   it('includes dev_loop', () => {
-    assert.ok(names.includes('dev_loop'));
+    expect(names.includes('dev_loop')).toBeTruthy();
   });
 
   it('includes scene_snapshot', () => {
-    assert.ok(names.includes('scene_snapshot'));
+    expect(names.includes('scene_snapshot')).toBeTruthy();
   });
 
   it('includes batch_validate', () => {
-    assert.ok(names.includes('batch_validate'));
+    expect(names.includes('batch_validate')).toBeTruthy();
   });
 
   it('all tools have required fields', () => {
     for (const tool of tools) {
-      assert.ok(tool.inputSchema, `${tool.name} missing inputSchema`);
-      assert.ok(tool.description, `${tool.name} missing description`);
+      expect(tool.inputSchema).toBeTruthy();
+      expect(tool.description).toBeTruthy();
     }
   });
 });

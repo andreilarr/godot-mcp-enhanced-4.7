@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import * as scene from '../build/tools/scene.js';
 
 describe('instance_scene tool definition', () => {
@@ -10,16 +9,16 @@ describe('instance_scene tool definition', () => {
       scene_path: 'res://main.tscn',
       // instance_path intentionally missing to trigger early error return
     }, { opsScript: '' });
-    assert.ok(result !== null, 'handleTool should return non-null for instance_scene');
+    expect(result !== null).toBeTruthy();
   });
 
   it('should have tool definition with correct schema', () => {
     const defs = scene.getToolDefinitions();
     const def = defs.find(d => d.name === 'instance_scene');
-    assert.ok(def, 'instance_scene tool definition not found');
-    assert.ok(def.inputSchema.required?.includes('project_path'));
-    assert.ok(def.inputSchema.required?.includes('scene_path'));
-    assert.ok(def.inputSchema.required?.includes('instance_path'));
+    expect(def).toBeTruthy();
+    expect(def.inputSchema.required?.includes('project_path')).toBeTruthy();
+    expect(def.inputSchema.required?.includes('scene_path')).toBeTruthy();
+    expect(def.inputSchema.required?.includes('instance_path')).toBeTruthy();
   });
 
   it('should reject missing instance_path', async () => {
@@ -27,8 +26,8 @@ describe('instance_scene tool definition', () => {
       project_path: '/tmp/test',
       scene_path: 'res://main.tscn',
     }, { opsScript: '' });
-    assert.ok(result);
-    assert.ok(result.content[0].text.includes('error') || result.content[0].text.includes('Error'));
+    expect(result).toBeTruthy();
+    expect(result.content[0].text.includes('error') || result.content[0].text.includes('Error')).toBeTruthy();
   });
 
   it('should reject self-referencing instance_path', async () => {
@@ -37,16 +36,16 @@ describe('instance_scene tool definition', () => {
       scene_path: 'res://scenes/main.tscn',
       instance_path: 'res://scenes/main.tscn',
     }, { opsScript: '' });
-    assert.ok(result);
-    assert.ok(result.content[0].text.includes('CIRCULAR'));
+    expect(result).toBeTruthy();
+    expect(result.content[0].text.includes('CIRCULAR')).toBeTruthy();
   });
 });
 
 describe('instance_scene TOOL_META', () => {
   it('should be marked as write tool', () => {
     const meta = scene.TOOL_META;
-    assert.ok(meta['instance_scene']);
-    assert.equal(meta['instance_scene'].readonly, false);
+    expect(meta['instance_scene']).toBeTruthy();
+    expect(meta['instance_scene'].readonly).toBe(false);
   });
 });
 
@@ -58,18 +57,18 @@ describe('set_instance_property tool definition', () => {
       scene_path: 'res://main.tscn',
       // node_path intentionally missing to trigger early error return
     }, { opsScript: '' });
-    assert.ok(result !== null, 'handleTool should return non-null for set_instance_property');
+    expect(result !== null).toBeTruthy();
   });
 
   it('should have tool definition', () => {
     const defs = scene.getToolDefinitions();
     const def = defs.find(d => d.name === 'set_instance_property');
-    assert.ok(def);
-    assert.deepEqual(def.inputSchema.required, ['project_path', 'scene_path', 'node_path', 'property', 'value']);
+    expect(def).toBeTruthy();
+    expect(def.inputSchema.required).toEqual(['project_path', 'scene_path', 'node_path', 'property', 'value']);
   });
 
   it('should be marked as write tool', () => {
-    assert.equal(scene.TOOL_META['set_instance_property'].readonly, false);
+    expect(scene.TOOL_META['set_instance_property'].readonly).toBe(false);
   });
 
   it('should reject missing required params', async () => {
@@ -77,8 +76,8 @@ describe('set_instance_property tool definition', () => {
       project_path: '/tmp/test',
       scene_path: 'res://main.tscn',
     }, { opsScript: '' });
-    assert.ok(result);
-    assert.ok(result.content[0].text.includes('MISSING_PARAM') || result.content[0].text.includes('error'));
+    expect(result).toBeTruthy();
+    expect(result.content[0].text.includes('MISSING_PARAM') || result.content[0].text.includes('error')).toBeTruthy();
   });
 
   it('should reject blocked property names', async () => {
@@ -89,8 +88,8 @@ describe('set_instance_property tool definition', () => {
       property: 'script',
       value: 'test',
     }, { opsScript: '' });
-    assert.ok(result);
-    assert.ok(result.content[0].text.includes('BLOCKED_PROP'));
+    expect(result).toBeTruthy();
+    expect(result.content[0].text.includes('BLOCKED_PROP')).toBeTruthy();
   });
 
   it('should reject invalid property names', async () => {
@@ -101,8 +100,8 @@ describe('set_instance_property tool definition', () => {
       property: 'invalid-name!',
       value: 'test',
     }, { opsScript: '' });
-    assert.ok(result);
-    assert.ok(result.content[0].text.includes('INVALID_PARAM') || result.content[0].text.includes('Invalid property'));
+    expect(result).toBeTruthy();
+    expect(result.content[0].text.includes('INVALID_PARAM') || result.content[0].text.includes('Invalid property')).toBeTruthy();
   });
 });
 
@@ -112,21 +111,21 @@ describe('detach_instance tool definition', () => {
       project_path: '/tmp/test',
       scene_path: 'res://main.tscn',
     }, { opsScript: '' });
-    assert.ok(result !== null, 'handleTool should return non-null for detach_instance');
+    expect(result !== null).toBeTruthy();
   });
 
   it('should have tool definition', () => {
     const defs = scene.getToolDefinitions();
     const def = defs.find(d => d.name === 'detach_instance');
-    assert.ok(def, 'detach_instance tool definition not found');
-    assert.deepEqual(def.inputSchema.required, ['project_path', 'scene_path', 'node_path']);
+    expect(def).toBeTruthy();
+    expect(def.inputSchema.required).toEqual(['project_path', 'scene_path', 'node_path']);
   });
 
   it('should be marked as write tool', () => {
     const meta = scene.TOOL_META;
-    assert.ok(meta['detach_instance']);
-    assert.equal(meta['detach_instance'].readonly, false);
-    assert.equal(meta['detach_instance'].long_running, false);
+    expect(meta['detach_instance']).toBeTruthy();
+    expect(meta['detach_instance'].readonly).toBe(false);
+    expect(meta['detach_instance'].long_running).toBe(false);
   });
 
   it('should reject missing node_path', async () => {
@@ -134,7 +133,7 @@ describe('detach_instance tool definition', () => {
       project_path: '/tmp/test',
       scene_path: 'res://main.tscn',
     }, { opsScript: '' });
-    assert.ok(result);
-    assert.ok(result.content[0].text.includes('MISSING_PARAM') || result.content[0].text.includes('node_path'));
+    expect(result).toBeTruthy();
+    expect(result.content[0].text.includes('MISSING_PARAM') || result.content[0].text.includes('node_path')).toBeTruthy();
   });
 });

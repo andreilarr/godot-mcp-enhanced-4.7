@@ -1,5 +1,4 @@
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert/strict';
+import { expect } from 'vitest';
 import { ReadOnlyGuard } from '../build/core/ReadOnlyGuard.js';
 import { registerTools } from '../build/core/tool-registry.js';
 
@@ -16,34 +15,34 @@ describe('ReadOnlyGuard', () => {
   it('allows readonly tools when guard is active', () => {
     const guard = new ReadOnlyGuard(true);
     const result = guard.check('read_scene');
-    assert.equal(result.blocked, false);
+    expect(result.blocked).toBe(false);
   });
 
   it('blocks write tools when guard is active', () => {
     const guard = new ReadOnlyGuard(true);
     const result = guard.check('add_node');
-    assert.equal(result.blocked, true);
-    assert.equal(result.errorCode, -32001);
-    assert.ok(result.message.includes('read-only'));
+    expect(result.blocked).toBe(true);
+    expect(result.errorCode).toBe(-32001);
+    expect(result.message.includes('read-only')).toBeTruthy();
   });
 
   it('allows all tools when guard is inactive', () => {
     const guard = new ReadOnlyGuard(false);
-    assert.equal(guard.check('add_node').blocked, false);
-    assert.equal(guard.check('write_script').blocked, false);
-    assert.equal(guard.check('read_scene').blocked, false);
+    expect(guard.check('add_node').blocked).toBe(false);
+    expect(guard.check('write_script').blocked).toBe(false);
+    expect(guard.check('read_scene').blocked).toBe(false);
   });
 
   it('blocks unknown tools in readonly mode (safe default)', () => {
     const guard = new ReadOnlyGuard(true);
     const result = guard.check('unknown_tool');
-    assert.equal(result.blocked, true);
+    expect(result.blocked).toBe(true);
   });
 
   it('returns proper error structure', () => {
     const guard = new ReadOnlyGuard(true);
     const result = guard.check('write_script');
-    assert.deepEqual(result, {
+    expect(result).toEqual({
       blocked: true,
       errorCode: -32001,
       message: 'Operation blocked: read-only mode enabled (GODOT_MCP_READ_ONLY=true)',
