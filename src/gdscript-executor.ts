@@ -449,7 +449,7 @@ export async function executeGdscript(
     // Autoload mode: create a loader scene that initializes all autoloads first
     try {
       // Write loader script first to get its absolute path
-      const loaderScriptPath = writeSessionFile(createAutoloadLoaderScript(tempFile), '.gd', sessionDir);
+      const loaderScriptPath = writeSessionFile(randomizeMarkers(createAutoloadLoaderScript(tempFile)), '.gd', sessionDir);
       tempFiles.push(loaderScriptPath);
       // Create scene referencing loader script by absolute path (not res://)
       const loaderScene = createAutoloadLoaderScene(loaderScriptPath);
