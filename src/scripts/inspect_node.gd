@@ -176,6 +176,8 @@ func _safe_str(val) -> String:
 		_:
 			return str(val)
 
+# NOTE: Fixed markers ___MCP_RESULT___ / ___MCP_ERROR___ used because this script runs via
+# spawn (scene.ts), NOT executeGdscript(). Caller uses parseMcpScriptOutput() with fixed markers.
 func _output_result(data: Dictionary) -> void:
 	print("___MCP_RESULT___" + JSON.stringify(data))
 

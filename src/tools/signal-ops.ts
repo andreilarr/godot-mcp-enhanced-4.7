@@ -220,6 +220,7 @@ export async function handleTool(
         const signalName = args.signal_name as string;
         const signalArgs = args.args as unknown[] | undefined;
         if (!signalName) return opsErrorResult('INVALID_SIGNAL', 'signal_name is required');
+        try { validateIdentifier(signalName, 'signal_name'); } catch (e) { return opsErrorResult('INVALID_SIGNAL', (e as Error).message); }
         try {
           script = genSignalEmitScript(sourcePath, signalName, signalArgs);
         } catch (e) {

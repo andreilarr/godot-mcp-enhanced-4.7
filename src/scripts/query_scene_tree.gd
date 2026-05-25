@@ -114,6 +114,8 @@ func _count_nodes(data: Dictionary) -> int:
 		count += _count_nodes(child)
 	return count
 
+# NOTE: Fixed markers ___MCP_RESULT___ / ___MCP_ERROR___ used because this script runs via
+# spawn (scene.ts), NOT executeGdscript(). Caller uses parseMcpScriptOutput() with fixed markers.
 func _output_result(data: Dictionary) -> void:
 	print("___MCP_RESULT___" + JSON.stringify(data))
 

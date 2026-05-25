@@ -417,6 +417,11 @@ export async function executeGdscript(
     scriptContent = wrapSnippet(code, rndResult);
   }
 
+  // C-09: For injectHelpers path, replace fixed markers with random ones
+  // (wrapSnippet paths already use random markers via template parameter)
+  scriptContent = scriptContent.replaceAll(MARKER_RESULT, rndResult);
+  scriptContent = scriptContent.replaceAll(MARKER_ERROR, rndError);
+
   // Create isolated session directory
   cleanupOldSessions();
   const sessionDir = createSessionDir();
