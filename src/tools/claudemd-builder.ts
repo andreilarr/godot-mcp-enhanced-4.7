@@ -3,18 +3,18 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import type { GodotConfig } from '../helpers.js';
 
-// MCP 管理的章节标识（用于合并检测）
+// MCP 管理的章节标识（含旧格式，用于识别并替换）
 export const SECTION_IDS = new Set([
   '## 引擎版本', '## 渲染器', '## 项目关键路径', '## 主场景',
   '## Autoload', '## Input Map', '## 物理设置', '## 层级名称',
   '## MCP 规则映射', '## Godot MCP Rules',
 ]);
 
-// MCP 章节的固定顺序（含旧格式，确保幂等性检测一致）
+// MCP 章节的固定顺序（仅新格式，用于幂等性检测和输出顺序）
 export const SECTION_ORDER: string[] = [
   '## 引擎版本', '## 渲染器', '## 项目关键路径', '## 主场景',
   '## Autoload', '## Input Map', '## 物理设置', '## 层级名称',
-  '## MCP 规则映射', '## Godot MCP Rules',
+  '## MCP 规则映射',
 ];
 
 // godot-mcp.md 固定模板内容

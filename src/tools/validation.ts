@@ -8,7 +8,7 @@ import { promisify } from 'util';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { validatePath, resolveWithinRoot, parseMcpScriptOutput, normalizeUserProjectPath, checkVersionMismatch } from '../helpers.js';
+import { validatePath, resolveWithinRoot, parseMcpScriptOutput, normalizeUserProjectPath, checkVersionMismatch, buildSafeEnv } from '../helpers.js';
 import { analyzeOutput, type AnalysisResult } from '../error-analyzer.js';
 import { forceKillTree } from '../core/process-state.js';
 
@@ -230,7 +230,7 @@ export async function batchValidateScripts(
     const proc = spawn(
       effectiveGodotPath,
       ['--headless', '--path', projectPath, '--script', validatorPath],
-      { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env } }
+      { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() }
     );
 
     proc.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); });

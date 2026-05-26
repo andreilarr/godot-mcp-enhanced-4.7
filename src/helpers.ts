@@ -110,6 +110,25 @@ export function isPathInAllowedRoots(requestedPath: string): boolean {
   return allowed.some(p => resolved === p || resolved.startsWith(p + sep));
 }
 
+/** Build a safe environment for child processes, only passing necessary variables. */
+export function buildSafeEnv(): NodeJS.ProcessEnv {
+  return {
+    PATH: process.env.PATH ?? '',
+    HOME: process.env.HOME ?? '',
+    USERPROFILE: process.env.USERPROFILE ?? '',
+    LOCALAPPDATA: process.env.LOCALAPPDATA ?? '',
+    APPDATA: process.env.APPDATA ?? '',
+    TEMP: process.env.TEMP ?? '',
+    TMP: process.env.TMP ?? '',
+    GODOT: process.env.GODOT ?? '',
+    // Windows-specific variables required for proper process spawning
+    SystemRoot: process.env.SystemRoot ?? '',
+    COMSPEC: process.env.COMSPEC ?? '',
+    OS: process.env.OS ?? '',
+    PATHEXT: process.env.PATHEXT ?? '',
+  };
+}
+
 // ─── Shared: checkVersionMismatch ────────────────────────────────────────────
 
 export async function checkVersionMismatch(projectPath: string, godotBin: string): Promise<string | null> {

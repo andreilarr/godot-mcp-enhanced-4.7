@@ -20,6 +20,7 @@ import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
 import { analyzeOutput, type ParsedError } from './error-analyzer.js';
 import { forceKillTree } from './core/process-state.js';
+import { buildSafeEnv } from './helpers.js';
 
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -487,16 +488,7 @@ export async function executeGdscript(
 
     const proc = spawn(godotPath, godotArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        PATH: process.env.PATH ?? '',
-        HOME: process.env.HOME ?? '',
-        USERPROFILE: process.env.USERPROFILE ?? '',
-        LOCALAPPDATA: process.env.LOCALAPPDATA ?? '',
-        APPDATA: process.env.APPDATA ?? '',
-        TEMP: process.env.TEMP ?? '',
-        TMP: process.env.TMP ?? '',
-        GODOT: process.env.GODOT ?? '',
-      },
+      env: buildSafeEnv(),
     });
 
     proc.stdout?.on('data', (d: Buffer) => {

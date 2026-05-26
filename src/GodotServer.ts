@@ -235,6 +235,13 @@ export class GodotServer {
             };
           }
           // Re-dispatch with original tool name and args
+          // Validate project_path against whitelist for editor branch (C-01)
+          if (typeof pending.args.project_path === 'string' && !isPathInAllowedRoots(pending.args.project_path)) {
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify({ error: { code: 'PATH_NOT_ALLOWED', message: `Path not in ALLOWED_PROJECT_PATHS: ${pending.args.project_path}` } }) }],
+              isError: true,
+            };
+          }
           if (this.connectionMode === 'editor' && this.editorExecutor) {
             const editorResult = await this.editorExecutor.execute(pending.toolName, pending.args);
             const duration = Date.now() - startTime;

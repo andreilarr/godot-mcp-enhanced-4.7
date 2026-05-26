@@ -20,6 +20,7 @@ import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import * as os from 'os';
 import { forceKillTree } from './core/process-state.js';
+import { buildSafeEnv } from './helpers.js';
 
 export interface ScreenshotResult {
   success: boolean;
@@ -71,7 +72,7 @@ function runScreenshot(
     let out = '';
     const proc = spawn(godotPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: buildSafeEnv(),
     });
 
     proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
