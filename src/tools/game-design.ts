@@ -79,7 +79,7 @@ function escapeRegex(str: string): string {
 /**
  * Checks if the Formulas section body contains hardcoded numbers
  * that are not part of variable names.
- * Matches standalone numbers like `10`, `2.5`, `-3` but not `var_name_1`.
+ * Matches standalone numbers like `10`, `2.5` but not `var_name_1` or `Vector3`.
  */
 function findHardcodedNumbers(body: string): number[] {
   // Match numbers not preceded by a word character (letter or underscore or digit)

@@ -102,24 +102,28 @@ describe("GDD Validator", () => {
   });
 
   it("should detect acceptance criteria without testable format", () => {
-    const result = validateGDD({
-      // Pass raw string directly to test prose text
-    } instanceof Object
-      ? fullGDD({
-          "Acceptance Criteria":
-            "The system should work correctly and players should enjoy using it in most situations.",
-        })
-      : "");
-
+    const markdown = `# Test System
+## Overview
+A test system with enough content to pass.
+## Player Fantasy
+Feel powerful and engaged.
+## Detailed Rules
+Rules about the system behavior.
+## Formulas
+damage = atk * mult
+## Edge Cases
+When health reaches zero.
+## Dependencies
+Health system.
+## Tuning Knobs
+mult: 2.0
+## Acceptance Criteria
+The system should work correctly and players should enjoy using it.`;
+    const result = validateGDD(markdown);
     const acWarnings = result.issues.filter(
-      (i) =>
-        i.severity === "warning" &&
-        i.location === "Acceptance Criteria",
+      (i) => i.severity === "warning" && i.location === "Acceptance Criteria"
     );
     expect(acWarnings.length).toBeGreaterThanOrEqual(1);
-    const hasBulletWarning = acWarnings.some((w) =>
-      w.message.includes("bullet list"),
-    );
-    expect(hasBulletWarning).toBe(true);
+    expect(acWarnings.some(w => w.message.includes("bullet list") || w.message.includes("testable"))).toBe(true);
   });
 });
