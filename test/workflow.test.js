@@ -27,4 +27,12 @@ describe('workflow tool definitions', () => {
       expect(tool.description).toBeTruthy();
     }
   });
+
+  it('dev_loop has bridge parameter', () => {
+    const devLoop = tools.find(t => t.name === 'dev_loop');
+    const props = devLoop.inputSchema.properties;
+    expect(props.bridge).toBeTruthy();
+    expect(props.bridge.properties.screenshot).toBeTruthy();
+    expect(props.bridge.properties.queries).toBeTruthy();
+  });
 });

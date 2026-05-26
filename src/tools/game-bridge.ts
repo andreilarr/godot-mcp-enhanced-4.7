@@ -16,7 +16,7 @@ const DEFAULT_TIMEOUT = 10000;
 
 // ─── TCP client for Bridge communication ────────────────────────────────────
 
-interface BridgeResponse {
+export interface BridgeResponse {
   id: number | null;
   result?: unknown;
   error?: { code: number; message: string };
@@ -161,7 +161,14 @@ function _ensureConnection(timeout: number): Promise<Socket> {
   });
 }
 
-function sendToBridge(method: string, params: Record<string, unknown> = {}, timeout = DEFAULT_TIMEOUT): Promise<BridgeResponse> {
+/** Set the project directory for bridge secret lookup. Invalidates all cached bridge state. */
+export function setBridgeProjectDir(projectDir: string): void {
+  process.env.GODOT_BRIDGE_PROJECT_DIR = projectDir;
+  _cachedSecretPath = null;
+  _cachedSecret = null;
+}
+
+export function sendToBridge(method: string, params: Record<string, unknown> = {}, timeout = DEFAULT_TIMEOUT): Promise<BridgeResponse> {
   return _ensureConnection(timeout).then(sock => {
     return new Promise<BridgeResponse>((resolve, reject) => {
       const id = _nextRequestId++;
@@ -437,10 +444,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       case 'game_write':
       case 'game_input':
       case 'game_wait': {
-        // Ensure bridge secret lookup finds .godot/ before tmpdir
-        if (ctx.projectDir && !process.env.GODOT_BRIDGE_PROJECT_DIR) {
-          process.env.GODOT_BRIDGE_PROJECT_DIR = ctx.projectDir;
-          _cachedSecretPath = null;
+        // Always update project dir so switching projects between calls works
+        if (ctx.projectDir) {
+          setBridgeProjectDir(ctx.projectDir);
         }
         const methodSets: Record<string, Set<string>> = {
           game_query: QUERY_METHODS,

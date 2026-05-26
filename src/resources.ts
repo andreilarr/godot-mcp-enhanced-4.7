@@ -239,6 +239,63 @@ Tokens expire after 3 minutes, single-use, max 100 pending.
 Set READ_ONLY_MODE=false or remove the env var.
 `,
   },
+  'hooks-setup': {
+    name: 'Claude Code Hooks Setup',
+    description: 'Auto-validate GDScript after edits via Claude Code hooks',
+    text: `# Claude Code Hooks — Auto Validate GDScript
+
+## What it does
+After editing any .gd file via edit_script/write_script, Claude Code automatically reminds the AI to run validate_scripts.
+
+## Setup (one-time)
+
+Add to your Godot project's \`.claude/settings.json\`:
+
+\`\`\`json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__godot__edit_script|mcp__godot__write_script",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '>>> GDScript file modified — you MUST call validate_scripts now to verify syntax.'"
+          }
+        ]
+      }
+    ]
+  }
+}
+\`\`\`
+
+## How it works
+1. AI edits a .gd file via edit_script or write_script
+2. Hook fires, outputting a reminder message
+3. AI sees the message and calls validate_scripts on the changed file
+4. If validation fails, AI rolls back the change
+
+## Alternative: CLAUDE.md rule
+Add to your project's CLAUDE.md:
+> After every edit_script or write_script call, immediately run validate_scripts on the modified file. If validation fails, roll back the change.
+
+Both approaches work. Hooks are automatic; CLAUDE.md rules are more flexible.
+
+## Release Gate
+
+Before publishing a new version of your Godot project, run verify_delivery as a quality gate:
+
+\`\`\`
+verify_delivery(scope="full", project_path="your/project/path")
+\`\`\`
+
+All four dimensions (scene_tree, script_health, performance, assertions) must pass.
+If any dimension has errors, fix them before tagging a release.
+
+Add this to your project's CLAUDE.md:
+> Before committing a release version bump, run verify_delivery with scope="full". All dimensions must report no errors. Do not tag a release if verify_delivery reports failures.
+`,
+  },
 };
 
 function readProjectInfo(projectPath: string): McpResourceContent {

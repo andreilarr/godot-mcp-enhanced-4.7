@@ -10,6 +10,13 @@ import { executeGdscript } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, parseGdscriptResult, wrapAssertionCode } from './shared.js';
 import { gdEscape } from './shared.js';
 import { batchValidateScripts, type BatchValidateResult } from './validation.js';
+import { sendToBridge, setBridgeProjectDir } from './game-bridge.js';
+
+// Read-only methods only — take_screenshot handled separately via bridge.screenshot
+const BRIDGE_QUERY_ALLOWLIST = new Set([
+  'ping', 'get_tree', 'find_nodes', 'get_node_properties',
+  'get_performance', 'get_viewport_info',
+]);
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
@@ -17,7 +24,7 @@ export function getToolDefinitions(): Tool[] {
   return [
     {
       name: 'dev_loop',
-      description: 'Run a development loop: execute GDScript code, optionally validate project, and capture structured output in one step.',
+      description: 'Run a development loop: execute GDScript code, optionally validate project, capture structured output, and verify via Game Bridge in one step.',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -26,6 +33,32 @@ export function getToolDefinitions(): Tool[] {
           verify: { type: 'boolean', description: 'Also run project validation after execution (default: false)', default: false },
           timeout: { type: 'number', description: 'Timeout per step in seconds (default: 30)', default: 30 },
           load_autoloads: { type: 'boolean', description: 'Load Autoload context (default: true)', default: true },
+          bridge: {
+            type: 'object',
+            description: 'Optional: connect to running game via Game Bridge for screenshot/query validation. Bridge steps have their own timeout budget (separate from the timeout parameter).',
+            properties: {
+              screenshot: {
+                type: 'object',
+                description: 'Take a screenshot from the running game (saved to game filesystem, not returned to client)',
+                properties: {
+                  path: { type: 'string', description: 'Screenshot save path in game (default: user://mcp_dev_screenshot.png)' },
+                },
+              },
+              queries: {
+                type: 'array',
+                description: 'Bridge queries to run after code execution',
+                items: {
+                  type: 'object',
+                  properties: {
+                    method: { type: 'string', description: 'Bridge query method (e.g. ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info)' },
+                    params: { type: 'object', description: 'Query parameters' },
+                    expect: { type: 'string', description: 'Expected result substring (optional, for validation)' },
+                  },
+                  required: ['method'],
+                },
+              },
+            },
+          },
           acceptance: {
             type: 'object',
             description: 'Optional acceptance criteria to verify after execution',
@@ -136,6 +169,65 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       if (verify) {
         result.step2_verify = await runVerification(godot, projectPath);
+      }
+
+      // ── Bridge step: connect to running game for screenshot/query ──
+      const bridge = args.bridge as Record<string, unknown> | undefined;
+      if (bridge) {
+        if (projectPath) {
+          setBridgeProjectDir(projectPath);
+        }
+        const bridgeResult: Record<string, unknown> = { connected: false };
+        try {
+          // Ping first to verify connectivity
+          const pingResp = await sendToBridge('ping', {}, 5000);
+          if (pingResp.error) {
+            bridgeResult.error = `Bridge ping failed: ${pingResp.error.message}`;
+          } else {
+            bridgeResult.connected = true;
+
+            // Screenshot
+            const screenshot = bridge.screenshot as Record<string, unknown> | undefined;
+            if (screenshot) {
+              const ssPath = (screenshot.path as string) || 'user://mcp_dev_screenshot.png';
+              const ssResp = await sendToBridge('take_screenshot', { path: ssPath }, 10000);
+              bridgeResult.screenshot = ssResp.error
+                ? { success: false, error: ssResp.error.message }
+                : { success: true, ...(ssResp.result as Record<string, unknown>) };
+            }
+
+            // Queries
+            const queries = bridge.queries as Array<Record<string, unknown>> | undefined;
+            if (queries && queries.length > 0) {
+              const queryResults: Array<Record<string, unknown>> = [];
+              for (const q of queries) {
+                const method = q.method as string;
+                if (!BRIDGE_QUERY_ALLOWLIST.has(method)) {
+                  queryResults.push({ method, success: false, error: `Method "${method}" not allowed in bridge queries. Allowed: ${[...BRIDGE_QUERY_ALLOWLIST].join(', ')}` });
+                  continue;
+                }
+                const params = (q.params as Record<string, unknown>) || {};
+                const expect = q.expect as string | undefined;
+                const qResp = await sendToBridge(method, params, 10000);
+                if (qResp.error) {
+                  queryResults.push({ method, success: false, error: qResp.error.message });
+                } else {
+                  const actual = JSON.stringify(qResp.result);
+                  const match = expect ? actual.includes(expect) : undefined;
+                  queryResults.push({ method, success: true, result: qResp.result, ...(expect !== undefined ? { match } : {}) });
+                }
+              }
+              bridgeResult.queries = queryResults;
+              if (queryResults.length > 0) {
+                bridgeResult.all_queries_passed = queryResults.every(r => r.success !== false && (r.match === undefined || r.match === true));
+              }
+            }
+          }
+        } catch (err) {
+          bridgeResult.error = err instanceof Error ? err.message : String(err);
+        }
+        const stepNum = verify ? 3 : 2;
+        result[`step${stepNum}_bridge`] = bridgeResult;
       }
 
       // ── Acceptance assertions (execute individually for isolation) ──
