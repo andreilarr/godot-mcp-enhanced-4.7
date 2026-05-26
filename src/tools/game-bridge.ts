@@ -163,6 +163,7 @@ function _ensureConnection(timeout: number): Promise<Socket> {
 
 /** Set the project directory for bridge secret lookup. Invalidates all cached bridge state. */
 export function setBridgeProjectDir(projectDir: string): void {
+  if (process.env.GODOT_BRIDGE_PROJECT_DIR === projectDir) return;
   process.env.GODOT_BRIDGE_PROJECT_DIR = projectDir;
   _cachedSecretPath = null;
   _cachedSecret = null;
@@ -352,6 +353,12 @@ const TOOL_NAMES = [
 const QUERY_METHODS = new Set([
   'ping', 'get_tree', 'find_nodes', 'get_node_properties',
   'get_performance', 'get_viewport_info', 'take_screenshot',
+]);
+
+/** Read-only query methods excluding take_screenshot (handled separately via bridge.screenshot). */
+export const BRIDGE_READ_ONLY_METHODS = new Set([
+  'ping', 'get_tree', 'find_nodes', 'get_node_properties',
+  'get_performance', 'get_viewport_info',
 ]);
 
 const WRITE_METHODS = new Set([

@@ -244,6 +244,14 @@ Set READ_ONLY_MODE=false or remove the env var.
     description: 'Auto-validate GDScript after edits via Claude Code hooks',
     text: `# Claude Code Hooks — Auto Validate GDScript
 
+## Quick Setup (recommended)
+
+Call \`setup_project_rules\` to auto-generate both hooks and CLAUDE.md rules:
+\`\`\`
+setup_project_rules(project_path="your/project/path")
+\`\`\`
+This creates \`.claude/settings.json\` with PostToolUse hook and appends validation rules to \`CLAUDE.md\`.
+
 ## What it does
 After editing any .gd file via edit_script/write_script, Claude Code automatically reminds the AI to run validate_scripts.
 

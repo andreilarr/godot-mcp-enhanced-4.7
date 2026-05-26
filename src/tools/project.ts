@@ -1,5 +1,5 @@
 import { join, basename } from 'path';
-import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, renameSync, unlinkSync } from 'fs';
 import { randomUUID } from 'crypto';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
@@ -12,6 +12,7 @@ const TOOL_NAMES = [
   'list_files',
   'read_project_config',
   'create_project',
+  'setup_project_rules',
 ] as const;
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
@@ -70,6 +71,20 @@ export function getToolDefinitions(): Tool[] {
           project_path: { type: 'string', description: 'Directory path where the project will be created' },
           project_name: { type: 'string', description: 'Project name (default: folder name)', default: '' },
           renderer: { type: 'string', description: 'Renderer to use: "forward_plus" (default), "mobile", or "gl_compatibility"', default: 'forward_plus', enum: ['forward_plus', 'mobile', 'gl_compatibility'] },
+        },
+        required: ['project_path'],
+      },
+    },
+    {
+      name: 'setup_project_rules',
+      description: 'One-time setup: generate Claude Code hooks and CLAUDE.md rules for a Godot project. Creates .claude/settings.json with PostToolUse hook for auto GDScript validation, and appends verify_delivery release gate rule to CLAUDE.md. Recommended to run this once when starting work on a new Godot project.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          project_path: { type: 'string', description: 'Path to Godot project directory' },
+          hooks: { type: 'boolean', description: 'Create .claude/settings.json with PostToolUse hook (default: true)', default: true },
+          claude_md: { type: 'boolean', description: 'Create/append CLAUDE.md with validation rules (default: true)', default: true },
+          force: { type: 'boolean', description: 'Overwrite existing configuration (default: false)', default: false },
         },
         required: ['project_path'],
       },
@@ -248,6 +263,94 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       );
     }
 
+    case 'setup_project_rules': {
+      const p = validatePath(args.project_path as string);
+      const doHooks = args.hooks !== false;
+      const doClaudeMd = args.claude_md !== false;
+      const force = args.force === true;
+
+      if (!existsSync(join(p, 'project.godot'))) {
+        return textResult(`Error: No project.godot found at ${p}. Not a Godot project.`);
+      }
+
+      const report: Record<string, unknown> = { project_path: p };
+      const actions: string[] = [];
+
+      // ── Hooks: .claude/settings.json ──
+      if (doHooks) {
+        const claudeDir = join(p, '.claude');
+        const settingsPath = join(claudeDir, 'settings.json');
+        const hookEntry = {
+          matcher: 'mcp__godot__edit_script|mcp__godot__write_script',
+          hooks: [{
+            type: 'command',
+            command: "echo '>>> GDScript file modified — you MUST call validate_scripts now to verify syntax.'",
+          }],
+        };
+
+        let existing: ClaudeSettings | null = null;
+        if (existsSync(settingsPath)) {
+          try {
+            existing = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+          } catch {
+            actions.push('hooks: ERROR — existing settings.json is invalid JSON. Fix manually or delete it first.');
+            existing = null;
+          }
+        }
+
+        if (existing) {
+          const postHooks = existing.hooks?.PostToolUse;
+          const alreadyConfigured = Array.isArray(postHooks) && postHooks.some(h => h.matcher === hookEntry.matcher);
+          if (alreadyConfigured && !force) {
+            actions.push('hooks: skipped (already configured, use force=true to overwrite)');
+          } else {
+            // force: remove old entry with same matcher, then append new one
+            const merged = force && alreadyConfigured ? replaceHookEntry(existing, hookEntry) : mergeHooks(existing, hookEntry);
+            writeAtomic(settingsPath, JSON.stringify(merged, null, 2));
+            actions.push(force ? 'hooks: updated .claude/settings.json (force)' : 'hooks: updated .claude/settings.json');
+          }
+        } else if (existing === null && existsSync(settingsPath)) {
+          // JSON parse failed — don't touch the file
+        } else {
+          mkdirSync(claudeDir, { recursive: true });
+          writeAtomic(settingsPath, JSON.stringify({ hooks: { PostToolUse: [hookEntry] } }, null, 2));
+          actions.push('hooks: created .claude/settings.json');
+        }
+      }
+
+      // ── CLAUDE.md rules ──
+      if (doClaudeMd) {
+        const claudeMdPath = join(p, 'CLAUDE.md');
+        const rules = [
+          '',
+          '## Godot MCP Rules',
+          '- After every edit_script or write_script call, immediately run validate_scripts on the modified file. If validation fails, roll back the change.',
+          '- Before committing a release version bump, run verify_delivery with scope="full". All dimensions must report no errors.',
+        ];
+
+        if (existsSync(claudeMdPath)) {
+          const existing = readFileSync(claudeMdPath, 'utf-8');
+          if (existing.includes('## Godot MCP Rules') && !force) {
+            actions.push('CLAUDE.md: skipped (rules already present, use force=true to overwrite)');
+          } else if (existing.includes('## Godot MCP Rules') && force) {
+            const rulesBlock = rules.join('\n') + '\n';
+            const updated = existing.replace(/## Godot MCP Rules\n(?:(?!^## ).*\n?)*/, rulesBlock);
+            writeAtomic(claudeMdPath, updated);
+            actions.push('CLAUDE.md: updated rules (force)');
+          } else {
+            writeAtomic(claudeMdPath, existing + rules.join('\n') + '\n');
+            actions.push('CLAUDE.md: appended rules');
+          }
+        } else {
+          writeAtomic(claudeMdPath, '# Godot Project\n' + rules.join('\n') + '\n');
+          actions.push('CLAUDE.md: created with rules');
+        }
+      }
+
+      report.actions = actions;
+      return textResult(JSON.stringify(report, null, 2));
+    }
+
     default:
       return null;
   }
@@ -259,4 +362,35 @@ export const TOOL_META: Record<string, { readonly: boolean; long_running: boolea
   list_files: { readonly: true, long_running: false },
   read_project_config: { readonly: true, long_running: false },
   create_project: { readonly: false, long_running: false },
+  setup_project_rules: { readonly: false, long_running: false },
 };
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+interface HookEntry { matcher: string; hooks: Array<{ type: string; command: string }> }
+interface SettingsHooks { PostToolUse: HookEntry[] }
+interface ClaudeSettings { [key: string]: unknown; hooks?: { PostToolUse?: HookEntry[] } }
+
+function mergeHooks(existing: ClaudeSettings, hookEntry: HookEntry): ClaudeSettings {
+  const hooks: SettingsHooks = { PostToolUse: [...(existing.hooks?.PostToolUse ?? [])] };
+  hooks.PostToolUse.push(hookEntry);
+  return { ...existing, hooks };
+}
+
+function replaceHookEntry(existing: ClaudeSettings, hookEntry: HookEntry): ClaudeSettings {
+  const filtered = (existing.hooks?.PostToolUse ?? []).filter(h => h.matcher !== hookEntry.matcher);
+  filtered.push(hookEntry);
+  const hooks: SettingsHooks = { PostToolUse: filtered };
+  return { ...existing, hooks };
+}
+
+function writeAtomic(filePath: string, content: string): void {
+  const tmp = filePath + '.mcp-tmp';
+  writeFileSync(tmp, content, 'utf-8');
+  try {
+    renameSync(tmp, filePath);
+  } catch (e) {
+    try { unlinkSync(tmp); } catch { /* best effort */ }
+    throw e;
+  }
+}

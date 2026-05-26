@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { join } from 'path';
-import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 
 import {
@@ -63,9 +63,9 @@ describe('project-tools getToolDefinitions', () => {
     expect(defs.length).toBeGreaterThan(0);
   });
 
-  it('has 5 tool definitions', () => {
+  it('has 6 tool definitions', () => {
     const defs = getToolDefinitions();
-    expect(defs.length).toBe(5);
+    expect(defs.length).toBe(6);
     const names = defs.map(d => d.name);
     expect(names).toContain('list_projects');
     expect(names).toContain('get_project_info');
@@ -88,8 +88,8 @@ describe('project-tools getToolDefinitions', () => {
 // ─── TOOL_META ──────────────────────────────────────────────────────────────
 
 describe('project-tools TOOL_META', () => {
-  it('has entries for all 5 tools', () => {
-    expect(Object.keys(TOOL_META).length).toBe(5);
+  it('has entries for all 6 tools', () => {
+    expect(Object.keys(TOOL_META).length).toBe(6);
     expect(TOOL_META.list_projects).toBeDefined();
     expect(TOOL_META.get_project_info).toBeDefined();
     expect(TOOL_META.list_files).toBeDefined();
@@ -320,5 +320,148 @@ describe('project-tools handleTool — create_project', () => {
 
     expect(result).not.toBeNull();
     expect(result.content[0].text).toContain('Invalid renderer');
+  });
+});
+
+// ─── handleTool — setup_project_rules ────────────────────────────────────────
+
+describe('project-tools handleTool — setup_project_rules', () => {
+  let dir;
+
+  beforeEach(() => {
+    dir = makeTempDir();
+    makeGodotProject(dir);
+  });
+
+  afterEach(() => {
+    if (tempDir) rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('returns error when project.godot missing', async () => {
+    const ctx = createMockCtx();
+    const emptyDir = join(dir, 'nogodot');
+    mkdirSync(emptyDir, { recursive: true });
+
+    const result = await handleTool('setup_project_rules', { project_path: emptyDir }, ctx);
+    expect(result).not.toBeNull();
+    expect(result.content[0].text).toContain('Not a Godot project');
+  });
+
+  it('creates .claude/settings.json and CLAUDE.md', async () => {
+    const ctx = createMockCtx();
+
+    const result = await handleTool('setup_project_rules', { project_path: dir }, ctx);
+    expect(result).not.toBeNull();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.actions).toBeDefined();
+    expect(parsed.actions.length).toBe(2);
+
+    // Verify settings.json
+    const settingsPath = join(dir, '.claude', 'settings.json');
+    expect(existsSync(settingsPath)).toBe(true);
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+    expect(settings.hooks.PostToolUse).toBeDefined();
+    expect(settings.hooks.PostToolUse[0].matcher).toContain('edit_script');
+
+    // Verify CLAUDE.md
+    const claudeMdPath = join(dir, 'CLAUDE.md');
+    expect(existsSync(claudeMdPath)).toBe(true);
+    const claudeMd = readFileSync(claudeMdPath, 'utf-8');
+    expect(claudeMd).toContain('Godot MCP Rules');
+    expect(claudeMd).toContain('validate_scripts');
+  });
+
+  it('skips hooks when hooks=false', async () => {
+    const ctx = createMockCtx();
+
+    const result = await handleTool('setup_project_rules', {
+      project_path: dir,
+      hooks: false,
+    }, ctx);
+    expect(result).not.toBeNull();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.actions).toBeDefined();
+    expect(parsed.actions.length).toBe(1);
+    expect(parsed.actions[0]).toContain('CLAUDE.md');
+    expect(existsSync(join(dir, '.claude', 'settings.json'))).toBe(false);
+  });
+
+  it('skips CLAUDE.md when claude_md=false', async () => {
+    const ctx = createMockCtx();
+
+    const result = await handleTool('setup_project_rules', {
+      project_path: dir,
+      claude_md: false,
+    }, ctx);
+    expect(result).not.toBeNull();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.actions).toBeDefined();
+    expect(parsed.actions.length).toBe(1);
+    expect(parsed.actions[0]).toContain('hooks');
+    expect(existsSync(join(dir, 'CLAUDE.md'))).toBe(false);
+  });
+
+  it('skips when already configured', async () => {
+    const ctx = createMockCtx();
+
+    // First run: creates everything
+    await handleTool('setup_project_rules', { project_path: dir }, ctx);
+
+    // Second run: should skip both
+    const result = await handleTool('setup_project_rules', { project_path: dir }, ctx);
+    expect(result).not.toBeNull();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.actions).toBeDefined();
+    expect(parsed.actions.length).toBe(2);
+    expect(parsed.actions.every(a => a.includes('skipped'))).toBe(true);
+  });
+
+  it('merges hooks into existing settings.json', async () => {
+    const ctx = createMockCtx();
+
+    // Pre-create settings.json with existing config
+    mkdirSync(join(dir, '.claude'), { recursive: true });
+    writeFileSync(join(dir, '.claude', 'settings.json'), JSON.stringify({
+      someOtherSetting: true,
+      hooks: { PostToolUse: [{ matcher: 'other_tool', hooks: [{ type: 'command', command: 'echo hi' }] }] },
+    }), 'utf-8');
+
+    const result = await handleTool('setup_project_rules', { project_path: dir }, ctx);
+    expect(result).not.toBeNull();
+
+    const settings = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf-8'));
+    expect(settings.someOtherSetting).toBe(true);
+    expect(settings.hooks.PostToolUse.length).toBe(2);
+  });
+
+  it('overwrites with force=true and preserves file content', async () => {
+    const ctx = createMockCtx();
+
+    // First run
+    await handleTool('setup_project_rules', { project_path: dir }, ctx);
+
+    // Second run with force
+    const result = await handleTool('setup_project_rules', {
+      project_path: dir,
+      force: true,
+    }, ctx);
+    expect(result).not.toBeNull();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.actions).toBeDefined();
+    expect(parsed.actions.every(a => !a.includes('skipped'))).toBe(true);
+
+    // Verify settings.json still has valid structure with hook
+    const settings = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf-8'));
+    expect(settings.hooks.PostToolUse.length).toBe(1);
+    expect(settings.hooks.PostToolUse[0].matcher).toContain('edit_script');
+
+    // Verify CLAUDE.md still has rules section
+    const claudeMd = readFileSync(join(dir, 'CLAUDE.md'), 'utf-8');
+    expect(claudeMd).toContain('## Godot MCP Rules');
+    expect(claudeMd).toContain('validate_scripts');
+  });
+
+  it('setup_project_rules is non-readonly', () => {
+    expect(TOOL_META.setup_project_rules.readonly).toBe(false);
   });
 });

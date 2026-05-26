@@ -10,13 +10,7 @@ import { executeGdscript } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, parseGdscriptResult, wrapAssertionCode } from './shared.js';
 import { gdEscape } from './shared.js';
 import { batchValidateScripts, type BatchValidateResult } from './validation.js';
-import { sendToBridge, setBridgeProjectDir } from './game-bridge.js';
-
-// Read-only methods only — take_screenshot handled separately via bridge.screenshot
-const BRIDGE_QUERY_ALLOWLIST = new Set([
-  'ping', 'get_tree', 'find_nodes', 'get_node_properties',
-  'get_performance', 'get_viewport_info',
-]);
+import { sendToBridge, setBridgeProjectDir, BRIDGE_READ_ONLY_METHODS } from './game-bridge.js';
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
@@ -46,7 +40,8 @@ export function getToolDefinitions(): Tool[] {
               },
               queries: {
                 type: 'array',
-                description: 'Bridge queries to run after code execution',
+                maxItems: 10,
+                description: 'Bridge queries to run after code execution (max 10)',
                 items: {
                   type: 'object',
                   properties: {
@@ -189,11 +184,15 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             // Screenshot
             const screenshot = bridge.screenshot as Record<string, unknown> | undefined;
             if (screenshot) {
-              const ssPath = (screenshot.path as string) || 'user://mcp_dev_screenshot.png';
-              const ssResp = await sendToBridge('take_screenshot', { path: ssPath }, 10000);
-              bridgeResult.screenshot = ssResp.error
-                ? { success: false, error: ssResp.error.message }
-                : { success: true, ...(ssResp.result as Record<string, unknown>) };
+              const rawPath = (screenshot.path as string) || 'user://mcp_dev_screenshot.png';
+              if (!rawPath.startsWith('user://') && !rawPath.startsWith('res://')) {
+                bridgeResult.screenshot = { success: false, error: 'path must start with user:// or res://' };
+              } else {
+                const ssResp = await sendToBridge('take_screenshot', { path: rawPath }, 10000);
+                bridgeResult.screenshot = ssResp.error
+                  ? { success: false, error: ssResp.error.message }
+                  : { success: true, ...(ssResp.result as Record<string, unknown>) };
+              }
             }
 
             // Queries
@@ -202,8 +201,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
               const queryResults: Array<Record<string, unknown>> = [];
               for (const q of queries) {
                 const method = q.method as string;
-                if (!BRIDGE_QUERY_ALLOWLIST.has(method)) {
-                  queryResults.push({ method, success: false, error: `Method "${method}" not allowed in bridge queries. Allowed: ${[...BRIDGE_QUERY_ALLOWLIST].join(', ')}` });
+                if (!BRIDGE_READ_ONLY_METHODS.has(method)) {
+                  queryResults.push({ method, success: false, error: `Method "${method}" not allowed in bridge queries. Allowed: ${[...BRIDGE_READ_ONLY_METHODS].join(', ')}` });
                   continue;
                 }
                 const params = (q.params as Record<string, unknown>) || {};
