@@ -64,8 +64,12 @@ func setup(plugin: EditorPlugin) -> void:
 func cleanup() -> void:
 	if _sync_commands:
 		_sync_commands.cleanup()
+		_sync_commands.queue_free()
+		_sync_commands = null
 	if _recording_commands:
 		_recording_commands.cleanup()
+		_recording_commands.queue_free()
+		_recording_commands = null
 	if _animation_commands:
 		_animation_commands.queue_free()
 		_animation_commands = null

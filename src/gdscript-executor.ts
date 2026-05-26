@@ -177,78 +177,92 @@ function wrapSnippet(code: string, resultMarker = MARKER_RESULT): string {
     statementLines.push(line);
   }
 
-  const classBody = declarationLines.length > 0
-    ? '\n' + declarationLines.join('\n') + '\n'
-    : '';
+  // Build via array join — prevents JS template interpolation of user code
+  const scriptLines: string[] = [
+    'extends SceneTree',
+    '## MCP snippet mode \u2014 autoloads are NOT available unless load_autoloads=true',
+    '## Use Variant type for variables to avoid "Cannot infer type" errors',
+    '',
+    'var _mcp_outputs: Array = []',
+    'var _mcp_root: Node = null',
+    '',
+    'func _mcp_get_root() -> Node:',
+    '\tif _mcp_root != null:',
+    '\t\treturn _mcp_root',
+    '\tif root != null:',
+    '\t\t_mcp_root = root',
+    '\t\treturn _mcp_root',
+    '\tvar ml: Variant = Engine.get_main_loop()',
+    '\tif ml != null and ml is SceneTree and ml.root != null:',
+    '\t\t_mcp_root = ml.root',
+    '\t\treturn _mcp_root',
+    '\treturn null',
+    '',
+    'func _mcp_get_node(path: NodePath) -> Node:',
+    '\tvar _p: String = str(path)',
+    '\tif _p.begins_with("/"):',
+    '\t\t_p = _p.substr(1)',
+    '\tvar _r: Node = _mcp_get_root()',
+    '\tif _r == null:',
+    '\t\treturn null',
+    '\t# Fallback: root.get_node() may fail in headless _initialize()',
+    '\tvar _node: Node = _r.get_node_or_null(_p)',
+    '\tif _node != null:',
+    '\t\treturn _node',
+    '\t# Manual traversal for headless compatibility',
+    '\tvar _parts: PackedStringArray = _p.split("/")',
+    '\t_node = _r',
+    '\tfor _part in _parts:',
+    '\t\tif _part == "" or _part == "root":',
+    '\t\t\tcontinue',
+    '\t\tvar _found: bool = false',
+    '\t\tfor _ch in _node.get_children():',
+    '\t\t\tif _ch.name == _part:',
+    '\t\t\t\t_node = _ch',
+    '\t\t\t\t_found = true',
+    '\t\t\t\tbreak',
+    '\t\tif not _found:',
+    '\t\t\treturn null',
+    '\treturn _node',
+    'func _mcp_load_main_scene() -> void:',
+    '\tvar _r: Node = _mcp_get_root()',
+    '\tif _r == null:',
+    '\t\treturn',
+    '\tvar _sp: Variant = ProjectSettings.get_setting("application/run/main_scene")',
+    '\tif _sp != null and _sp != "":',
+    '\t\tvar _sr = load(_sp)',
+    '\t\tif _sr:',
+    '\t\t\t_r.add_child(_sr.instantiate())',
+    '',
+    'func _mcp_output(key: String, value: Variant) -> void:',
+    '\t_mcp_outputs.append({"key": key, "value": str(value)})',
+  ];
 
-  const initBody = statementLines.length > 0
-    ? '\n' + statementLines.map(l => '\t' + l).join('\n')
-    : '';
+  // User code — safe: array join does not interpolate dollar-brace or backticks
+  if (declarationLines.length > 0) {
+    scriptLines.push('');
+    scriptLines.push(...declarationLines);
+    scriptLines.push('');
+  }
 
-  return `extends SceneTree
-## MCP snippet mode — autoloads are NOT available unless load_autoloads=true
-## Use Variant type for variables to avoid "Cannot infer type" errors
+  scriptLines.push(
+    'func _initialize():',
+    '\t_mcp_load_main_scene()',
+  );
 
-var _mcp_outputs: Array = []
-var _mcp_root: Node = null
+  if (statementLines.length > 0) {
+    for (const l of statementLines) {
+      scriptLines.push('\t' + l);
+    }
+  }
 
-func _mcp_get_root() -> Node:
-\tif _mcp_root != null:
-\t\treturn _mcp_root
-\tif root != null:
-\t\t_mcp_root = root
-\t\treturn _mcp_root
-\tvar ml: Variant = Engine.get_main_loop()
-\tif ml != null and ml is SceneTree and ml.root != null:
-\t\t_mcp_root = ml.root
-\t\treturn _mcp_root
-\treturn null
+  scriptLines.push(
+    '\t\tprint("' + resultMarker + '" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))',
+    '\t\tif Engine.get_main_loop() == self:',
+    '\t\t\tquit(0)',
+  );
 
-func _mcp_get_node(path: NodePath) -> Node:
-\tvar _p: String = str(path)
-\tif _p.begins_with("/"):
-\t\t_p = _p.substr(1)
-\tvar _r: Node = _mcp_get_root()
-\tif _r == null:
-\t\treturn null
-\t# Fallback: root.get_node() may fail in headless _initialize()
-\tvar _node: Node = _r.get_node_or_null(_p)
-\tif _node != null:
-\t\treturn _node
-\t# Manual traversal for headless compatibility
-\tvar _parts: PackedStringArray = _p.split("/")
-\t_node = _r
-\tfor _part in _parts:
-\t\tif _part == "" or _part == "root":
-\t\t\tcontinue
-\t\tvar _found: bool = false
-\t\tfor _ch in _node.get_children():
-\t\t\tif _ch.name == _part:
-\t\t\t\t_node = _ch
-\t\t\t\t_found = true
-\t\t\t\tbreak
-\t\tif not _found:
-\t\t\treturn null
-\treturn _node
-func _mcp_load_main_scene() -> void:
-\tvar _r: Node = _mcp_get_root()
-\tif _r == null:
-\t\treturn
-\tvar _sp: Variant = ProjectSettings.get_setting("application/run/main_scene")
-\tif _sp != null and _sp != "":
-\t\tvar _sr = load(_sp)
-\t\tif _sr:
-\t\t\t_r.add_child(_sr.instantiate())
-
-func _mcp_output(key: String, value: Variant) -> void:
-\t_mcp_outputs.append({"key": key, "value": str(value)})
-${classBody}
-func _initialize():
-\t_mcp_load_main_scene()${initBody}
-\t\tprint("${resultMarker}" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
-\t\tif Engine.get_main_loop() == self:
-\t\t\tquit(0)
-`;
+  return scriptLines.join('\n') + '\n';
 }
 
 /**
@@ -296,30 +310,45 @@ function wrapSnippetAsNode(code: string, resultMarker = MARKER_RESULT): string {
     statementLines.push(line);
   }
 
-  const classBody = declarationLines.length > 0
-    ? '\n' + declarationLines.join('\n') + '\n'
-    : '';
+  // Rename user's _initialize to _mcp_user_init to avoid collision with our _initialize
+  for (let i = 0; i < declarationLines.length; i++) {
+    declarationLines[i] = declarationLines[i].replace(/func _initialize\(/g, "func _mcp_user_init(");
+  }
+  const hasUserInit = /func _mcp_user_init\(/.test(declarationLines.join('\n'));
 
-  const initBody = statementLines.length > 0
-    ? '\n' + statementLines.map(l => '\t' + l).join('\n')
-    : '';
+  // Build via array join — prevents JS template interpolation of user code
+  const nodeLines: string[] = [
+    'extends Node',
+    '## MCP autoload snippet mode \u2014 runs as Node child in loader scene',
+    '',
+    'var _mcp_outputs: Array = []',
+    '',
+    'func _mcp_output(key: String, value: Variant) -> void:',
+    '\t_mcp_outputs.append({"key": key, "value": str(value)})',
+  ];
 
-  const safeBody = classBody.replace(/func _initialize\(/g, "func _mcp_user_init(");
-  const hasUserInit = /func _mcp_user_init\(/.test(safeBody);
-  const userInitCall = hasUserInit ? "\n\t_mcp_user_init()" : "";
+  // User code — safe: array join does not interpolate dollar-brace or backticks
+  if (declarationLines.length > 0) {
+    nodeLines.push('');
+    nodeLines.push(...declarationLines);
+    nodeLines.push('');
+  }
 
-  return `extends Node
-## MCP autoload snippet mode — runs as Node child in loader scene
+  nodeLines.push('func _initialize() -> void:');
+  if (statementLines.length > 0) {
+    for (const l of statementLines) {
+      nodeLines.push('\t' + l);
+    }
+  }
+  if (hasUserInit) {
+    nodeLines.push('\t_mcp_user_init()');
+  }
+  nodeLines.push(
+    '\tprint("' + resultMarker + '" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))',
+    '\tget_tree().quit(0)',
+  );
 
-var _mcp_outputs: Array = []
-
-func _mcp_output(key: String, value: Variant) -> void:
-\t_mcp_outputs.append({"key": key, "value": str(value)})
-${safeBody}
-func _initialize() -> void:${initBody}${userInitCall}
-	print("${resultMarker}" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
-	get_tree().quit(0)
-`;
+  return nodeLines.join('\n') + '\n';
 }
 
 /**
@@ -637,13 +666,15 @@ function extractCompileError(raw: string): string {
  */
 function createAutoloadLoaderScene(loaderScriptPath: string): string {
   const loaderPathRes = loaderScriptPath.replace(/\\/g, '/').replace(/"/g, '\\"');
-  return `[gd_scene load_steps=2 format=3]
-
-[ext_resource type="Script" path="${loaderPathRes}" id="1"]
-
-[node name="MCPLoader" type="Node"]
-script = ExtResource("1")
-`;
+  return [
+    '[gd_scene load_steps=2 format=3]',
+    '',
+    '[ext_resource type="Script" path="' + loaderPathRes + '" id="1"]',
+    '',
+    '[node name="MCPLoader" type="Node"]',
+    'script = ExtResource("1")',
+    '',
+  ].join('\n');
 }
 
 /**
@@ -652,17 +683,18 @@ script = ExtResource("1")
  */
 function createAutoloadLoaderScript(userScriptPath: string): string {
   const pathRes = userScriptPath.replace(/\\/g, '/').replace(/"/g, '\\"');
-  return `extends Node
-
-func _ready() -> void:
-\tvar user_script: GDScript = load("${pathRes}") as GDScript
-\tif user_script == null:
-\t\tprint("___MCP_ERROR___" + JSON.stringify({"success": false, "error": "Failed to load user script"}))
-\t\tget_tree().quit(0)
-\t\treturn
-\tvar instance: Variant = user_script.new()
-\tif instance.has_method("_initialize"):
-\t\tinstance._initialize()
-\tget_tree().quit(0)
-`;
+  return [
+    'extends Node',
+    '',
+    'func _ready() -> void:',
+    '\tvar user_script: GDScript = load("' + pathRes + '") as GDScript',
+    '\tif user_script == null:',
+    '\t\tprint("___MCP_ERROR___" + JSON.stringify({"success": false, "error": "Failed to load user script"}))',
+    '\t\tget_tree().quit(0)',
+    '\t\treturn',
+    '\tvar instance: Variant = user_script.new()',
+    '\tif instance.has_method("_initialize"):',
+    '\t\tinstance._initialize()',
+    '\tget_tree().quit(0)',
+  ].join('\n') + '\n';
 }
