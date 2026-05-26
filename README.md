@@ -357,7 +357,7 @@ setup_project_rules(project_path="你的项目路径")
 
 | 工具 | 说明 |
 |------|------|
-| `dev_loop` | 开发循环：执行 GDScript → 验证 → 捕获输出，一步完成 |
+| `dev_loop` | 开发循环：执行 GDScript → 验证 → 捕获输出，支持 save_state 文件即记忆 |
 | `scene_snapshot` | 场景树快照，用于前后对比检测变更 |
 | `batch_validate` | 批量验证多个 GDScript 文件 |
 
@@ -438,7 +438,14 @@ setup_project_rules(project_path="你的项目路径")
 
 | 工具 | 说明 |
 |------|------|
-| `verify_delivery` | 端到端交付验证：场景树完整性 + 脚本健康 + 性能 + 自定义断言 |
+| `verify_delivery` | 端到端交付验证：场景树完整性 + 脚本健康 + 性能 + 自定义断言 + GDD 标准合规 |
+
+### 游戏设计工具
+
+| 工具 | 说明 |
+|------|------|
+| `validate_gdd` | 验证游戏设计文档是否符合 8 章节标准（概述、玩家幻想、详细规则、公式、边界情况、依赖、调优旋钮、验收标准） |
+| `chain_verify` | Chain-of-Verification 自我质疑引擎：对审查结论生成 5 个挑战性问题，防止盲点和过度自信 |
 
 ### 代码模板工具
 
