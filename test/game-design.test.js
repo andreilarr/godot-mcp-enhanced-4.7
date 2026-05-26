@@ -1,0 +1,125 @@
+import { expect, describe, it } from "vitest";
+import {
+  validateGDD,
+  GDD_REQUIRED_SECTIONS,
+  GDD_SECTION_HINTS,
+} from "../build/tools/game-design.js";
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Build a GDD markdown string from a partial map of section → body. */
+function buildGDD(sections) {
+  return Object.entries(sections)
+    .map(([name, body]) => `## ${name}\n\n${body}`)
+    .join("\n\n");
+}
+
+/** All 8 sections with sufficient body content. */
+function fullGDD(overrides = {}) {
+  const defaults = {
+    Overview:
+      "This system handles player combat interactions including damage calculation, hit detection, and feedback.",
+    "Player Fantasy":
+      "The player feels like a skilled warrior who reads enemy patterns and strikes with precision.",
+    "Detailed Rules":
+      "1. Player can attack with light or heavy strikes. 2. Each strike consumes stamina. 3. Blocking reduces incoming damage by a percentage.",
+    Formulas:
+      "damage = base_damage * attack_multiplier - target_defense * defense_modifier",
+    "Edge Cases":
+      "When stamina reaches zero, attacks deal minimum damage. When target defense exceeds attack, damage is clamped to zero.",
+    Dependencies:
+      "- Combat system reads from Stats system\n- UI system displays health bars\n- Animation system triggers hit reactions",
+    "Tuning Knobs":
+      "- base_damage: default 10, range [1..100]\n- attack_multiplier: default 1.0, range [0.1..5.0]\n- defense_modifier: default 0.5, range [0..1]",
+    "Acceptance Criteria":
+      "- [ ] Player can deal damage to enemies\n- [ ] Damage formula produces expected results\n- [ ] Stamina system prevents infinite attacks\n- [ ] Blocking reduces damage correctly",
+  };
+  return buildGDD({ ...defaults, ...overrides });
+}
+
+// ─── Tests ───────────────────────────────────────────────────────────────────
+
+describe("GDD Validator", () => {
+  it("should fail when required sections are missing", () => {
+    const gdd = buildGDD({
+      Overview: "A simple overview of the system.",
+      "Player Fantasy": "The player feels powerful and strategic.",
+    });
+
+    const result = validateGDD(gdd);
+
+    expect(result.passed).toBe(false);
+    expect(result.sections_found).toHaveLength(2);
+    expect(result.sections_missing).toHaveLength(6);
+    const errors = result.issues.filter((i) => i.severity === "error");
+    expect(errors).toHaveLength(6);
+    // Every error should be about a missing section
+    for (const err of errors) {
+      expect(err.message).toMatch(/Missing required section:/);
+      expect(err.suggestion).toBeTruthy();
+    }
+  });
+
+  it("should pass when all 8 sections are present", () => {
+    const result = validateGDD(fullGDD());
+
+    expect(result.passed).toBe(true);
+    expect(result.sections_found).toHaveLength(8);
+    expect(result.sections_missing).toHaveLength(0);
+    expect(result.issues).toHaveLength(0);
+  });
+
+  it("should warn when section body is too short (< 20 chars)", () => {
+    const result = validateGDD(
+      fullGDD({ Overview: "TODO" }),
+    );
+
+    expect(result.passed).toBe(true); // warnings don't fail
+    const shortWarnings = result.issues.filter(
+      (i) =>
+        i.severity === "warning" &&
+        i.location === "Overview" &&
+        i.message.includes("too short"),
+    );
+    expect(shortWarnings).toHaveLength(1);
+    expect(shortWarnings[0].suggestion).toContain("Overview");
+  });
+
+  it("should detect hardcoded numbers in formulas section", () => {
+    const result = validateGDD(
+      fullGDD({ Formulas: "damage = 10 + atk * 2.5" }),
+    );
+
+    const formulaWarnings = result.issues.filter(
+      (i) =>
+        i.severity === "warning" &&
+        i.location === "Formulas" &&
+        i.message.includes("Hardcoded"),
+    );
+    expect(formulaWarnings).toHaveLength(1);
+    expect(formulaWarnings[0].message).toContain("10");
+    expect(formulaWarnings[0].message).toContain("2.5");
+  });
+
+  it("should detect acceptance criteria without testable format", () => {
+    const result = validateGDD({
+      // Pass raw string directly to test prose text
+    } instanceof Object
+      ? fullGDD({
+          "Acceptance Criteria":
+            "The system should work correctly and players should enjoy using it in most situations.",
+        })
+      : "");
+
+    const acWarnings = result.issues.filter(
+      (i) =>
+        i.severity === "warning" &&
+        i.location === "Acceptance Criteria",
+    );
+    expect(acWarnings.length).toBeGreaterThanOrEqual(1);
+    const hasBulletWarning = acWarnings.some((w) =>
+      w.message.includes("bullet list"),
+    );
+    expect(hasBulletWarning).toBe(true);
+  });
+});
