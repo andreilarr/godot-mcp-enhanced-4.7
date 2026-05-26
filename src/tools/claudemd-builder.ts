@@ -1,5 +1,5 @@
 // src/tools/claudemd-builder.ts
-import { readdirSync } from 'fs';
+import { existsSync } from 'fs';
 import { join } from 'path';
 import type { GodotConfig } from '../helpers.js';
 
@@ -10,11 +10,11 @@ export const SECTION_IDS = new Set([
   '## MCP 规则映射', '## Godot MCP Rules',
 ]);
 
-// MCP 章节的固定顺序
+// MCP 章节的固定顺序（含旧格式，确保幂等性检测一致）
 export const SECTION_ORDER: string[] = [
   '## 引擎版本', '## 渲染器', '## 项目关键路径', '## 主场景',
   '## Autoload', '## Input Map', '## 物理设置', '## 层级名称',
-  '## MCP 规则映射',
+  '## MCP 规则映射', '## Godot MCP Rules',
 ];
 
 // godot-mcp.md 固定模板内容
@@ -156,7 +156,7 @@ export function buildKeyPaths(projectDir: string): string | null {
   const existing: string[] = [];
   for (const { name, label } of KNOWN_DIRS) {
     try {
-      if (readdirSync(join(projectDir, name))) {
+      if (existsSync(join(projectDir, name))) {
         existing.push(`├── ${name}/ — ${label}`);
       }
     } catch { /* not found */ }
@@ -183,6 +183,9 @@ export function buildAutoloads(config: GodotConfig | null): string | null {
 
   return '| 名称 | 路径 |\n|------|------|\n' + rows.join('\n');
 }
+
+// Godot 引擎默认物理参数（4.x）
+const GODOT_DEFAULTS = { gravity3d: 9.8, gravity2d: 980, physicsFps: 60 };
 
 // ─── InputMap, Physics, LayerNames, McpMapping builders ────────────────────
 
@@ -216,13 +219,13 @@ export function buildPhysics(config: GodotConfig | null): string | null {
   const gravity2d = physics['2d/default_gravity'];
   const fps = physics['common/physics_fps'];
 
-  if (typeof gravity3d === 'number' && gravity3d !== 9.8) {
+  if (typeof gravity3d === 'number' && gravity3d !== GODOT_DEFAULTS.gravity3d) {
     lines.push(`- 3D 重力: ${gravity3d}`);
   }
-  if (typeof gravity2d === 'number' && gravity2d !== 980) {
+  if (typeof gravity2d === 'number' && gravity2d !== GODOT_DEFAULTS.gravity2d) {
     lines.push(`- 2D 重力: ${gravity2d}`);
   }
-  if (typeof fps === 'number' && fps !== 60) {
+  if (typeof fps === 'number' && fps !== GODOT_DEFAULTS.physicsFps) {
     lines.push(`- 物理 FPS: ${fps}`);
   }
 
@@ -301,7 +304,7 @@ function parseSections(content: string): { title: string; preSections: string; s
   let preSections = '';
   let firstSectionIdx = lines.length;
   for (let i = titleEndIdx; i < lines.length; i++) {
-    if (/^## /.test(lines[i])) {
+    if (/^## (?!#)/.test(lines[i])) {
       firstSectionIdx = i;
       break;
     }
@@ -314,7 +317,7 @@ function parseSections(content: string): { title: string; preSections: string; s
   let current: Section | null = null;
 
   for (let i = firstSectionIdx; i < lines.length; i++) {
-    const headerMatch = lines[i].match(/^##\s+(.*)/);
+    const headerMatch = lines[i].match(/^## (?!#)\s*(.*)/);
     if (headerMatch) {
       if (current) sections.push(current);
       const fullHeader = '## ' + headerMatch[1].trim();
@@ -353,8 +356,8 @@ export function mergeSections(existing: string, newSections: Array<[string, stri
     parts.push(`${header}\n${body}`);
   }
 
-  // User pre-section text
-  if (preSections) parts.push(preSections);
+  // User pre-section text（保留原始空白，空字符串代表 title 后无内容）
+  if (preSections !== '') parts.push(preSections);
 
   // User sections
   for (const s of userSections) {

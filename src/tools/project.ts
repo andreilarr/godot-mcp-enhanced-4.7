@@ -438,6 +438,7 @@ function replaceHookEntry(existing: ClaudeSettings, hookEntry: HookEntry): Claud
 function writeAtomic(filePath: string, content: string): void {
   if (process.platform === 'win32') {
     // Windows: renameSync fails if target is locked (VS Code, etc.)
+    // 非原子写入，低概率下进程崩溃可能留下部分写入的文件
     writeFileSync(filePath, content, 'utf-8');
     return;
   }
