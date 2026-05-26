@@ -66,6 +66,12 @@ func cleanup() -> void:
 		_sync_commands.cleanup()
 	if _recording_commands:
 		_recording_commands.cleanup()
+	if _animation_commands:
+		_animation_commands.queue_free()
+		_animation_commands = null
+	if _ui_commands:
+		_ui_commands.queue_free()
+		_ui_commands = null
 
 func handle(method: String, params: Dictionary, request_id: int) -> Dictionary:
 	match method:

@@ -125,10 +125,13 @@ function _ensureConnection(timeout: number): Promise<Socket> {
             clearTimeout(timer);
             _socket = sock;
             _socketAuthenticated = true;
-            // Detach per-request handlers — response handling moves to sendToBridge
+            // Detach per-auth handlers — response handling moves to sendToBridge
             sock.removeAllListeners('data');
             sock.removeAllListeners('error');
             sock.removeAllListeners('close');
+            // Register persistent monitors so a dead/lost connection is detected automatically
+            sock.on('close', () => { _invalidateSocket(); });
+            sock.on('error', () => { _invalidateSocket(); });
             resolve(sock);
             return;
           }
