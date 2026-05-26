@@ -45,7 +45,7 @@ export function getToolDefinitions(): Tool[] {
     {
       name: 'verify_delivery',
       description:
-        'End-to-end delivery verification tool. Four-dimension checks: scene tree integrity, script robustness, performance/resource health, and custom behavior assertions. ' +
+        'End-to-end delivery verification tool. Multi-dimension checks: scene tree integrity, script robustness, performance/resource health, custom behavior assertions, and GDD standards compliance. ' +
         'Returns a structured report with clear pass/fail per dimension. scope controls scanning range, checks controls which dimensions to run.',
       inputSchema: {
         type: 'object' as const,
@@ -77,6 +77,15 @@ export function getToolDefinitions(): Tool[] {
                   },
                   required: ['description', 'gdscript'],
                 },
+              },
+              gdd_standards: {
+                type: 'boolean',
+                description: 'Check GDD documents against 8-section standard (requires design/ directory)',
+              },
+              gdd_dirs: {
+                type: 'array',
+                description: 'Directories to scan for GDD .md files (default: ["design/gdd"])',
+                items: { type: 'string' },
               },
             },
           },
@@ -448,6 +457,70 @@ func _initialize():
       report.assertions = { passed: allPassed, results: assertionResults };
       dimensionResults.push({ dim: 'assertions', passed: allPassed });
     }
+  }
+
+  // ── Dimension 5: GDD standards ──
+  const effectiveGddStandards = checks.gdd_standards === true
+    || (checks.gdd_standards !== false && scope === 'full' && existsSync(join(projectPath, 'design')));
+
+  if (effectiveGddStandards) {
+    const { validateGDD } = await import('./game-design.js');
+    const gddDirs = (checks.gdd_dirs as string[]) || ['design/gdd'];
+    const gddIssues: Issue[] = [];
+    let gddFilesScanned = 0;
+
+    for (const gddDir of gddDirs) {
+      const fullDir = join(projectPath, gddDir);
+      if (!existsSync(fullDir)) {
+        gddIssues.push({
+          severity: 'warning',
+          location: gddDir,
+          message: `GDD directory not found: ${gddDir}`,
+          suggestion: 'Create design/gdd/ directory for game design documents',
+        });
+        continue;
+      }
+
+      // Collect .md files recursively (reuse existing SKIP_DIRS pattern)
+      function collectGddFiles(dir: string, prefix: string): string[] {
+        const result: string[] = [];
+        try {
+          for (const e of readdirSync(dir, { withFileTypes: true })) {
+            if (e.isDirectory() && !SKIP_DIRS.has(e.name)) {
+              result.push(...collectGddFiles(join(dir, e.name), `${prefix}${e.name}/`));
+            } else if (e.name.endsWith('.md')) {
+              result.push(`${prefix}${e.name}`);
+            }
+          }
+        } catch { /* ignore */ }
+        return result;
+      }
+
+      const gddFiles = collectGddFiles(fullDir, '');
+      gddFilesScanned += gddFiles.length;
+
+      for (const gf of gddFiles) {
+        const content = safeReadFile(join(fullDir, gf));
+        if (!content) continue;
+        const validation = validateGDD(content);
+        for (const issue of validation.issues) {
+          gddIssues.push({
+            severity: issue.severity,
+            location: `${gddDir}/${gf}:${issue.location}`,
+            message: issue.message,
+            suggestion: issue.suggestion,
+          });
+        }
+      }
+    }
+
+    const gddPassed = !hasErrors(gddIssues);
+    report.gdd_standards = {
+      passed: gddPassed,
+      files_scanned: gddFilesScanned,
+      issues: gddIssues,
+    };
+    dimensionResults.push({ dim: 'gdd_standards', passed: gddPassed });
   }
 
   // ── Summary ──
