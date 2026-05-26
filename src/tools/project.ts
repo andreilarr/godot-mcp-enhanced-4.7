@@ -4,7 +4,12 @@ import { randomUUID } from 'crypto';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { validatePath, resolveWithinRoot } from '../helpers.js';
+import {
+  buildEngineVersion, buildRenderer, buildKeyPaths, buildMainScene,
+  buildAutoloads, buildInputMap, buildPhysics, buildLayerNames, buildMcpMapping,
+  mergeSections, SECTION_ORDER, GODOT_MCP_RULES,
+} from './claudemd-builder.js';
+import { validatePath, resolveWithinRoot, type GodotConfig } from '../helpers.js';
 
 const TOOL_NAMES = [
   'list_projects',
@@ -321,35 +326,75 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       // ── CLAUDE.md rules ──
       if (doClaudeMd) {
         const claudeMdPath = join(p, 'CLAUDE.md');
-        const rules = [
-          '',
-          '## Godot MCP Rules',
-          '- After every edit_script or write_script call, immediately run validate_scripts on the modified file. If validation fails, roll back the change.',
-          '- Before committing a release version bump, run verify_delivery with scope="full". All dimensions must report no errors.',
+
+        // Parse project.godot for metadata
+        const cfgPath = join(p, 'project.godot');
+        let config: GodotConfig | null = null;
+        try {
+          const cfgContent = readFileSync(cfgPath, 'utf-8');
+          config = ctx.parseGodotConfig(cfgContent) as GodotConfig;
+        } catch {
+          actions.push('CLAUDE.md: warning — project.godot parse failed, using minimal rules');
+        }
+
+        // Build sections
+        const sections: Array<[string, string]> = [];
+        const builders: Array<[string, () => string | null]> = [
+          ['## 引擎版本', () => buildEngineVersion(config)],
+          ['## 渲染器', () => buildRenderer(config)],
+          ['## 项目关键路径', () => buildKeyPaths(p)],
+          ['## 主场景', () => buildMainScene(config)],
+          ['## Autoload', () => buildAutoloads(config)],
+          ['## Input Map', () => buildInputMap(config)],
+          ['## 物理设置', () => buildPhysics(config)],
+          ['## 层级名称', () => buildLayerNames(config)],
+          ['## MCP 规则映射', () => buildMcpMapping()],
         ];
 
+        for (const [header, builder] of builders) {
+          const body = builder();
+          if (body !== null) {
+            sections.push([header, body]);
+          }
+        }
+
         if (existsSync(claudeMdPath)) {
-          const existing = readFileSync(claudeMdPath, 'utf-8');
-          if (existing.includes('## Godot MCP Rules') && !force) {
-            actions.push('CLAUDE.md: skipped (rules already present, use force=true to overwrite)');
-          } else if (existing.includes('## Godot MCP Rules') && force) {
-            const lines = existing.split('\n');
-            const startIdx = lines.findIndex(l => l.trim() === '## Godot MCP Rules');
-            let endIdx = lines.length;
-            for (let i = startIdx + 1; i < lines.length; i++) {
-              if (/^## /.test(lines[i])) { endIdx = i; break; }
+          if (!force) {
+            // Check if MCP sections already present (idempotency)
+            const existing = readFileSync(claudeMdPath, 'utf-8');
+            const hasMcpSections = SECTION_ORDER.some(h => existing.includes(h));
+            if (hasMcpSections) {
+              actions.push('CLAUDE.md: skipped (already configured, use force=true to update)');
+            } else {
+              const merged = mergeSections(existing, sections);
+              writeAtomic(claudeMdPath, merged);
+              actions.push('CLAUDE.md: merged new sections into existing file');
             }
-            const newBlock = rules.slice(1).join('\n');
-            lines.splice(startIdx, endIdx - startIdx, newBlock);
-            writeAtomic(claudeMdPath, lines.join('\n') + '\n');
-            actions.push('CLAUDE.md: updated rules (force)');
           } else {
-            writeAtomic(claudeMdPath, existing + rules.join('\n') + '\n');
-            actions.push('CLAUDE.md: appended rules');
+            // force: still merge (preserves user sections) but skip idempotency check
+            const existing = readFileSync(claudeMdPath, 'utf-8');
+            const merged = mergeSections(existing, sections);
+            writeAtomic(claudeMdPath, merged);
+            actions.push('CLAUDE.md: updated (force)');
           }
         } else {
-          writeAtomic(claudeMdPath, '# Godot Project\n' + rules.join('\n') + '\n');
-          actions.push('CLAUDE.md: created with rules');
+          const content = sections.map(([h, b]) => `${h}\n${b}`).join('\n\n') + '\n';
+          const projectName = config
+            ? (config.application as Record<string, unknown>)?.['config/name'] || basename(p)
+            : basename(p);
+          writeAtomic(claudeMdPath, `# ${projectName}\n\n${content}`);
+          actions.push('CLAUDE.md: created with project metadata');
+        }
+
+        // ── rules file ──
+        const rulesDir = join(p, '.claude', 'rules');
+        const rulesPath = join(rulesDir, 'godot-mcp.md');
+        if (!existsSync(rulesPath)) {
+          mkdirSync(rulesDir, { recursive: true });
+          writeAtomic(rulesPath, GODOT_MCP_RULES);
+          actions.push('rules: created .claude/rules/godot-mcp.md');
+        } else if (force) {
+          actions.push('rules: skipped (file exists, will not overwrite user modifications)');
         }
       }
 
