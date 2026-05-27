@@ -61,6 +61,13 @@ export function isProcessBusy(): boolean {
   return _processBusy;
 }
 
+/** Atomically acquire the process slot. Returns true if acquired, false if busy. */
+export function acquireProcessSlot(): boolean {
+  if (_processBusy) return false;
+  _processBusy = true;
+  return true;
+}
+
 export function setProcessBusy(busy: boolean): void {
   _processBusy = busy;
 }

@@ -21,6 +21,7 @@ import {
   killProcess,
   isProcessBusy,
   setProcessBusy,
+  acquireProcessSlot,
 } from '../src/core/process-state.js';
 
 function makeMockProc({ killed = false, pid = 12345 } = {}) {
@@ -277,5 +278,31 @@ describe('busy guard (C-03)', () => {
     setProcessBusy(true);
     resetState();
     expect(isProcessBusy()).toBe(false);
+  });
+});
+
+// ─── acquireProcessSlot (C-TYP-02 TOCTOU fix) ────────────────────────────────
+
+describe('acquireProcessSlot', () => {
+  it('returns true and sets busy when slot is free', () => {
+    expect(isProcessBusy()).toBe(false);
+    expect(acquireProcessSlot()).toBe(true);
+    expect(isProcessBusy()).toBe(true);
+  });
+
+  it('returns false when already busy', () => {
+    setProcessBusy(true);
+    expect(acquireProcessSlot()).toBe(false);
+  });
+
+  it('is atomic: double acquire fails', () => {
+    expect(acquireProcessSlot()).toBe(true);
+    expect(acquireProcessSlot()).toBe(false);
+  });
+
+  it('allows re-acquire after release', () => {
+    expect(acquireProcessSlot()).toBe(true);
+    setProcessBusy(false);
+    expect(acquireProcessSlot()).toBe(true);
   });
 });
