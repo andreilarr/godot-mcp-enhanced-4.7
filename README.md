@@ -101,6 +101,17 @@ read_scene/read_script → 理解结构 → write_script → run_and_verify
 → validate_project → batch_add_nodes → import_resources → 验证通过
 ```
 
+## 安全边界
+
+本工具在受信任的本地开发环境中运行，具有以下安全特性：
+
+- **GDScript 动态执行**：`execute_gdscript` 等工具会在本地 Godot 进程中执行任意 GDScript 代码。GDScript 拥有完整的系统访问权限（文件读写、网络请求、进程创建）。**仅用于受信任的本地开发环境，不可暴露到不可信的远程连接。**
+- **路径白名单**：通过 `ALLOWED_PROJECT_PATHS` 环境变量限制可访问的项目路径。未配置时会在日志中打印 WARNING。
+- **确认令牌**：对危险操作（如删除节点）要求显式确认，防止 AI 误操作。
+- **输出标记防伪造**：每次执行使用随机生成的标记字符串，防止 GDScript 代码伪造 MCP 输出。
+
+**仅限本地使用**：本工具设计为 AI 与开发者在同一台机器上协作使用，不提供任何远程访问认证或加密机制。
+
 ## 安装
 
 ```bash
@@ -580,6 +591,7 @@ MIT
 
 | 版本 | 日期 | 要点 |
 |------|------|------|
+| **v0.15.0** | 2026-05-27 | 6 代理并行审查（14 CRITICAL 修复）+ deny-by-default 安全 + Bridge 录制 + ESLint + 1509 测试 |
 | **v0.14.0** | 2026-05-24 | 7 轴全维度审查（8 CRITICAL 修复）+ IK 框架 MVP + Vitest 迁移 1257 测试 |
 | **v0.13.0** | 2026-05-23 | Bridge 安全加固 20 项 + requestId 取模 + CSS Grid + EditorConnection 重连上限 |
 | **v0.12.0** | 2026-05-23 | 迭代 URL 解码防路径遍历 + verify_delivery 4 维度验证 + dev_loop acceptance |
