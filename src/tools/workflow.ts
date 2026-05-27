@@ -256,7 +256,10 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
 
       // ── Bridge step: connect to running game for screenshot/query ──
-      const bridge = args.bridge as Record<string, unknown> | undefined;
+      const rawBridge = args.bridge;
+      const bridge = (rawBridge && typeof rawBridge === 'object' && !Array.isArray(rawBridge))
+        ? rawBridge as Record<string, unknown>
+        : undefined;
       if (bridge) {
         if (projectPath) {
           setBridgeProjectDir(projectPath);
@@ -319,7 +322,10 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
 
       // ── Acceptance assertions (execute individually for isolation) ──
-      const acceptance = args.acceptance as Record<string, unknown> | undefined;
+      const rawAcceptance = args.acceptance;
+      const acceptance = (rawAcceptance && typeof rawAcceptance === 'object' && !Array.isArray(rawAcceptance))
+        ? rawAcceptance as Record<string, unknown>
+        : undefined;
       if (acceptance) {
         const assertionList = (acceptance.assertions as Array<Record<string, string>>) ?? [];
         if (assertionList.length > 0) {

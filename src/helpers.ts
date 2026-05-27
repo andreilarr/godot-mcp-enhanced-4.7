@@ -158,7 +158,8 @@ export async function checkVersionMismatch(projectPath: string, godotBin: string
       return `[WARNING] Version mismatch: project.godot expects Godot ${projectVersion}, but binary is ${binVersion} (${binMajorMinor}). Errors may be inaccurate.`;
     }
     return null;
-  } catch {
+  } catch (err) {
+    console.debug('[helpers] checkGodotVersion failed:', err);
     return null;
   }
 }

@@ -202,8 +202,8 @@ export class EditorConnection {
     if (!this.ws || !this.connected) throw new Error('Not connected');
     try {
       this.ws.send(JSON.stringify({ jsonrpc: '2.0', method, params }));
-    } catch {
-      // best effort — notification has no response
+    } catch (err) {
+      console.debug('[EditorConnection] notify send failed:', err);
     }
   }
 
@@ -299,8 +299,8 @@ export class EditorConnection {
       try {
         await this.connect();
         console.error('[EditorConnection] Reconnected');
-      } catch {
-        // close handler will schedule next reconnect
+      } catch (err) {
+        console.debug('[EditorConnection] reconnect failed:', err);
       }
     }, delay);
   }

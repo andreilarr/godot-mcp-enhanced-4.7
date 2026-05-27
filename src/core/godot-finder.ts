@@ -33,7 +33,8 @@ async function validateGodotBinary(candidatePath: string): Promise<boolean> {
   try {
     const { stdout } = await execFileAsync(candidatePath, ['--version'], { encoding: 'utf-8', timeout: 5000 });
     return stdout.trim().toLowerCase().includes('godot') || /^\d+\.\d+/.test(stdout.trim());
-  } catch {
+  } catch (err) {
+    console.debug('[godot-finder] validateGodotBinary failed for', candidatePath, err);
     return false;
   }
 }
@@ -79,7 +80,7 @@ export async function findGodot(): Promise<string> {
       godotPath = 'godot';
       return godotPath;
     }
-  } catch { tried.push('godot (PATH)'); }
+  } catch (err) { console.debug('[godot-finder] PATH godot failed:', err); tried.push('godot (PATH)'); }
 
   // 3. Platform-specific search
   if (process.platform === 'win32') {

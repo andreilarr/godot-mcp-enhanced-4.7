@@ -253,7 +253,7 @@ export async function handleTool(
     switch (name) {
       case 'ik_modifier_create': {
         const ikType = args.type as string;
-        if (!IK_TYPE_WHITELIST.includes(ikType as any)) {
+        if (!(IK_TYPE_WHITELIST as readonly string[]).includes(ikType)) {
           return opsErrorResult(ERROR_CODES.INVALID_TYPE,
             `Invalid IK type: "${ikType}". Must be one of: ${IK_TYPE_WHITELIST.join(', ')}`);
         }
@@ -279,7 +279,7 @@ export async function handleTool(
           return opsErrorResult(ERROR_CODES.INVALID_PROPERTY, 'properties must be an object');
         }
         for (const key of Object.keys(props)) {
-          if (!IK_SETTABLE_PROPS.includes(key as any)) {
+          if (!(IK_SETTABLE_PROPS as readonly string[]).includes(key)) {
             return opsErrorResult(ERROR_CODES.INVALID_PROPERTY,
               `Unknown property: "${key}". Allowed: ${IK_SETTABLE_PROPS.join(', ')}`);
           }

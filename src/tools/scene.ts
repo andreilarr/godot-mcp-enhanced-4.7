@@ -828,7 +828,11 @@ async function handleInstanceScene(args: Record<string, unknown>, ctx: ToolConte
   const nodeName = args.node_name ? String(args.node_name) : '';
 
   // 属性覆写中排除危险属性
-  const properties = (args.properties as Record<string, unknown>) || {};
+  const rawProps = args.properties;
+  if (rawProps !== undefined && rawProps !== null && (typeof rawProps !== 'object' || Array.isArray(rawProps))) {
+    return opsErrorResult('INVALID_PARAMS', 'properties must be an object');
+  }
+  const properties = (rawProps as Record<string, unknown>) || {};
   const safeProps = Object.entries(properties).filter(([k]) => !BLOCKED_PROPS.has(k));
 
   let propLines = '';

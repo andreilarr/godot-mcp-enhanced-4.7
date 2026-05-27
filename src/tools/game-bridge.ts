@@ -492,7 +492,10 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         if (!allowed.has(method)) {
           return textResult(`Error: Unknown method "${method}". Supported: ${[...allowed].join(', ')}`);
         }
-        const params = (args.params as Record<string, unknown>) || {};
+        const rawParams = args.params;
+        const params = (rawParams && typeof rawParams === 'object' && !Array.isArray(rawParams))
+          ? rawParams as Record<string, unknown>
+          : {};
         const rawTimeout = (args.timeout as number) || DEFAULT_TIMEOUT;
         const timeout = Math.min(rawTimeout, 60000);
         const response = await sendToBridge(method, params, timeout);

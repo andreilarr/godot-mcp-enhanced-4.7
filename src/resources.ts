@@ -429,7 +429,7 @@ function scanForResources(projectPath: string, relativeDir: string, resources: M
   let entries;
   try {
     entries = readdirSync(dir, { withFileTypes: true });
-  } catch { return; }
+  } catch (err) { console.debug('[resources] scanDirectory failed for', dir, err); return; }
 
   for (const entry of entries) {
     if (resources.length >= MAX_RESOURCES) return;

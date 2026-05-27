@@ -14,7 +14,8 @@ export function forceKillTree(proc: ChildProcess): void {
     try {
       const child = spawn('taskkill', ['/F', '/T', '/PID', String(proc.pid)], { stdio: 'ignore' });
       child.on('error', () => { proc.kill(); });
-    } catch {
+    } catch (err) {
+      console.debug('[process-state] taskkill failed, falling back to proc.kill:', err);
       proc.kill();
     }
   } else {
