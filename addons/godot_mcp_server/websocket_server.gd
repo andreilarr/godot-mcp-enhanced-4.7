@@ -139,9 +139,11 @@ func _process(delta: float) -> void:
 		match peer.get_ready_state():
 			WebSocketPeer.STATE_OPEN:
 				_heartbeat.tick(delta, peer)
-				while peer.get_available_packet_count() > 0:
+				var _pkt_count := 0
+				while peer.get_available_packet_count() > 0 and _pkt_count < 50:
 					var text = peer.get_packet().get_string_from_utf8()
 					_handle_message(text, peer)
+					_pkt_count += 1
 					_heartbeat.reset_activity(peer.get_instance_id())
 			WebSocketPeer.STATE_CLOSED:
 				to_remove.append(i)

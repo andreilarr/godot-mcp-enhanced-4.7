@@ -89,6 +89,8 @@ func cleanup() -> void:
 		_export_commands.queue_free()
 		_export_commands = null
 	if _particle_commands:
+		if _particle_commands.has_method("cleanup"):
+			_particle_commands.cleanup()
 		_particle_commands.queue_free()
 		_particle_commands = null
 	if _nav_commands:

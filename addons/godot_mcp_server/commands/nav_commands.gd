@@ -30,10 +30,11 @@ func handle_nav_create_region(params: Dictionary, request_id: int) -> Dictionary
 	mesh.geometry_parsed_collision_mask = 0xFFFFFFFF
 	nav.navigation_mesh = mesh
 
+	var bake_result: bool = false
 	if params.get("bake", false):
-		nav.bake_navigation_mesh()
+		bake_result = nav.bake_navigation_mesh()
 
-	return {"result": {"node_path": str(nav.get_path()), "type": "NavigationRegion3D", "bake_requested": true}}
+	return {"result": {"node_path": str(nav.get_path()), "type": "NavigationRegion3D", "baked": bake_result}}
 
 func handle_nav_bake_mesh(params: Dictionary) -> Dictionary:
 	var root = _get_edited_scene_root()

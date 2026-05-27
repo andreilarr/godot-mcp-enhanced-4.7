@@ -545,7 +545,7 @@ func _is_blocked_property(prop: String) -> bool:
 		return true
 	if "." in prop:
 		for segment in prop.split("."):
-			if segment.begins_with("_") or segment in BLOCKED_PROPERTIES:
+			if segment == "" or segment.begins_with("_") or segment in BLOCKED_PROPERTIES:
 				return true
 	if ":" in prop or "/" in prop:
 		return true
