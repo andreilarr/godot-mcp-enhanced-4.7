@@ -33,9 +33,7 @@ function genCreateRegionScript(
   bake: boolean,
 ): string {
   const bakeBlock = bake
-    ? `\tvar bake_result = _nav.bake_navigation_mesh()
-\tif not bake_result:
-\t\t_mcp_output("warning", "Navigation mesh bake returned false — scene may lack geometry")`
+    ? `\t_nav.bake_navigation_mesh()`
     : '';
 
   return `${SCENE_TREE_HEADER}
@@ -75,10 +73,9 @@ func _initialize():
 \t\t_mcp_output("error", "Node is not a NavigationRegion3D: ${gdEscape(nodePath)}")
 \t\t_mcp_done()
 \t\treturn
-\tvar bake_result = _nav.bake_navigation_mesh()
-\tif not bake_result:
-\t\t_mcp_output("warning", "Navigation mesh bake returned false — scene may lack geometry")
-\t_mcp_output("baked", {"node": "${gdEscape(nodePath)}", "success": bake_result})
+\t_nav.bake_navigation_mesh()
+\tvar _bake_ok = _nav.navigation_mesh != null
+\t_mcp_output("baked", {"node": "${gdEscape(nodePath)}", "success": _bake_ok})
 \t_mcp_done()
 `;
 }
