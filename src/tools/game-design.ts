@@ -266,7 +266,7 @@ export function chainOfVerification(verdict: string, context: string): CoVResult
 import { readFileSync } from "fs";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolContext, ToolResult } from "../types.js";
-import { validatePath, resolveWithinRoot } from "../helpers.js";
+import { requireProjectPath, resolveWithinRoot } from "../helpers.js";
 
 export function getToolDefinitions(): Tool[] {
   return [
@@ -319,7 +319,7 @@ export async function handleTool(
 ): Promise<ToolResult | null> {
   switch (name) {
     case "validate_gdd": {
-      const projectPath = validatePath(args.project_path as string);
+      const projectPath = requireProjectPath(args);
       const fullPath = resolveWithinRoot(projectPath, args.gdd_path as string);
       let content: string;
       try {

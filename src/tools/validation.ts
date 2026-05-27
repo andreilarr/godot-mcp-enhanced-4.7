@@ -8,7 +8,7 @@ import { promisify } from 'util';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { validatePath, resolveWithinRoot, parseMcpScriptOutput, normalizeUserProjectPath, checkVersionMismatch, buildSafeEnv } from '../helpers.js';
+import { requireProjectPath, resolveWithinRoot, parseMcpScriptOutput, normalizeUserProjectPath, checkVersionMismatch, buildSafeEnv } from '../helpers.js';
 import { analyzeOutput, type AnalysisResult } from '../error-analyzer.js';
 import { forceKillTree } from '../core/process-state.js';
 
@@ -515,7 +515,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
   switch (name) {
     case 'run_and_verify': {
-      const projectPath = validatePath(args.project_path as string);
+      const projectPath = requireProjectPath(args);
       const timeout = (args.timeout as number) || 20;
       const scene = args.scene as string | undefined;
       const captureTree = args.capture_tree === true;
@@ -596,7 +596,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'validate_project': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const checkResources = args.check_resources !== false;
       const checkScripts = args.check_scripts !== false;
       const checkScenes = args.check_scenes !== false;
@@ -737,7 +737,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'validate_scripts': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const perScriptTimeout = (args.timeout as number) || 10;
       const godot = await ctx.findGodot();
 
@@ -836,7 +836,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'import_resources': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const directoryRaw = args.directory as string;
       const normalizedDir = normalizeUserProjectPath(directoryRaw);
 

@@ -3,7 +3,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { appendOutput, clearOutputBuffer, killProcess, setProcessBusy, acquireProcessSlot } from '../core/process-state.js';
-import { validatePath, checkVersionMismatch } from '../helpers.js';
+import { requireProjectPath, checkVersionMismatch, buildSafeEnv } from '../helpers.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
 
@@ -103,12 +103,12 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
   switch (name) {
     case 'launch_editor': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       if (!existsSync(join(p, 'project.godot'))) {
         return textResult(`Error: Not a Godot project (no project.godot found): ${p}`);
       }
       const godot = await ctx.findGodot();
-      const child = spawn(godot, ['--editor', '--path', p], { detached: true, stdio: 'ignore' });
+      const child = spawn(godot, ['--editor', '--path', p], { detached: true, stdio: 'ignore', env: buildSafeEnv() });
       child.on('error', (err) => {
         console.error(`[runtime] Failed to launch editor: ${err.message}`);
       });
@@ -117,7 +117,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'run_project': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       if (!existsSync(join(p, 'project.godot'))) {
         return textResult(`Error: Not a Godot project (no project.godot found): ${p}`);
       }
@@ -146,6 +146,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       const proc = spawn(godot, ['--path', p, '--debug'], {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: buildSafeEnv(),
       });
 
       proc.stdout?.on('data', (data: Buffer) => {
@@ -223,7 +224,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'run_tests': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       if (!existsSync(join(p, 'project.godot'))) {
         return textResult(`Error: Not a Godot project (no project.godot found): ${p}`);
       }
@@ -236,7 +237,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           '--script', 'addons/gut/gut_cmdln.gd',
           '-gdir', testScript,
           '-gquit',
-        ], { stdio: ['pipe', 'pipe', 'pipe'] });
+        ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
 
         let out = '';
         proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
@@ -273,7 +274,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     case 'get_godot_version': {
       const godot = await ctx.findGodot();
       return new Promise((resolve) => {
-        const proc = spawn(godot, ['--version'], { stdio: ['pipe', 'pipe', 'pipe'] });
+        const proc = spawn(godot, ['--version'], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
         let out = '';
         proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
         proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });

@@ -26,6 +26,15 @@ function escapeTscnAttr(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
+/** Detect values that are Godot expressions or primitives and should NOT be quoted in .tscn. */
+const GODOT_LITERAL_RE = /^(true|false|null|-?\d+(\.\d+)?(e[+-]?\d+)?|0x[0-9a-fA-F]+|ExtResource\(|SubResource\(|NodePath\(|Vector2i?\(|Vector3i?\(|Vector4i?\(|AABB\(|Color\(|Plane\(|Projection\(|Rect2i?\(|Transform2D\(|Transform3D\(|Basis\(|Quaternion\(|Callable\(|Signal\(|StringName\(|Packed.*Array\(|Array\(|Dictionary\(|RID\(|Object\(|Resource\(|Variant\(|&")/;
+
+function formatTscnValue(value: string): string {
+  const escaped = escapeTscnValue(value);
+  if (GODOT_LITERAL_RE.test(value.trim())) return escaped;
+  return `"${escaped}"`;
+}
+
 /** Escape property values for safe embedding inside quoted .tscn values (e.g. `property = "value"`).
  *  Does NOT handle unquoted .tscn values or structural syntax. */
 function escapeTscnValue(value: string): string {
@@ -134,7 +143,7 @@ export function editNodeProperty(
   for (let i = nodeLine + 1; i <= end; i++) {
     const trimmed = lines[i].trim();
     if (trimmed.startsWith(propPrefix)) {
-      lines[i] = `${property} = ${escapeTscnValue(value)}`;
+      lines[i] = `${property} = ${formatTscnValue(value)}`;
       return { success: true, message: `Updated ${property} on ${nodePath}`, scene: lines.join('\n') };
     }
     // Also handle property:type = value format
@@ -142,7 +151,7 @@ export function editNodeProperty(
       const rest = trimmed.slice(trimmed.indexOf(':') + 1);
       const typeMatch = rest.match(/^(\w+)\s*=/);
       if (typeMatch) {
-        lines[i] = `${property}:${typeMatch[1]} = ${escapeTscnValue(value)}`;
+        lines[i] = `${property}:${typeMatch[1]} = ${formatTscnValue(value)}`;
         return { success: true, message: `Updated ${property} on ${nodePath}`, scene: lines.join('\n') };
       }
     }
@@ -155,7 +164,7 @@ export function editNodeProperty(
       insertAt = i + 1;
     }
   }
-  lines.splice(insertAt, 0, `${property} = ${escapeTscnValue(value)}`);
+  lines.splice(insertAt, 0, `${property} = ${formatTscnValue(value)}`);
 
   return { success: true, message: `Added ${property} = ${value} to ${nodePath}`, scene: lines.join('\n') };
 }

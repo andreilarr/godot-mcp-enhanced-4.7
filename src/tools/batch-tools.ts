@@ -3,7 +3,7 @@ import { existsSync, writeFileSync, readFileSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { validatePath, resolveWithinRoot, normalizeUserProjectPath, ensureDir } from '../helpers.js';
+import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath, ensureDir, buildSafeEnv } from '../helpers.js';
 import { analyzeOutput } from '../error-analyzer.js';
 import { batchValidateScripts } from './validation.js';
 import { lintGDScript, formatLintResults } from './gdscript-lint.js';
@@ -88,7 +88,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
   switch (name) {
     case 'batch_create_files': {
-      const projectPath = validatePath(args.project_path as string);
+      const projectPath = requireProjectPath(args);
       const files = args.files as Array<{ path: string; content: string; overwrite?: boolean }>;
       const doValidate = args.validate !== false;
 
@@ -163,7 +163,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'batch_run_verify': {
-      const projectPath = validatePath(args.project_path as string);
+      const projectPath = requireProjectPath(args);
       const scenes = args.scenes as string[];
       const timeout = Math.min((args.timeout as number) || 10, 60);
       const captureTree = args.capture_tree === true;
@@ -205,7 +205,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'diff_scenes': {
-      const projectPath = validatePath(args.project_path as string);
+      const projectPath = requireProjectPath(args);
       const sceneA = args.scene_a as string;
       const sceneB = args.scene_b as string;
       const ignoreProps = new Set((args.ignore_properties as string[]) || ['metadata/_edit_lock']);
@@ -303,6 +303,7 @@ function runSingleVerify(
     const sceneArg = `res://${scene.replace(/\\/g, '/')}`;
     const proc = spawn(godot, ['--headless', '--path', projectPath, sceneArg], {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: buildSafeEnv(),
     });
 
     proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });

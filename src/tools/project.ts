@@ -9,7 +9,7 @@ import {
   buildAutoloads, buildInputMap, buildPhysics, buildLayerNames, buildMcpMapping,
   mergeSections, SECTION_ORDER, GODOT_MCP_RULES,
 } from './claudemd-builder.js';
-import { validatePath, resolveWithinRoot, type GodotConfig } from '../helpers.js';
+import { validatePath, requireProjectPath, resolveWithinRoot, type GodotConfig } from '../helpers.js';
 
 const TOOL_NAMES = [
   'list_projects',
@@ -129,7 +129,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'get_project_info': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const cfgPath = join(p, 'project.godot');
       if (!existsSync(cfgPath)) return textResult(`No project.godot found at ${p}`);
 
@@ -161,7 +161,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'list_files': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const extensions = args.extensions as string[] | undefined;
       const subdir = args.subdirectory as string | undefined;
       const target = subdir ? resolveWithinRoot(p, subdir) : p;
@@ -189,7 +189,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'read_project_config': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const cfgPath = join(p, 'project.godot');
       if (!existsSync(cfgPath)) return textResult(`No project.godot found at ${p}`);
 
@@ -199,7 +199,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'create_project': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const projectName = (args.project_name as string) || basename(p);
       const renderer = (args.renderer as string) || 'forward_plus';
       const validRenderers = ['forward_plus', 'mobile', 'gl_compatibility'];
@@ -269,7 +269,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'setup_project_rules': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const doHooks = args.hooks !== false;
       const doClaudeMd = args.claude_md !== false;
       const force = args.force === true;

@@ -463,7 +463,7 @@ export async function handleTool(
 ): Promise<ToolResult | null> {
   if (name !== 'list_templates' && name !== 'apply_template') return null;
 
-  const projectPath = args.project_path ? validateProjectRoot(args.project_path as string) : undefined;
+  const projectPath = typeof args.project_path === 'string' && args.project_path ? validateProjectRoot(args.project_path) : undefined;
 
   if (name === 'list_templates') {
     const templates = getAllTemplates(projectPath);

@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync } from 
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { validatePath, resolveWithinRoot, normalizeUserProjectPath, ensureDir, parseMcpScriptOutput } from '../helpers.js';
+import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath, ensureDir, parseMcpScriptOutput, buildSafeEnv } from '../helpers.js';
 import { parseTscn, parseTscnSummary } from '../tscn-parser.js';
 import { findInstanceNode, detachInstance, nodePathToNameAndParent } from '../tscn-editor.js';
 import { executeGdscript } from '../gdscript-executor.js';
@@ -265,7 +265,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
   switch (name) {
     case 'read_scene': {
-      const sp = resolveWithinRoot(validatePath(args.project_path as string), normalizeUserProjectPath(args.scene_path as string));
+      const sp = resolveWithinRoot(requireProjectPath(args), normalizeUserProjectPath(args.scene_path as string));
       if (!existsSync(sp)) return textResult(`Scene file not found: ${sp}`);
 
       const content = readFileSync(sp, 'utf-8');
@@ -290,7 +290,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     case 'add_node':
     case 'save_scene':
     case 'load_sprite': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const godot = await ctx.findGodot();
 
       const params: Record<string, unknown> = {};
@@ -337,7 +337,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           '--headless', '--path', p,
           '--script', ctx.opsScript,
           name, JSON.stringify(params),
-        ], { stdio: ['pipe', 'pipe', 'pipe'] });
+        ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
 
         let out = '';
         let settled = false;
@@ -373,7 +373,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'quick_scene': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const sceneRelPath = normalizeUserProjectPath(args.scene_path as string);
       const scriptRelPath = args.script_path ? normalizeUserProjectPath(args.script_path as string) : undefined;
       const rootNodeType = (args.root_node_type as string) || 'Node2D';
@@ -453,7 +453,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
     case 'query_scene_tree': {
       if (!acquireProcessSlot()) return textResult('Error: another Godot process is running. Wait for it to finish.');
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const godot = await ctx.findGodot();
       const scriptsDir = dirname(ctx.opsScript);
       const treeScript = join(scriptsDir, 'query_scene_tree.gd');
@@ -475,7 +475,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           '--headless', '--path', p,
           '--script', treeScript,
           JSON.stringify(params),
-        ], { stdio: ['pipe', 'pipe', 'pipe'] });
+        ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
 
         proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
         proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
@@ -510,7 +510,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
     case 'inspect_node': {
       if (!acquireProcessSlot()) return textResult('Error: another Godot process is running. Wait for it to finish.');
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const godot = await ctx.findGodot();
       const scriptsDir = dirname(ctx.opsScript);
       const inspectScript = join(scriptsDir, 'inspect_node.gd');
@@ -535,7 +535,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           '--headless', '--path', p,
           '--script', inspectScript,
           JSON.stringify(params),
-        ], { stdio: ['pipe', 'pipe', 'pipe'] });
+        ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
 
         proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
         proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
@@ -569,7 +569,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'batch_add_nodes': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const scenePath = normalizeUserProjectPath(args.scene_path as string);
       const nodes = args.nodes as Array<{
         node_type: string;
@@ -609,7 +609,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             scene_path: scenePath,
             nodes: nodes,
           }),
-        ], { stdio: ['pipe', 'pipe', 'pipe'] });
+        ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
 
         let out = '';
         let settled = false;
@@ -645,7 +645,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'edit_node': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const scenePath = resolveWithinRoot(p, normalizeUserProjectPath(args.scene_path as string));
       const nodePath = normalizeNodePath(args.node_path as string);
       const properties = args.properties as Record<string, unknown>;
@@ -686,7 +686,7 @@ func _initialize():
     }
 
     case 'remove_node': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const scenePath = resolveWithinRoot(p, normalizeUserProjectPath(args.scene_path as string));
       const nodePath = normalizeNodePath(args.node_path as string);
 
@@ -816,7 +816,7 @@ async function handleInstanceScene(args: Record<string, unknown>, ctx: ToolConte
   if (!args.scene_path) return opsErrorResult('MISSING_PARAM', 'scene_path is required');
   if (!args.instance_path) return opsErrorResult('MISSING_PARAM', 'instance_path is required');
 
-  const p = validatePath(args.project_path as string);
+  const p = requireProjectPath(args);
   const scenePath = resolveWithinRoot(p, normalizeUserProjectPath(args.scene_path as string));
   const instancePath = String(args.instance_path);
 
@@ -915,7 +915,7 @@ async function handleSetInstanceProperty(args: Record<string, unknown>, ctx: Too
   if (!args.property) return opsErrorResult('MISSING_PARAM', 'property is required');
   if (args.value === undefined) return opsErrorResult('MISSING_PARAM', 'value is required');
 
-  const p = validatePath(args.project_path as string);
+  const p = requireProjectPath(args);
   const scenePath = resolveWithinRoot(p, normalizeUserProjectPath(args.scene_path as string));
   const nodePath = normalizeNodePath(args.node_path as string);
   const rawPropName = String(args.property);
@@ -982,7 +982,7 @@ function handleDetachInstance(args: Record<string, unknown>): ToolResult {
   if (!args.scene_path) return opsErrorResult('MISSING_PARAM', 'scene_path is required');
   if (!args.node_path) return opsErrorResult('MISSING_PARAM', 'node_path is required');
 
-  const p = validatePath(args.project_path as string);
+  const p = requireProjectPath(args);
   const sceneAbsPath = resolveWithinRoot(p, normalizeUserProjectPath(args.scene_path as string));
 
   if (!existsSync(sceneAbsPath)) {

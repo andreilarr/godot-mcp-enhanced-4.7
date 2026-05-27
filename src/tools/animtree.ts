@@ -1,6 +1,6 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
-import { validatePath } from '../helpers.js';
+import { requireProjectPath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { normalizeNodePath, gdEscape, ensureNumber, SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } from './shared.js';
 
@@ -388,7 +388,7 @@ export async function handleTool(
   if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
 
   try {
-    const projectPath = validatePath(args.project_path as string);
+    const projectPath = requireProjectPath(args);
     const godotPath = await ctx.findGodot();
 
     let code: string;

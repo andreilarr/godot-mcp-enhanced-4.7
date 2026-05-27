@@ -101,11 +101,10 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       return opsErrorResult('EDITOR_ONLY', `Tool "${name}" requires Editor mode. Set GODOT_MCP_MODE=editor and install the Godot plugin.`);
     }
 
-    const rawProjectPath = args.project_path as string;
-    if (!rawProjectPath || typeof rawProjectPath !== 'string') {
+    if (typeof args.project_path !== 'string' || !args.project_path) {
       return opsErrorResult('INVALID_PARAMS', 'project_path is required and must be a string');
     }
-    const projectPath = validatePath(rawProjectPath);
+    const projectPath = validatePath(args.project_path);
     const godot = await ctx.findGodot();
 
     switch (name) {

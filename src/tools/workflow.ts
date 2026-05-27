@@ -4,7 +4,7 @@ import { existsSync, writeFileSync, mkdirSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { validatePath, resolveWithinRoot } from '../helpers.js';
+import { requireProjectPath, resolveWithinRoot, buildSafeEnv } from '../helpers.js';
 import { forceKillTree } from '../core/process-state.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, parseGdscriptResult, wrapAssertionCode } from './shared.js';
@@ -207,7 +207,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
   switch (name) {
     case 'dev_loop': {
-      const projectPath = validatePath(args.project_path as string);
+      const projectPath = requireProjectPath(args);
       const code = args.code as string;
       const verify = args.verify === true;
       const timeout = (args.timeout as number) || 30;
@@ -384,7 +384,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'scene_snapshot': {
-      const projectPath = validatePath(args.project_path as string);
+      const projectPath = requireProjectPath(args);
       const scenePath = args.scene_path as string;
       const maxDepth = (args.max_depth as number) || 5;
       const godot = await ctx.findGodot();
@@ -432,7 +432,7 @@ func _snap(node: Node, max_depth: int, depth: int) -> Dictionary:
     }
 
     case 'batch_validate': {
-      const projectPath = validatePath(args.project_path as string);
+      const projectPath = requireProjectPath(args);
       const scripts = args.scripts as string[];
 
       if (!scripts || !Array.isArray(scripts) || scripts.length === 0) {
@@ -486,6 +486,7 @@ function runVerification(godot: string, projectPath: string): Promise<Record<str
     let out = '';
     const proc = spawn(godot, ['--headless', '--path', projectPath, '-e', '--quit'], {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: buildSafeEnv(),
     });
 
     proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });

@@ -78,6 +78,34 @@ export function ensureDir(p: string): void {
   }
 }
 
+/** Require a non-empty string from tool args. Throws descriptive error on missing/invalid. */
+export function requireString(args: Record<string, unknown>, key: string): string {
+  const v = args[key];
+  if (typeof v !== 'string' || v === '') {
+    throw new Error(`${key} must be a non-empty string, got: ${v === undefined ? 'undefined' : v === null ? 'null' : JSON.stringify(v)}`);
+  }
+  return v;
+}
+
+/** Require a finite number from tool args. Returns fallback if key is absent/undefined. */
+export function requireNumber(args: Record<string, unknown>, key: string, fallback?: number): number {
+  const v = args[key];
+  if (v === undefined || v === null) {
+    if (fallback !== undefined) return fallback;
+    throw new Error(`${key} is required and must be a number`);
+  }
+  const n = Number(v);
+  if (!Number.isFinite(n)) {
+    throw new Error(`${key} must be a finite number, got: ${JSON.stringify(v)}`);
+  }
+  return n;
+}
+
+/** Convenience: require and validate project_path in one call. */
+export function requireProjectPath(args: Record<string, unknown>): string {
+  return validatePath(requireString(args, 'project_path'));
+}
+
 export function normalizeUserProjectPath(input: string): string {
   const trimmed = String(input || '').trim();
   if (!trimmed) return '';

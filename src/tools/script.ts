@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, statSy
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { validatePath, resolveWithinRoot, ensureDir } from '../helpers.js';
+import { requireProjectPath, resolveWithinRoot, ensureDir } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { batchValidateScripts } from './validation.js';
 import { lintGDScript, formatLintResults } from './gdscript-lint.js';
@@ -236,7 +236,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
   switch (name) {
     case 'read_script': {
-      const sp = resolveWithinRoot(validatePath(args.project_path as string), args.script_path as string);
+      const sp = resolveWithinRoot(requireProjectPath(args), args.script_path as string);
       if (!existsSync(sp)) return textResult(`Script not found: ${sp}`);
 
       const content = readFileSync(sp, 'utf-8');
@@ -263,7 +263,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
     case 'write_script': {
       const scriptPath = args.script_path as string;
-      const sp = resolveWithinRoot(validatePath(args.project_path as string), scriptPath);
+      const sp = resolveWithinRoot(requireProjectPath(args), scriptPath);
       const content = args.content as string;
       const overwrite = args.overwrite === true; // default false
 
@@ -300,7 +300,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
     case 'edit_script': {
       const scriptPath = args.script_path as string;
-      const projectPath = validatePath(args.project_path as string);
+      const projectPath = requireProjectPath(args);
       const fullPath = resolveWithinRoot(projectPath, scriptPath);
 
       if (!existsSync(fullPath)) {
@@ -500,7 +500,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'generate_test': {
-      const projectPath = validatePath(args.project_path as string);
+      const projectPath = requireProjectPath(args);
       const scriptPath = args.script_path as string;
       if (!scriptPath) {
         return textResult('Error: script_path is required (e.g. "scripts/player.gd")');
@@ -590,7 +590,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'create_test_scene': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
 
       const gutDir = join(p, 'addons', 'gut');
       if (!existsSync(gutDir)) {
@@ -628,7 +628,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'execute_gdscript': {
-      const projectPath = validatePath(args.project_path as string);
+      const projectPath = requireProjectPath(args);
       const code = args.code as string;
       const timeout = validateTimeout(args.timeout);
       const loadAutoloads = (args.load_autoloads as boolean) || false;
@@ -646,7 +646,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'project_replace': {
-      const p = validatePath(args.project_path as string);
+      const p = requireProjectPath(args);
       const search = args.search as string;
       const replace = (args.replace as string) ?? '';
       const ALLOWED_EXTENSIONS = new Set(['.gd', '.tscn', '.tres', '.gdshader', '.cfg', '.txt', '.md', '.json', '.xml', '.yaml', '.yml', '.toml', '.csv']);

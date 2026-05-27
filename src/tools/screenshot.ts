@@ -4,7 +4,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { captureScreenshot } from '../screenshot.js';
-import { validatePath, resolveWithinRoot, normalizeUserProjectPath, allowOutsideProjectPaths, isPathInAllowedRoots } from '../helpers.js';
+import { validatePath, requireProjectPath, resolveWithinRoot, normalizeUserProjectPath, allowOutsideProjectPaths, isPathInAllowedRoots } from '../helpers.js';
 
 const TOOL_NAMES = ['capture_screenshot', 'analyze_screenshot'] as const;
 
@@ -51,7 +51,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
   switch (name) {
     case 'capture_screenshot': {
-      const projectPath = validatePath(args.project_path as string);
+      const projectPath = requireProjectPath(args);
       const scene = args.scene as string | undefined;
       const outputPathRaw = args.output_path as string | undefined;
       const normalizedOutput = normalizeUserProjectPath(outputPathRaw ?? '');

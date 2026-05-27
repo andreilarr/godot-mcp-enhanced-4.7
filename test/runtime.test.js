@@ -27,6 +27,8 @@ vi.mock('../src/core/process-state.js', () => ({
 
 vi.mock('../src/helpers.js', () => ({
   validatePath: vi.fn(p => p),
+  requireProjectPath: vi.fn(args => typeof args === 'string' ? args : args.project_path),
+  buildSafeEnv: vi.fn(() => process.env),
   checkVersionMismatch: vi.fn(async () => null),
 }));
 

@@ -6,7 +6,7 @@ import { execFileSync } from 'child_process';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { validatePath } from '../helpers.js';
+import { requireProjectPath } from '../helpers.js';
 
 const BRIDGE_PORT = 9081;
 const BRIDGE_HOST = 'localhost';
@@ -35,6 +35,11 @@ let _socket: Socket | null = null;
 let _socketAuthenticated = false;
 let _socketBuffer = '';
 let _connectionLock: Promise<Socket> | null = null;
+
+// Request serialization: ensures only one sendToBridge uses the socket at a time.
+// Without this, concurrent calls register overlapping 'data' handlers on the shared
+// socket, causing each handler to see partial/mixed response data.
+let _sendLock: Promise<unknown> = Promise.resolve();
 
 /** Find the bridge secret file — prefer project .godot dir, fallback to tmpdir. */
 function findBridgeSecretPath(): string {
@@ -196,7 +201,9 @@ export function setBridgeProjectDir(projectDir: string): void {
 }
 
 export function sendToBridge(method: string, params: Record<string, unknown> = {}, timeout = DEFAULT_TIMEOUT): Promise<BridgeResponse> {
-  return _ensureConnection(timeout).then(sock => {
+  // Serialize requests so only one uses the shared socket at a time.
+  // Each call chains onto _sendLock, preventing concurrent data handlers.
+  const run = () => _ensureConnection(timeout).then(sock => {
     return new Promise<BridgeResponse>((resolve, reject) => {
       const id = _nextRequestId++;
       let settled = false;
@@ -229,8 +236,6 @@ export function sendToBridge(method: string, params: Record<string, unknown> = {
             doResolve(resp);
             return;
           } catch {
-            // Skip non-JSON lines (debug output, status messages) instead of killing the connection.
-            // The timeout above ensures we still fail if no valid response ever arrives.
             continue;
           }
         }
@@ -253,13 +258,18 @@ export function sendToBridge(method: string, params: Record<string, unknown> = {
       sock.write(JSON.stringify({ id, method, params }) + '\n');
     });
   }).catch(err => {
-    // Connection-level errors — map to user-friendly messages
     const msg = (err as Error).message;
     if (msg.includes('ECONNREFUSED')) {
       return Promise.reject(new Error('Cannot connect to MCP Bridge. Is the game running with the bridge autoload installed?'));
     }
     return Promise.reject(err);
   });
+
+  // Chain onto the send lock — next request waits for this one to settle
+  const prev = _sendLock;
+  let resolveLock!: () => void;
+  _sendLock = new Promise<void>(r => { resolveLock = r; });
+  return prev.then(() => run()).finally(resolveLock);
 }
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
@@ -405,7 +415,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
   try {
     switch (name) {
       case 'game_bridge_install': {
-        const projectPath = validatePath(args.project_path as string);
+        const projectPath = requireProjectPath(args);
         const port = (args.port as number) || 9081;
         const scriptsDir = dirname(ctx.opsScript);
         const bridgeSrc = join(scriptsDir, BRIDGE_SCRIPT_NAME);
@@ -448,7 +458,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
 
       case 'game_bridge_uninstall': {
-        const projectPath = validatePath(args.project_path as string);
+        const projectPath = requireProjectPath(args);
         const configPath = join(projectPath, 'project.godot');
 
         if (!existsSync(configPath)) {
