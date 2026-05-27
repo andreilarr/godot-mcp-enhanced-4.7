@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.0] - 2026-05-27
+
+### Security
+
+- **C-SEC-01**: `isPathInAllowedRoots` 改为 deny-by-default — 未设置白名单时仅允许 `process.cwd()`，新增 `GODOT_MCP_UNRESTRICTED` 环境变量作为逃生阀
+- **I-SEC-01**: `list_projects` 的 `search_dir` 参数添加白名单检查，修复绕过漏洞（含 editor 分支）
+- **C-SEC-02**: 可选 GDScript 沙箱警告扫描器 — `GODOT_MCP_SANDBOX=strict` 启用，检测 `OS.execute`/`DirAccess.remove`/`FileAccess.open(WRITE)` 等危险操作
+
+### Fixed
+
+- **C-TYP-01**: game-bridge 连接锁 — `_ensureConnection` 拆分为 `_doConnect` + Promise 链锁，防止并发连接竞争
+- **C-TYP-02**: process-state TOCTOU 竞争 — `acquireProcessSlot()` 原子操作替代 `isProcessBusy` + `setProcessBusy` 两步模式
+- **C-Q-01**: test_stress GDScript 缩进修复 — 空格改为 tab，修复 mixed indentation 解析错误
+- **C-Q-02**: 录制功能重构为 Bridge TCP 模式 — start/stop 通过 Bridge 命令实现，修复跨进程状态不可用的架构断裂
+- **I-Q-06**: ik-tools.ts 两处 `as any` 替换为 `readonly string[]` 类型守卫
+- **I-Q-07**: 4 处 `as Record` 断言添加运行时 object 类型校验
+- **I-Q-08**: 7 处关键空 catch 块（子进程/文件 I/O/网络）添加 `console.debug` 日志
+
+### Changed
+
+- **C-Q-03/04/05**: material-ops 提取 `parseMaterialParam` 共享函数；tilemap-ops 提取 4 个辅助函数（layerArg/nodePreamble/tilemapBranch/tilemapCall），净减 101 行
+- **I-Q-01/02**: `ensureNumber`/`clampParam`/`validatePositiveInt` 统一到 `shared.ts`，消除 6 个模块的重复定义
+- **C-CI-01**: 新增 ESLint 配置（warn-only）+ CI lint 步骤
+
+### Added
+
+- **C-CI-02**: gdscript-executor 核心函数测试 +38（wrapSnippet/buildSafeEnv/createAutoloadLoaderScript 等）
+- **C-CI-03**: delivery.ts 维度测试 +50（scene_tree/script_health/performance/assertions），覆盖率 3% → 80%
+- **I-CI-01**: GDScript 代码生成正确性测试 +70（gdEscape/SCENE_TREE_HEADER/stressTest/recordingPlay 等）
+- 录制功能 Bridge 端：`mcp_bridge.gd` 新增 `_cmd_recording_start/stop` + `_input` 回调
+
 ## [Unreleased]
 
 ### Security
