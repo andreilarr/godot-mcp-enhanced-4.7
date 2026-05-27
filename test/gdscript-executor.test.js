@@ -1,5 +1,5 @@
 import { expect } from 'vitest';
-import { parseMcpMarkers } from '../src/gdscript-executor.js';
+import { parseMcpMarkers, scanGdscriptSandbox } from '../src/gdscript-executor.js';
 
 // C-2 fix: import actual function instead of inline copy
 
@@ -44,5 +44,64 @@ describe('wrapSnippet code detection', () => {
   it('snippet without extends is not full class', () => {
     const code = 'var x = 1\nprint(x)';
     expect(/^\s*extends\s+/m.test(code)).toBeFalsy();
+  });
+});
+
+describe('scanGdscriptSandbox', () => {
+  afterEach(() => {
+    delete process.env.GODOT_MCP_SANDBOX;
+  });
+
+  it('should detect OS.execute when sandbox is strict', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('OS.execute("rm", ["-rf", "/"])');
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain('OS system command');
+  });
+
+  it('should return empty when sandbox is off', () => {
+    delete process.env.GODOT_MCP_SANDBOX;
+    const warnings = scanGdscriptSandbox('OS.execute("rm", ["-rf", "/"])');
+    expect(warnings).toEqual([]);
+  });
+
+  it('should not flag safe code', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('var x = 1 + 2');
+    expect(warnings).toEqual([]);
+  });
+
+  it('should detect DirAccess.remove when sandbox is strict', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('DirAccess.remove("user://save.dat")');
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain('Directory removal');
+  });
+
+  it('should detect FileAccess open with WRITE when sandbox is strict', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('FileAccess.open("user://data.txt", FileAccess.WRITE)');
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain('File write access');
+  });
+
+  it('should detect Engine.set_singleton when sandbox is strict', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('Engine.set_singleton("MySingleton", node)');
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain('Engine singleton modification');
+  });
+
+  it('should detect multiple dangerous patterns in one script', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'OS.execute("ls", [])\nDirAccess.remove_absolute("/tmp/test")';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.length).toBe(2);
+  });
+
+  it('should not activate when GODOT_MCP_SANDBOX is not strict', () => {
+    process.env.GODOT_MCP_SANDBOX = 'warn';
+    const warnings = scanGdscriptSandbox('OS.execute("rm", ["-rf", "/"])');
+    expect(warnings).toEqual([]);
   });
 });

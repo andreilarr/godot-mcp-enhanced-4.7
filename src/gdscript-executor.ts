@@ -23,6 +23,27 @@ import { forceKillTree } from './core/process-state.js';
 import { buildSafeEnv } from './helpers.js';
 
 
+// ─── Sandbox scanner (C-SEC-02) ──────────────────────────────────────────────
+
+const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /OS\.(execute|shell_open|kill|set_restart_on_exit|crash)\b/, label: 'OS system command' },
+  { pattern: /DirAccess\.(remove_absolute|remove)\b/, label: 'Directory removal' },
+  { pattern: /FileAccess\.open\s*\([^)]*WRITE/, label: 'File write access' },
+  { pattern: /Engine\.(set_singleton)\b/, label: 'Engine singleton modification' },
+];
+
+/** Best-effort scan for dangerous GDScript patterns. Returns warnings array. */
+export function scanGdscriptSandbox(code: string): string[] {
+  if (process.env.GODOT_MCP_SANDBOX !== 'strict') return [];
+  const warnings: string[] = [];
+  for (const { pattern, label } of DANGEROUS_PATTERNS) {
+    if (pattern.test(code)) {
+      warnings.push(`[SANDBOX] Potential dangerous operation detected: ${label}`);
+    }
+  }
+  return warnings;
+}
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface OutputEntry {
@@ -419,6 +440,15 @@ export async function executeGdscript(
   // Hard kill switch: set ALLOW_EXECUTE_GDSCRIPT=false to disable GDScript execution
   if (process.env.ALLOW_EXECUTE_GDSCRIPT === 'false') {
     return { success: false, compile_success: false, compile_error: 'GDScript execution is disabled (ALLOW_EXECUTE_GDSCRIPT=false)', errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0 };
+  }
+
+  // C-SEC-02: Sandbox warning scan (does NOT block execution)
+  const sandboxWarnings = scanGdscriptSandbox(code);
+  if (sandboxWarnings.length > 0) {
+    console.warn('[executor] Sandbox warnings for submitted code:');
+    for (const w of sandboxWarnings) {
+      console.warn('  ' + w);
+    }
   }
 
   // Validate godotPath exists and looks like a Godot binary
