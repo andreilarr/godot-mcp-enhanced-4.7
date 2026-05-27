@@ -12,11 +12,14 @@ func setup(handler: Node) -> void:
 func start_sync() -> Dictionary:
 	if _syncing:
 		return {"error": {"code": "SYNC_ALREADY_ACTIVE", "message": "Sync already active"}}
+	var tree = get_tree()
+	if tree == null or tree.root == null:
+		return {"error": {"code": -32003, "message": "Not in scene tree"}}
 	_syncing = true
 	_node_paths.clear()
-	_cache_paths_recursive(get_tree().root)
-	get_tree().connect("node_added", _on_node_added)
-	get_tree().connect("node_removed", _on_node_removed)
+	_cache_paths_recursive(tree.root)
+	tree.connect("node_added", _on_node_added)
+	tree.connect("node_removed", _on_node_removed)
 	return {"result": {"success": true}}
 
 
@@ -24,8 +27,12 @@ func stop_sync() -> Dictionary:
 	if not _syncing:
 		return {"error": {"code": "SYNC_NOT_ACTIVE", "message": "Sync not active"}}
 	_syncing = false
-	get_tree().disconnect("node_added", _on_node_added)
-	get_tree().disconnect("node_removed", _on_node_removed)
+	var tree = get_tree()
+	if tree != null:
+		if tree.is_connected("node_added", _on_node_added):
+			tree.disconnect("node_added", _on_node_added)
+		if tree.is_connected("node_removed", _on_node_removed):
+			tree.disconnect("node_removed", _on_node_removed)
 	_node_paths.clear()
 	return {"result": {"success": true}}
 
@@ -49,7 +56,6 @@ func _cache_paths_recursive(node: Node, depth: int = 0) -> void:
 
 
 func _on_node_added(node: Node) -> void:
-	# 仅跟踪当前编辑场景内的节点变更
 	var edited_root = _get_edited_scene_root()
 	if edited_root != null and not edited_root.is_ancestor_of(node) and node != edited_root:
 		return

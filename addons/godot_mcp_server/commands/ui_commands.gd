@@ -45,7 +45,8 @@ func handle_ui_create_control(params: Dictionary, request_id: int) -> Dictionary
 			var val = properties[key]
 			if val is Object:
 				continue
-			node.set(key, val)
+			if _property_exists_and_type_ok(node, key, val):
+				node.set(key, val)
 
 	parent_node.add_child(node)
 	node.owner = root
@@ -282,7 +283,8 @@ func handle_ui_container_add(params: Dictionary, request_id: int) -> Dictionary:
 			var cval = child_properties[key]
 			if cval is Object:
 				continue
-			child.set(key, cval)
+			if _property_exists_and_type_ok(child, key, cval):
+				child.set(key, cval)
 
 	container.add_child(child)
 	child.owner = root
@@ -402,3 +404,26 @@ func _find_node(root: Node, path: String) -> Node:
 	if p == "":
 		return root
 	return root.get_node_or_null(p)
+
+func _property_exists_and_type_ok(obj: Object, prop_name: String, val) -> bool:
+	var found = false
+	for p in obj.get_property_list():
+		if p["name"] == prop_name:
+			found = true
+			break
+	if not found:
+		return false
+	var current = obj.get(prop_name)
+	if current == null:
+		return val == null
+	var current_type = typeof(current)
+	var val_type = typeof(val)
+	if current_type == val_type:
+		return true
+	if (current_type == TYPE_INT or current_type == TYPE_FLOAT) and (val_type == TYPE_INT or val_type == TYPE_FLOAT):
+		return true
+	if (current_type == TYPE_STRING or current_type == TYPE_STRING_NAME) and (val_type == TYPE_STRING or val_type == TYPE_STRING_NAME):
+		return true
+	if (current_type == TYPE_BOOL and val_type == TYPE_INT) or (current_type == TYPE_INT and val_type == TYPE_BOOL):
+		return true
+	return false

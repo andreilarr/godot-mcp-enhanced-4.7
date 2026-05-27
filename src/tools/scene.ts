@@ -10,7 +10,7 @@ import { findInstanceNode, detachInstance, nodePathToNameAndParent } from '../ts
 import { executeGdscript } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, opsErrorResult, parseGdscriptResult, sanitizeResPath } from './shared.js';
 import { normalizeNodePath, gdEscape, toSnakeCase } from './shared.js';
-import { forceKillTree } from '../core/process-state.js';
+import { forceKillTree, isProcessBusy } from '../core/process-state.js';
 
 const TOOL_NAMES = [
   'read_scene',
@@ -453,6 +453,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'query_scene_tree': {
+      if (isProcessBusy()) return textResult('Error: another Godot process is running. Wait for it to finish.');
       const p = validatePath(args.project_path as string);
       const godot = await ctx.findGodot();
       const scriptsDir = dirname(ctx.opsScript);
@@ -505,6 +506,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'inspect_node': {
+      if (isProcessBusy()) return textResult('Error: another Godot process is running. Wait for it to finish.');
       const p = validatePath(args.project_path as string);
       const godot = await ctx.findGodot();
       const scriptsDir = dirname(ctx.opsScript);

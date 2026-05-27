@@ -34,7 +34,8 @@ function escapeTscnAttr(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-/** Escape property values for safe embedding in .tscn files */
+/** Escape property values for safe embedding inside quoted .tscn values (e.g. `property = "value"`).
+ *  Does NOT handle unquoted .tscn values or structural syntax. */
 function escapeTscnValue(value: string): string {
   if (/[\r\n]/.test(value)) throw new Error('Value must not contain newlines');
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\]/g, '\\]');

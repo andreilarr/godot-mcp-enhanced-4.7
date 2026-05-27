@@ -70,7 +70,7 @@ let baseDirReady = false;
 
 function ensureBaseDir(): void {
   if (baseDirReady) return;
-  mkdirSync(BASE_TMP_DIR, { recursive: true });
+  mkdirSync(BASE_TMP_DIR, { recursive: true, mode: 0o700 });
   baseDirReady = true;
 }
 

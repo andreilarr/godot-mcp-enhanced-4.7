@@ -1,5 +1,5 @@
 import { createConnection, Socket } from 'net';
-import { readFileSync, writeFileSync, existsSync, copyFileSync, unlinkSync, chmodSync, statSync, renameSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, copyFileSync, unlinkSync, chmodSync, statSync, lstatSync, renameSync } from 'fs';
 import { join, dirname } from 'path';
 import { tmpdir } from 'os';
 import { execFileSync } from 'child_process';
@@ -65,6 +65,11 @@ function readBridgeSecret(): string | null {
       try {
         chmodSync(secretPath, 0o600);
       } catch (err) { console.debug('[bridge] chmod secret file:', err); }
+    }
+    const lstat = lstatSync(secretPath);
+    if (lstat.isSymbolicLink()) {
+      console.error(`[SECURITY] Bridge secret file ${secretPath} is a symlink — refusing to read.`);
+      return null;
     }
     const stat = statSync(secretPath);
     if (!_permWarned && process.platform !== 'win32' && (stat.mode & 0o007) !== 0) {
@@ -208,9 +213,9 @@ export function sendToBridge(method: string, params: Record<string, unknown> = {
             doResolve(resp);
             return;
           } catch {
-            _invalidateSocket();
-            doReject(new Error(`Invalid JSON from bridge: ${line}`));
-            return;
+            // Skip non-JSON lines (debug output, status messages) instead of killing the connection.
+            // The timeout above ensures we still fail if no valid response ever arrives.
+            continue;
           }
         }
       };

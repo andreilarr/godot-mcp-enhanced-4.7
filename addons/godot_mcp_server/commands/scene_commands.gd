@@ -49,18 +49,18 @@ func handle_instance_scene(params: Dictionary) -> Dictionary:
 			continue
 		if not key is String:
 			continue
-		# Block sub-property paths
 		if ":" in key or "/" in key:
 			continue
 		var val = properties[key]
 		if val is Object:
-			continue  # 不允许设置 Object 子类型
-		instance.set(key, val)
+			continue
+		if _property_exists_and_type_ok(instance, key, val):
+			instance.set(key, val)
 
 	var ei = Engine.get_singleton("EditorInterface") as EditorInterface
 	var root = ei.get_edited_scene_root()
 	if root == null:
-		instance.queue_free()  # 释放未添加到树的节点
+		instance.queue_free()
 		return {"error": {"code": -32003, "message": "No edited scene"}}
 	var parent = _find_node_by_path(root, parent_path)
 	if parent == null:
@@ -96,14 +96,14 @@ func handle_set_instance_property(params: Dictionary) -> Dictionary:
 		"collision_priority", "transform", "global_transform"]
 	if prop_name.begins_with("_") or prop_name in blocked:
 		return {"error": {"code": -32004, "message": "BLOCKED_PROPERTY: " + prop_name}}
-	# Block sub-property paths
 	if ":" in prop_name or "/" in prop_name:
 		return {"error": {"code": -32004, "message": "BLOCKED_SUBPROPERTY: " + prop_name}}
-	# 属性名格式验证
 	if prop_name.is_empty() or (not (prop_name[0] == "_" or prop_name[0].is_alpha())):
 		return {"error": {"code": -32004, "message": "INVALID_PROPERTY_NAME: " + prop_name}}
 	if prop_value is Object:
 		return {"error": {"code": -32004, "message": "OBJECT_VALUES_NOT_ALLOWED"}}
+	if not _property_exists_and_type_ok(target, prop_name, prop_value):
+		return {"error": {"code": -32004, "message": "PROPERTY_TYPE_MISMATCH: " + prop_name}}
 	target.set(prop_name, prop_value)
 	return {"result": {"node": str(target.name), "property": prop_name}}
 
@@ -120,3 +120,26 @@ func _find_node_by_path(root: Node, path: String) -> Node:
 	if root.has_node(clean):
 		return root.get_node(clean)
 	return null
+
+func _property_exists_and_type_ok(obj: Object, prop_name: String, val) -> bool:
+	var found = false
+	for p in obj.get_property_list():
+		if p["name"] == prop_name:
+			found = true
+			break
+	if not found:
+		return false
+	var current = obj.get(prop_name)
+	if current == null:
+		return val == null
+	var current_type = typeof(current)
+	var val_type = typeof(val)
+	if current_type == val_type:
+		return true
+	if (current_type == TYPE_INT or current_type == TYPE_FLOAT) and (val_type == TYPE_INT or val_type == TYPE_FLOAT):
+		return true
+	if (current_type == TYPE_STRING or current_type == TYPE_STRING_NAME) and (val_type == TYPE_STRING or val_type == TYPE_STRING_NAME):
+		return true
+	if (current_type == TYPE_BOOL and val_type == TYPE_INT) or (current_type == TYPE_INT and val_type == TYPE_BOOL):
+		return true
+	return false
