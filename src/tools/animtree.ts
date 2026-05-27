@@ -2,8 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { validatePath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
-import { normalizeNodePath, gdEscape } from './shared.js';
-import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } from './shared.js';
+import { normalizeNodePath, gdEscape, ensureNumber, SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } from './shared.js';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -373,12 +372,6 @@ export {
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
-
-function ensureNumber(v: unknown, name: string): number {
-  const n = Number(v);
-  if (!Number.isFinite(n)) throw new Error(`${name} must be a finite number, got: ${JSON.stringify(v)}`);
-  return n;
-}
 
 function animtreeErrorMapper(errorMsg: string): string {
   if (errorMsg.includes('not found')) return ERROR_CODES.NODE_NOT_FOUND;

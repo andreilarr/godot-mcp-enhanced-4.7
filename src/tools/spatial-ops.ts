@@ -2,8 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { validatePath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
-import { normalizeNodePath, gdEscape } from './shared.js';
-import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } from './shared.js';
+import { normalizeNodePath, gdEscape, validatePositiveInt, SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } from './shared.js';
 
 const TOOL_NAMES = ['spatial_info'] as const;
 
@@ -12,14 +11,6 @@ function validateVector3(v: { x: number; y: number; z: number }, name: string): 
     || !Number.isFinite(v.x) || !Number.isFinite(v.y) || !Number.isFinite(v.z)) {
     throw new Error(`${name} must have finite x, y, z number values`);
   }
-}
-
-function validatePositiveInt(v: unknown, name: string, min: number, max: number): number {
-  const n = Number(v);
-  if (!Number.isFinite(n) || n < min || n > max) {
-    throw new Error(`${name} must be a number between ${min} and ${max}, got: ${JSON.stringify(v)}`);
-  }
-  return Math.round(n);
 }
 
 export function getToolDefinitions(): Tool[] {

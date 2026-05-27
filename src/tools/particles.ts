@@ -2,8 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { validatePath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
-import { normalizeNodePath, gdEscape, validateVector3 } from './shared.js';
-import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } from './shared.js';
+import { normalizeNodePath, gdEscape, validateVector3, clampParam, SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } from './shared.js';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -47,13 +46,6 @@ function validateVector2(v: unknown): { x: number; y: number } {
     if (typeof obj[key] !== 'number' || !Number.isFinite(obj[key] as number)) throw new Error(`Vector2 field "${key}" must be a finite number`);
   }
   return { x: obj.x as number, y: obj.y as number };
-}
-
-function clampParam(val: number | undefined, min: number, max: number, name: string, warnings: string[]): number | undefined {
-  if (val === undefined) return undefined;
-  if (val < min) { warnings.push(`${name} ${val} clamped to ${min}`); return min; }
-  if (val > max) { warnings.push(`${name} ${val} clamped to ${max}`); return max; }
-  return val;
 }
 
 // ─── GDScript Generators ───────────────────────────────────────────────────

@@ -73,6 +73,39 @@ export function validateTimeout(value: unknown, min = 5, max = 120, defaultVal =
   return Math.min(max, Math.max(min, Math.round(num)));
 }
 
+/** Ensure a value converts to a finite number; throws with descriptive error on failure. */
+export function ensureNumber(v: unknown, name: string): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) throw new Error(`${name} must be a finite number, got: ${JSON.stringify(v)}`);
+  return n;
+}
+
+/** Clamp a numeric parameter to [min, max], pushing a warning when clamped. Returns undefined if input is undefined. */
+export function clampParam(val: number | undefined, min: number, max: number, name: string, warnings: string[]): number | undefined {
+  if (val === undefined) return undefined;
+  if (val < min) { warnings.push(`${name} ${val} clamped to ${min}`); return min; }
+  if (val > max) { warnings.push(`${name} ${val} clamped to ${max}`); return max; }
+  return val;
+}
+
+/** Validate and return a rounded number within [min, max]; throws on failure. */
+export function validatePositiveInt(v: unknown, name: string, min: number, max: number): number {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < min || n > max) {
+    throw new Error(`${name} must be a number between ${min} and ${max}, got: ${JSON.stringify(v)}`);
+  }
+  return Math.round(n);
+}
+
+/** Common error codes shared across tool modules. */
+export const COMMON_ERROR_CODES = {
+  INVALID_PARAMS: 'INVALID_PARAMS',
+  NODE_NOT_FOUND: 'NODE_NOT_FOUND',
+  SCRIPT_EXEC_FAILED: 'SCRIPT_EXEC_FAILED',
+  INVALID_TYPE: 'INVALID_TYPE',
+  INVALID_VALUE: 'INVALID_VALUE',
+} as const;
+
 /** Validates that a string is a safe GDScript identifier (class name, type name, etc.). */
 export function validateIdentifier(name: string, label = 'Identifier'): void {
   if (name.length > 64) {

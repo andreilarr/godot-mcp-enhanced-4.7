@@ -2,7 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { validatePath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
-import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult, gdEscape, normalizeNodePath } from './shared.js';
+import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult, gdEscape, normalizeNodePath, clampParam } from './shared.js';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -20,15 +20,6 @@ export const TOOL_NAMES = [
   'audio_set_param',
   'audio_query',
 ] as const;
-
-// ─── Internal helpers ──────────────────────────────────────────────────────
-
-function clampParam(val: number | undefined, min: number, max: number, name: string, warnings: string[]): number | undefined {
-  if (val === undefined) return undefined;
-  if (val < min) { warnings.push(`${name} ${val} clamped to ${min}`); return min; }
-  if (val > max) { warnings.push(`${name} ${val} clamped to ${max}`); return max; }
-  return val;
-}
 
 // ─── GDScript Generators: Audio ────────────────────────────────────────────
 

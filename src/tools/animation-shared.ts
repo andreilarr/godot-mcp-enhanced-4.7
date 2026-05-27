@@ -1,4 +1,7 @@
-import { gdEscape } from './shared.js';
+import { gdEscape, ensureNumber } from './shared.js';
+
+// Re-export ensureNumber for backward compatibility with animation-ops and animation-track
+export { ensureNumber };
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -53,10 +56,4 @@ export function animErrorMapper(errorMsg: string): string {
     if (errorMsg.includes('Keyframe')) return ANIM_ERROR_CODES.KEYFRAME_NOT_FOUND;
   }
   return ANIM_ERROR_CODES.SCRIPT_EXEC_FAILED;
-}
-
-export function ensureNumber(v: unknown, name: string): number {
-  const n = Number(v);
-  if (!Number.isFinite(n)) throw new Error(`${name} must be a finite number, got: ${JSON.stringify(v)}`);
-  return n;
 }
