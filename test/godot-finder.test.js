@@ -101,11 +101,12 @@ describe('findGodot', () => {
 
   it('skips GODOT_PATH when validation fails', async () => {
     vi.stubEnv('GODOT_PATH', '/usr/bin/not-godot');
-    existsSyncMock.mockReturnValue(true);
+    // Only GODOT_PATH exists; all other candidates (POSIX paths, etc.) do not
+    existsSyncMock.mockImplementation((p) => p === '/usr/bin/not-godot');
     // execFile returns something that is NOT a godot version
     mockExecFileSuccess('some-other-binary 1.0');
 
-    // Will fall through to PATH search which also fails
+    // Will fall through to PATH search (also fails due to mock) then POSIX candidates (all !existsSync)
     await expect(findGodot()).rejects.toThrow('Godot binary not found');
   });
 
