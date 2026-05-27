@@ -1,22 +1,7 @@
-# Godot Asset Library export config
-# https://docs.godotengine.org/en/latest/community/asset_library/submitting_to_assetlib.html
+# Normalize line endings for all files that Git considers text files.
+* text=auto eol=lf
 
-# 排除开发/构建文件
-/node_modules export-ignore
-/src export-ignore
-/test export-ignore
-/build export-ignore
-/coverage export-ignore
-/docs export-ignore
-/data export-ignore
-/scenes export-ignore
-/scripts export-ignore
-.claude export-ignore
-*.ts export-ignore
-*.zip export-ignore
-tsconfig.json export-ignore
-tsconfig.tsbuildinfo export-ignore
-package.json export-ignore
-package-lock.json export-ignore
-vitest.config.ts export-ignore
-tmp_bridge.gd export-ignore
+# Only include the addons folder when downloading from the Asset Library.
+/**        export-ignore
+/addons    !export-ignore
+/addons/** !export-ignore
