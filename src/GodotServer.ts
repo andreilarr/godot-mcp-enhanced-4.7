@@ -200,7 +200,7 @@ export class GodotServer {
       const args: Record<string, unknown> = {};
       if (rawArgs) {
         for (const [key, value] of Object.entries(rawArgs)) {
-          const snake = key.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase());
+          const snake = key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
           args[snake] = value;
         }
       }
