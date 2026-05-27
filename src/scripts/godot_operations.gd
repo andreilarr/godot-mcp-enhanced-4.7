@@ -531,9 +531,30 @@ func _is_safe_property(prop_name: String) -> bool:
 
 
 func _is_safe_value(val) -> bool:
-	if val is Script or val is Resource or val is Callable or val is Signal:
-		return false
-	return true
+	# Whitelist: only allow safe value types (consistent with mcp_bridge.gd)
+	if val == null:
+		return true
+	if val is bool or val is int or val is float or val is String:
+		return true
+	if val is Vector2 or val is Vector2i or val is Vector3 or val is Vector3i:
+		return true
+	if val is Color or val is Rect2 or val is Rect2i:
+		return true
+	if val is Transform2D or val is Transform3D or val is Basis or val is Quaternion:
+		return true
+	if val is Plane or val is AABB:
+		return true
+	if val is Array:
+		for item in val:
+			if not _is_safe_value(item):
+				return false
+		return true
+	if val is Dictionary:
+		for key in val:
+			if not _is_safe_value(val[key]):
+				return false
+		return true
+	return false
 
 
 
