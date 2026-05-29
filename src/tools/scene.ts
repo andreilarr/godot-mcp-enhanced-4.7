@@ -302,8 +302,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           JSON.stringify(params),
         ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
 
-        proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
-        proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
+        const MAX_OUTPUT = 100_000;
+        proc.stdout?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
+        proc.stderr?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
 
         const timer = setTimeout(() => {
           if (!settled && !proc.killed) {
@@ -362,8 +363,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           JSON.stringify(params),
         ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
 
-        proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
-        proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
+        const MAX_OUTPUT = 100_000;
+        proc.stdout?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
+        proc.stderr?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
 
         const timer = setTimeout(() => {
           if (!settled && !proc.killed) {
