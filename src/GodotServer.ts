@@ -9,18 +9,15 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import type { ChildProcess } from 'child_process';
-import type { ToolResult, ToolContext } from './types.js';
 import { waitForEditorSecret } from './core/editor-auth.js';
 import {
   listResources as listMcpResources,
   listResourceTemplates as listMcpResourceTemplates,
   readResource as readMcpResource,
 } from './resources.js';
-import { parseGodotConfig, isPathInAllowedRoots } from './helpers.js';
 
 // ─── Import and register tool modules ────────────────────────────────────────
-import { registerModule, getModuleForTool, getAllToolDefinitions, LITE_TOOLS } from './core/tool-registry.js';
+import { registerModule } from './core/tool-registry.js';
 
 import * as runtime from './tools/runtime.js';
 import * as screenshot from './tools/screenshot.js';
@@ -59,11 +56,12 @@ for (const mod of [runtime, screenshot, project, scene, script, validation, docs
   registerModule(mod);
 }
 
-import { requiresConfirmation, createPendingToken, consumeToken } from './guard.js';
+
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pkgVersion = require('../package.json').version;
 import { ReadOnlyGuard } from './core/ReadOnlyGuard.js';
+import { ToolDispatcher } from './core/ToolDispatcher.js';
 import { EditorConnection } from './core/EditorConnection.js';
 import { EditorToolExecutor } from './core/EditorToolExecutor.js';
 import { findGodot, clearGodotPathCache, getCachedGodotPath } from './core/godot-finder.js';
@@ -72,35 +70,6 @@ import { killProcess } from './core/process-state.js';
 
 // Re-export for backward compatibility (tests import from GodotServer)
 export { clearGodotPathCache, getCachedGodotPath };
-
-/** Validate path-related args against the whitelist. Returns error ToolResult or null if OK. */
-function validatePathArgs(args: Record<string, unknown>): ToolResult | null {
-  if (typeof args.project_path === 'string' && !isPathInAllowedRoots(args.project_path)) {
-    return { content: [{ type: 'text' as const, text: JSON.stringify({ error: { code: 'PATH_NOT_ALLOWED', message: `Path not in ALLOWED_PROJECT_PATHS: ${args.project_path}` } }) }], isError: true };
-  }
-  if (typeof args.search_dir === 'string' && !isPathInAllowedRoots(args.search_dir)) {
-    return { content: [{ type: 'text' as const, text: JSON.stringify({ error: { code: 'PATH_NOT_ALLOWED', message: `Search directory not in ALLOWED_PROJECT_PATHS: ${args.search_dir}. Set ALLOWED_PROJECT_PATHS or GODOT_MCP_UNRESTRICTED=true.` } }) }], isError: true };
-  }
-  return null;
-}
-
-async function dispatchTool(
-  toolName: string, args: Record<string, unknown>, ctx: ToolContext, startTime: number
-): Promise<ToolResult> {
-  // C-03 / I-SEC-01: Validate path args against whitelist
-  const pathErr = validatePathArgs(args);
-  if (pathErr) return pathErr;
-  const targetMod = getModuleForTool(toolName);
-  if (!targetMod) {
-    return { content: [{ type: 'text', text: `Unknown tool: ${toolName}` }] };
-  }
-  const result = await targetMod.handleTool(toolName, args, ctx);
-  if (result !== null) {
-    const duration = Date.now() - startTime;
-    return { ...result, content: [...result.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] };
-  }
-  return { content: [{ type: 'text', text: `Tool "${toolName}" registered but handler returned null` }] };
-}
 
 const DEBUG = process.env.DEBUG === 'true';
 
@@ -124,12 +93,11 @@ export class GodotServer {
   private opsScript: string;
   private options: ServerOptions;
   private readOnlyGuard: ReadOnlyGuard;
+  private dispatcher: ToolDispatcher | null = null;
   private editorConn: EditorConnection | null = null;
   private editorExecutor: EditorToolExecutor | null = null;
   private connectionMode: 'headless' | 'editor';
   private noFallback: boolean;
-  private _editorFallback = false;
-  private _editorFallbackWarned = false;
 
   constructor(opsScript: string, options: ServerOptions = {}) {
     this.opsScript = opsScript;
@@ -145,149 +113,24 @@ export class GodotServer {
   }
 
   private setupHandlers(): void {
-    // ── Collect tool definitions from all modules ──
-    let allTools = getAllToolDefinitions();
-
-    // Inline tool: confirm_and_execute (for confirmation token flow)
-    allTools.push({
-      name: 'confirm_and_execute',
-      description: 'Execute a previously blocked tool using a confirmation token. Use this when a tool returns a confirmation_token.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          token: { type: 'string', description: 'Confirmation token from the blocked tool response' },
-        },
-        required: ['token'],
-      },
-    });
-
-    // P0.1: Filter write tools in READ_ONLY_MODE
-    if (this.options.readOnly) {
-      allTools = allTools.filter(t => !this.readOnlyGuard.check(t.name).blocked);
-      log('READ_ONLY_MODE: %d tools available', allTools.length);
-    }
-
-    // P0.2: Filter to lite toolset
-    if (this.options.mode === 'lite') {
-      allTools = allTools.filter(t => LITE_TOOLS.has(t.name));
-      log('LITE mode: %d tools available', allTools.length);
-    }
-
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: allTools,
-    }));
-
-    // ── Build tool context ──
-    const ctx = {
+    const dispatcher = new ToolDispatcher({
+      readOnly: this.options.readOnly ?? false,
+      mode: this.options.mode ?? 'full',
+      readOnlyGuard: this.readOnlyGuard,
+      connectionMode: this.connectionMode,
+      noFallback: this.noFallback,
       opsScript: this.opsScript,
       findGodot,
-      get runningProcess() { return ps.getRunningProcess(); },
-      setRunningProcess(proc: ChildProcess | null) { ps.setRunningProcess(proc); },
-      get outputBuffer() { return ps.getOutputBuffer(); },
-      setOutputBuffer(buf: string[]) { ps.setOutputBuffer(buf); },
-      get processStartTime() { return ps.getProcessStartTime(); },
-      setProcessStartTime(t: number) { ps.setProcessStartTime(t); },
-      get projectDir() { return ps.getProjectDir(); },
-      setProjectDir(d: string) { ps.setProjectDir(d); },
-      parseGodotConfig,
-    };
-
-    /** I-12: Attach editor-fallback warning to first tool response only. */
-    const attachFallbackWarning = (result: ToolResult): ToolResult => {
-      if (this._editorFallback && !this._editorFallbackWarned) {
-        this._editorFallbackWarned = true;
-        const first = result.content?.[0];
-        if (first?.type === 'text') {
-          first.text += '\n\n⚠️ [EDITOR_FALLBACK] Running in Headless mode — Editor features (UndoRedo, live scene sync) unavailable.';
-        }
-      }
-      return result;
-    };
-
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: rawArgs } = request.params;
-      const startTime = Date.now();
-      // Normalize camelCase -> snake_case
-      const args: Record<string, unknown> = {};
-      if (rawArgs) {
-        for (const [key, value] of Object.entries(rawArgs)) {
-          const snake = key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
-          args[snake] = value;
-        }
-      }
-      try {
-        // ReadOnlyGuard check
-        const guardResult = this.readOnlyGuard.check(name);
-        if (guardResult.blocked) {
-          return {
-            content: [{ type: 'text' as const, text: JSON.stringify({ error: { code: guardResult.errorCode, message: guardResult.message } }) }],
-            isError: true,
-          };
-        }
-
-        // P1.1: Confirmation Token guard (applies to both editor and headless modes)
-        if (name === 'confirm_and_execute') {
-          const token = args.token as string;
-          if (!token || typeof token !== 'string') {
-            return { content: [{ type: 'text', text: 'Error: confirmation_token is required' }] };
-          }
-          const pending = consumeToken(token);
-          if (!pending) {
-            return { content: [{ type: 'text', text: 'Error: invalid or expired confirmation token' }] };
-          }
-          // S-1: Execute confirmed tool
-          log('[CONFIRM] Executing confirmed tool: %s', pending.toolName);
-          // Re-check ReadOnlyGuard for the confirmed tool
-          const confirmedToolGuardResult = this.readOnlyGuard.check(pending.toolName);
-          if (confirmedToolGuardResult.blocked) {
-            return {
-              content: [{ type: 'text' as const, text: JSON.stringify({ error: { code: confirmedToolGuardResult.errorCode, message: confirmedToolGuardResult.message } }) }],
-              isError: true,
-            };
-          }
-          // Re-dispatch with original tool name and args
-          // C-03 / I-SEC-01: Validate path args against whitelist
-          const pathErr = validatePathArgs(pending.args);
-          if (pathErr) return pathErr;
-          if (this.connectionMode === 'editor' && this.editorExecutor) {
-            const editorResult = await this.editorExecutor.execute(pending.toolName, pending.args);
-            const duration = Date.now() - startTime;
-            return attachFallbackWarning({ ...editorResult, content: [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] });
-          }
-          return attachFallbackWarning(await dispatchTool(pending.toolName, pending.args, ctx, startTime));
-        }
-
-        if (requiresConfirmation(name, args)) {
-          const token = createPendingToken(name, args);
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                requires_confirmation: true,
-                tool: name,
-                confirmation_token: token,
-                message: `Tool "${name}" requires confirmation. Call confirm_and_execute with this token to proceed.`,
-                ttl_seconds: 180,
-              }),
-            }],
-          };
-        }
-
-        // Dispatch to the appropriate module handler
-        // Editor mode: forward to plugin (after guard + confirmation checks)
-        if (this.connectionMode === 'editor' && this.editorExecutor) {
-          const editorResult = await this.editorExecutor.execute(name, args);
-          const duration = Date.now() - startTime;
-          return attachFallbackWarning({ ...editorResult, content: [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] });
-        }
-
-        return attachFallbackWarning(await dispatchTool(name, args, ctx, startTime));
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        log('Tool error:', name, msg);
-        return { content: [{ type: 'text', text: `Error: ${msg}` }] };
-      }
     });
+    this.dispatcher = dispatcher;
+
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: dispatcher.getFilteredTools(),
+    }));
+
+    this.server.setRequestHandler(CallToolRequestSchema, (request) =>
+      dispatcher.handleCall(request)
+    );
 
     // ── MCP Resources handlers ──────────────────────────────────────────────
     this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
@@ -341,13 +184,15 @@ export class GodotServer {
           process.exit(1);
         }
         console.error('[FALLBACK] Running in Headless mode (no editor auth).');
-        this._editorFallback = true;
+        this.dispatcher?.markEditorFallback();
         this.connectionMode = 'headless';
+        this.dispatcher?.setConnectionMode('headless');
       } else {
         this.editorConn = new EditorConnection({ port, reconnect: true, secret });
         try {
           await this.editorConn.connect();
           this.editorExecutor = new EditorToolExecutor(this.editorConn);
+          this.dispatcher?.setEditorExecutor(this.editorExecutor);
           log('Editor: Connected to Godot plugin on port %d', port);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -358,8 +203,9 @@ export class GodotServer {
           }
           console.error(`[FALLBACK] Editor connection failed: ${msg}.`);
           console.error('[FALLBACK] Running in Headless mode. UndoRedo disabled, no scene state persistence.');
-          this._editorFallback = true;
+          this.dispatcher?.markEditorFallback();
           this.connectionMode = 'headless';
+          this.dispatcher?.setConnectionMode('headless');
           this.editorConn = null;
         }
       }
@@ -370,7 +216,7 @@ export class GodotServer {
     if (this.editorConn) {
       this.editorConn.disconnect();
       this.editorConn = null;
-      this.editorExecutor = null;
+      this.dispatcher?.setEditorExecutor(null);
       log('Editor connection closed');
     }
     const proc = ps.getRunningProcess();
