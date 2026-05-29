@@ -254,7 +254,7 @@ export class GodotServer {
             const duration = Date.now() - startTime;
             return attachFallbackWarning({ ...editorResult, content: [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] });
           }
-          return attachFallbackWarning(dispatchTool(pending.toolName, pending.args, ctx, startTime));
+          return attachFallbackWarning(await dispatchTool(pending.toolName, pending.args, ctx, startTime));
         }
 
         if (requiresConfirmation(name, args)) {
@@ -281,7 +281,7 @@ export class GodotServer {
           return attachFallbackWarning({ ...editorResult, content: [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] });
         }
 
-        return attachFallbackWarning(dispatchTool(name, args, ctx, startTime));
+        return attachFallbackWarning(await dispatchTool(name, args, ctx, startTime));
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         log('Tool error:', name, msg);
