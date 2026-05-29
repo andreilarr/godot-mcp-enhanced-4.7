@@ -73,17 +73,23 @@ import { killProcess } from './core/process-state.js';
 // Re-export for backward compatibility (tests import from GodotServer)
 export { clearGodotPathCache, getCachedGodotPath };
 
+/** Validate path-related args against the whitelist. Returns error ToolResult or null if OK. */
+function validatePathArgs(args: Record<string, unknown>): ToolResult | null {
+  if (typeof args.project_path === 'string' && !isPathInAllowedRoots(args.project_path)) {
+    return { content: [{ type: 'text' as const, text: JSON.stringify({ error: { code: 'PATH_NOT_ALLOWED', message: `Path not in ALLOWED_PROJECT_PATHS: ${args.project_path}` } }) }], isError: true };
+  }
+  if (typeof args.search_dir === 'string' && !isPathInAllowedRoots(args.search_dir)) {
+    return { content: [{ type: 'text' as const, text: JSON.stringify({ error: { code: 'PATH_NOT_ALLOWED', message: `Search directory not in ALLOWED_PROJECT_PATHS: ${args.search_dir}. Set ALLOWED_PROJECT_PATHS or GODOT_MCP_UNRESTRICTED=true.` } }) }], isError: true };
+  }
+  return null;
+}
+
 async function dispatchTool(
   toolName: string, args: Record<string, unknown>, ctx: ToolContext, startTime: number
 ): Promise<ToolResult> {
-  // C-03: Validate project_path against whitelist
-  if (typeof args.project_path === 'string' && !isPathInAllowedRoots(args.project_path)) {
-    return { content: [{ type: 'text', text: JSON.stringify({ error: { code: 'PATH_NOT_ALLOWED', message: `Path not in ALLOWED_PROJECT_PATHS: ${args.project_path}` } }) }], isError: true };
-  }
-  // I-SEC-01: Validate search_dir against whitelist
-  if (typeof args.search_dir === 'string' && !isPathInAllowedRoots(args.search_dir)) {
-    return { content: [{ type: 'text', text: JSON.stringify({ error: { code: 'PATH_NOT_ALLOWED', message: `Search directory not in ALLOWED_PROJECT_PATHS: ${args.search_dir}. Set ALLOWED_PROJECT_PATHS or GODOT_MCP_UNRESTRICTED=true.` } }) }], isError: true };
-  }
+  // C-03 / I-SEC-01: Validate path args against whitelist
+  const pathErr = validatePathArgs(args);
+  if (pathErr) return pathErr;
   const targetMod = getModuleForTool(toolName);
   if (!targetMod) {
     return { content: [{ type: 'text', text: `Unknown tool: ${toolName}` }] };
@@ -226,20 +232,9 @@ export class GodotServer {
             };
           }
           // Re-dispatch with original tool name and args
-          // Validate project_path against whitelist for editor branch (C-01)
-          if (typeof pending.args.project_path === 'string' && !isPathInAllowedRoots(pending.args.project_path)) {
-            return {
-              content: [{ type: 'text' as const, text: JSON.stringify({ error: { code: 'PATH_NOT_ALLOWED', message: `Path not in ALLOWED_PROJECT_PATHS: ${pending.args.project_path}` } }) }],
-              isError: true,
-            };
-          }
-          // I-SEC-01: Validate search_dir against whitelist for editor branch
-          if (typeof pending.args.search_dir === 'string' && !isPathInAllowedRoots(pending.args.search_dir)) {
-            return {
-              content: [{ type: 'text' as const, text: JSON.stringify({ error: { code: 'PATH_NOT_ALLOWED', message: `Search directory not in ALLOWED_PROJECT_PATHS: ${pending.args.search_dir}. Set ALLOWED_PROJECT_PATHS or GODOT_MCP_UNRESTRICTED=true.` } }) }],
-              isError: true,
-            };
-          }
+          // C-03 / I-SEC-01: Validate path args against whitelist
+          const pathErr = validatePathArgs(pending.args);
+          if (pathErr) return pathErr;
           if (this.connectionMode === 'editor' && this.editorExecutor) {
             const editorResult = await this.editorExecutor.execute(pending.toolName, pending.args);
             const duration = Date.now() - startTime;
