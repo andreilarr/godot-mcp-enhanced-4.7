@@ -21,8 +21,11 @@ vi.mock('../src/core/process-state.js', () => ({
   appendOutput: vi.fn(),
   clearOutputBuffer: vi.fn(),
   killProcess: vi.fn(async () => {}),
+  forceKillTree: vi.fn(),
   setProcessBusy: vi.fn(),
   acquireProcessSlot: vi.fn(() => true),
+  acquireShortRunningSlot: vi.fn(() => true),
+  releaseShortRunningSlot: vi.fn(),
 }));
 
 vi.mock('../src/helpers.js', () => ({
