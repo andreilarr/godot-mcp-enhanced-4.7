@@ -16,17 +16,17 @@ func _enter_tree() -> void:
 	websocket_server.set_panel(status_panel)
 
 func _exit_tree() -> void:
-	if websocket_server:
+	if websocket_server and is_instance_valid(websocket_server):
 		websocket_server.set_process(false)
 		var handler = websocket_server.get_node_or_null("command_handler")
-		if handler and handler.has_method("cleanup"):
+		if handler and is_instance_valid(handler) and handler.has_method("cleanup"):
 			handler.cleanup()
 		websocket_server.queue_free()
-		websocket_server = null
-	if status_panel:
+	websocket_server = null
+	if status_panel and is_instance_valid(status_panel):
 		remove_control_from_bottom_panel(status_panel)
 		status_panel.queue_free()
-		status_panel = null
+	status_panel = null
 
 func get_plugin() -> EditorPlugin:
 	return self

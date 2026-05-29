@@ -151,14 +151,14 @@ describe('delivery handleTool: input validation', () => {
   it('rejects missing project_path', async () => {
     const result = await handleTool('verify_delivery', { scope: 'full' }, ctx);
     const parsed = JSON.parse(result.content[0].text);
-    expect(parsed.passed).toBe(false);
+    expect(parsed.success).toBe(false);
     expect(parsed.error).toContain('project_path must be a string');
   });
 
   it('rejects invalid scope', async () => {
     const result = await handleTool('verify_delivery', { project_path: tmpDir, scope: 'invalid' }, ctx);
     const parsed = JSON.parse(result.content[0].text);
-    expect(parsed.passed).toBe(false);
+    expect(parsed.success).toBe(false);
     expect(parsed.error).toContain('scope must be one of');
   });
 
@@ -167,7 +167,7 @@ describe('delivery handleTool: input validation', () => {
     try {
       const result = await handleTool('verify_delivery', { project_path: noProjectDir, scope: 'full' }, ctx);
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.passed).toBe(false);
+      expect(parsed.success).toBe(false);
       expect(parsed.error).toContain('Not a valid Godot project');
     } finally {
       cleanupDir(noProjectDir);
@@ -181,7 +181,7 @@ describe('delivery handleTool: input validation', () => {
       scene_path: '../../etc/passwd',
     }, ctx);
     const parsed = JSON.parse(result.content[0].text);
-    expect(parsed.passed).toBe(false);
+    expect(parsed.success).toBe(false);
     expect(parsed.error).toContain('traversal');
   });
 
@@ -192,7 +192,7 @@ describe('delivery handleTool: input validation', () => {
       script_path: '../../../etc/shadow',
     }, ctx);
     const parsed = JSON.parse(result.content[0].text);
-    expect(parsed.passed).toBe(false);
+    expect(parsed.success).toBe(false);
     expect(parsed.error).toContain('traversal');
   });
 });

@@ -84,37 +84,97 @@ func handle_recording_play(params: Dictionary) -> Dictionary:
 		speed_val = 1.0
 
 	var played_count = 0
+	# Schedule events with time offsets using a Timer for proper delays
+	if events.size() == 0:
+		return {"result": {"events_played": 0, "speed": speed_val, "status": "playback_complete"}}
+
+	# Build a sorted schedule of (delay_ms, event) pairs
+	var schedule: Array = []
+	var base_offset: float = 0.0
 	for evt in events:
 		if not (evt is Dictionary):
 			continue
-		var evt_type: String = str(evt.get("type", ""))
-		match evt_type:
-			"key":
-				var ie = InputEventKey.new()
-				ie.keycode = int(evt.get("keycode", 0))
-				ie.pressed = bool(evt.get("pressed", true))
-				ie.shift_pressed = bool(evt.get("shift", false))
-				ie.ctrl_pressed = bool(evt.get("ctrl", false))
-				ie.alt_pressed = bool(evt.get("alt", false))
-				Input.parse_input_event(ie)
-			"mouse_click":
-				var ie = InputEventMouseButton.new()
-				var pos = evt.get("position", [0.0, 0.0])
-				if pos is Array and pos.size() >= 2:
-					ie.position = Vector2(float(pos[0]), float(pos[1]))
-				ie.button_index = int(evt.get("button", 1))
-				ie.pressed = bool(evt.get("pressed", true))
-				Input.parse_input_event(ie)
-			"mouse_move":
-				var ie = InputEventMouseMotion.new()
-				var pos = evt.get("position", [0.0, 0.0])
-				if pos is Array and pos.size() >= 2:
-					ie.position = Vector2(float(pos[0]), float(pos[1]))
-				Input.parse_input_event(ie)
-		played_count += 1
+		var offset: float = float(evt.get("time_offset", 0.0)) / speed_val
+		schedule.append({"delay": offset - base_offset, "event": evt})
+		base_offset = offset
 
-	return {"result": {"events_played": played_count, "speed": speed_val, "status": "playback_complete"}}
+	_playback_schedule = schedule
+	_playback_index = 0
+	_playback_count = 0
+
+	# Start playback via timer
+	_schedule_next_event()
+
+	return {"result": {"events_played": events.size(), "speed": speed_val, "status": "playback_started"}}
+
+var _playback_schedule: Array = []
+var _playback_index: int = 0
+var _playback_count: int = 0
+var _playback_timer: Timer = null
+
+func _schedule_next_event() -> void:
+	if _playback_index >= _playback_schedule.size():
+		_playback_schedule = []
+		_playback_index = 0
+		return
+
+	var entry: Dictionary = _playback_schedule[_playback_index]
+	var delay_ms: float = entry.get("delay", 0.0)
+	_playback_index += 1
+
+	if delay_ms <= 1.0:
+		_fire_playback_event(entry.get("event"))
+		_schedule_next_event()
+	else:
+		if _playback_timer == null:
+			_playback_timer = Timer.new()
+			_playback_timer.one_shot = true
+			_playback_timer.timeout.connect(_on_playback_timer_timeout)
+			add_child(_playback_timer)
+		_playback_timer.start(delay_ms / 1000.0)
+
+func _on_playback_timer_timeout() -> void:
+	if _playback_index > 0 and _playback_index <= _playback_schedule.size():
+		var entry: Dictionary = _playback_schedule[_playback_index - 1]
+		_fire_playback_event(entry.get("event"))
+	_schedule_next_event()
+
+func _fire_playback_event(evt: Dictionary) -> void:
+	if evt == null:
+		return
+	var evt_type: String = str(evt.get("type", ""))
+	match evt_type:
+		"key":
+			var ie = InputEventKey.new()
+			ie.keycode = int(evt.get("keycode", 0))
+			ie.pressed = bool(evt.get("pressed", true))
+			ie.shift_pressed = bool(evt.get("shift", false))
+			ie.ctrl_pressed = bool(evt.get("ctrl", false))
+			ie.alt_pressed = bool(evt.get("alt", false))
+			Input.parse_input_event(ie)
+		"mouse_click":
+			var ie = InputEventMouseButton.new()
+			var pos = evt.get("position", [0.0, 0.0])
+			if pos is Array and pos.size() >= 2:
+				ie.position = Vector2(float(pos[0]), float(pos[1]))
+			ie.button_index = int(evt.get("button", 1))
+			ie.pressed = bool(evt.get("pressed", true))
+			Input.parse_input_event(ie)
+		"mouse_move":
+			var ie = InputEventMouseMotion.new()
+			var pos = evt.get("position", [0.0, 0.0])
+			if pos is Array and pos.size() >= 2:
+				ie.position = Vector2(float(pos[0]), float(pos[1]))
+			Input.parse_input_event(ie)
+	_playback_count += 1
 
 func cleanup() -> void:
 	_recording = false
 	_recorded_events = []
+	_playback_schedule = []
+	_playback_index = 0
+	if _playback_timer != null:
+		_playback_timer.stop()
+		remove_child(_playback_timer)
+		_playback_timer.queue_free()
+		_playback_timer = null

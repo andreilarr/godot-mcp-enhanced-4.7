@@ -49,21 +49,18 @@ describe('docs tools', () => {
   it('getToolDefinitions returns non-empty array', () => {
     const defs = getToolDefinitions();
     expect(Array.isArray(defs)).toBe(true);
-    expect(defs.length).toBeGreaterThanOrEqual(4);
+    expect(defs.length).toBeGreaterThanOrEqual(1);
     const names = defs.map(d => d.name);
-    expect(names).toContain('search_classes');
-    expect(names).toContain('get_class_info');
-    expect(names).toContain('find_method');
-    expect(names).toContain('get_inheritance');
+    // search_classes is now an action inside docs tool
+    expect(names).toContain('docs');
+    // find_method is now an action inside docs tool
+    // get_inheritance is now an action inside docs tool
   });
 
   it('TOOL_META has entries', () => {
-    expect(Object.keys(TOOL_META).length).toBeGreaterThanOrEqual(4);
-    expect(TOOL_META['get_class_info']).toBeDefined();
-    expect(TOOL_META['get_class_info'].readonly).toBe(true);
-    expect(TOOL_META['search_classes'].readonly).toBe(true);
-    expect(TOOL_META['find_method'].readonly).toBe(true);
-    expect(TOOL_META['get_inheritance'].readonly).toBe(true);
+    expect(Object.keys(TOOL_META).length).toBeGreaterThanOrEqual(1);
+    expect(TOOL_META['docs']).toBeDefined();
+    expect(TOOL_META['docs'].readonly).toBe(true);
   });
 
   it('handleTool returns null for unknown tool', async () => {
@@ -72,7 +69,7 @@ describe('docs tools', () => {
   });
 
   it('handleTool for search_classes returns results', async () => {
-    const result = await handleTool('search_classes', { query: 'node' }, ctx);
+    const result = await handleTool('docs', { action: 'search_classes', query: 'node' }, ctx);
     expect(result).not.toBeNull();
     expect(result.isError).toBeFalsy();
     const text = result.content[0].text;
@@ -83,7 +80,7 @@ describe('docs tools', () => {
   });
 
   it('handleTool for get_class_info returns class details', async () => {
-    const result = await handleTool('get_class_info', { class_name: 'Node2D' }, ctx);
+    const result = await handleTool('docs', { action: 'get_class_info', class_name: 'Node2D' }, ctx);
     expect(result).not.toBeNull();
     expect(result.isError).toBeFalsy();
     const text = result.content[0].text;
@@ -94,7 +91,8 @@ describe('docs tools', () => {
   });
 
   it('handleTool for find_method returns method info', async () => {
-    const result = await handleTool('find_method', {
+    const result = await handleTool('docs', {
+      action: 'find_method',
       class_name: 'Node2D',
       method_name: 'set_position',
     }, ctx);
@@ -105,7 +103,7 @@ describe('docs tools', () => {
   });
 
   it('handleTool for get_inheritance returns chain', async () => {
-    const result = await handleTool('get_inheritance', { class_name: 'Node2D' }, ctx);
+    const result = await handleTool('docs', { action: 'get_inheritance', class_name: 'Node2D' }, ctx);
     expect(result).not.toBeNull();
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.class).toBe('Node2D');

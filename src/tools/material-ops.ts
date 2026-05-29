@@ -570,65 +570,27 @@ function materialErrorMapper(msg: string): string {
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'material_read',
-      description: `读取节点材质属性 + shader uniform 列表。${NON_PERSIST}`,
+      name: 'material',
+      description: `Material and shader operations. Read: read. Write: set_params, create, save, load. Shader: shader_read, shader_write, shader_load_file, shader_save_file, shader_list_templates, shader_apply_template. ` + NON_PERSIST,
       inputSchema: {
         type: 'object' as const,
         properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: '场景树节点路径' },
-          material_index: { type: 'number', description: '材质索引（可选，默认 0，仅对 mesh surface 材质生效）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path'],
-      },
-    },
-    {
-      name: 'material_write',
-      description: `Write params / create material / attach / save .tres. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: '场景树节点路径' },
-          material_index: { type: 'number', description: '材质索引（可选，默认 0）' },
+          project_path: { type: 'string', description: 'Godot project directory path' },
           action: {
             type: 'string',
-            enum: ['set_params', 'create', 'save', 'load'],
-            description: '操作类型：set_params 设置参数 | create 创建材质 | save 保存为 .tres | load 加载 .tres',
+            enum: ['read', 'set_params', 'create', 'save', 'load', 'shader_read', 'shader_write', 'shader_load_file', 'shader_save_file', 'shader_list_templates', 'shader_apply_template'],
+            description: 'Operation type',
           },
-          params: {
-            type: 'object',
-            description: 'set_params 时的参数键值对（number→float, array[2]→Vector2, array[3]→Vector3, array[4]→Color, string→资源路径）',
-          },
-          material_type: {
-            type: 'string',
-            description: 'create 时的材质类型（ShaderMaterial / StandardMaterial3D / CanvasItemMaterial）',
-          },
-          shader_path: { type: 'string', description: 'create ShaderMaterial 时的 shader 资源路径（可选）' },
-          resource_path: { type: 'string', description: 'save/load 时的资源路径（res://materials/xxx.tres）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'action'],
-      },
-    },
-    {
-      name: 'shader_edit',
-      description: `Read/write shader code / load .gdshader / templates / compile diagnostics. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: '场景树节点路径（list_templates/save_file 时可选）' },
-          action: {
-            type: 'string',
-            enum: ['read', 'write', 'load_file', 'save_file', 'list_templates', 'apply_template'],
-            description: '操作类型：read 读取 shader | write 写入 shader | load_file 加载 .gdshader | save_file 保存 .gdshader | list_templates 列出模板 | apply_template 应用模板',
-          },
-          code: { type: 'string', description: 'write 时的完整 shader 代码' },
-          file_path: { type: 'string', description: 'load_file/save_file 时的文件路径（res://shaders/xxx.gdshader）' },
-          template_name: { type: 'string', description: 'apply_template 时的模板名称' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
+          node_path: { type: 'string', description: 'Scene tree node path' },
+          material_index: { type: 'number', description: 'Material index (optional, default 0)' },
+          params: { type: 'object', description: 'set_params: parameter key-value pairs' },
+          material_type: { type: 'string', description: 'create: material type' },
+          shader_path: { type: 'string', description: 'create: shader resource path' },
+          resource_path: { type: 'string', description: 'save/load: resource path' },
+          code: { type: 'string', description: 'shader_write/shader_save_file: shader code' },
+          file_path: { type: 'string', description: 'shader_load_file/shader_save_file: file path' },
+          template_name: { type: 'string', description: 'shader_apply_template: template name' },
+          load_autoloads: { type: 'boolean', description: 'Load Autoload context (default true)' },
         },
         required: ['project_path', 'action'],
       },
@@ -636,9 +598,11 @@ export function getToolDefinitions(): Tool[] {
   ];
 }
 
+
+
 // ─── Tool Handler ───────────────────────────────────────────────────────────
 
-const TOOL_NAMES = ['material_read', 'material_write', 'shader_edit'] as const;
+const TOOL_NAMES = ['material'] as const;
 
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
@@ -646,8 +610,11 @@ export async function handleTool(
   if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
 
   try {
+    const action = args.action as string;
+    if (!action) return opsErrorResult('SCRIPT_EXEC_FAILED', 'action is required');
+
     // list_templates 不需要 project_path，提前返回
-    if (name === 'shader_edit' && args.action === 'list_templates') {
+    if (action === 'shader_list_templates') {
       const templates = Object.entries(SHADER_TEMPLATES).map(([n, t]) => ({
         name: n,
         description: t.description,
@@ -680,114 +647,102 @@ export async function handleTool(
       return sanitizeResPath(raw, field);
     }
 
-    switch (name) {
-      case 'material_read': {
+
+        switch (action) {
+      case 'read': {
         const nodePath = requireNodePath(args.node_path);
         const materialIndex = requireMaterialIndex(args.material_index);
         script = genMaterialReadScript(nodePath, materialIndex);
         break;
       }
-      case 'material_write': {
+      case 'set_params': {
         const nodePath = requireNodePath(args.node_path);
         const materialIndex = requireMaterialIndex(args.material_index);
-        const action = args.action as string;
-        if (!action) return opsErrorResult('SCRIPT_EXEC_FAILED', 'action is required');
-
-        switch (action) {
-          case 'set_params': {
-            const params = args.params as Record<string, unknown>;
-            if (!params || typeof params !== 'object') {
-              return opsErrorResult('INVALID_PARAM_TYPE', 'params must be an object');
-            }
-            for (const [key, val] of Object.entries(params)) {
-              try {
-                validateParamType(val);
-              } catch (e) {
-                return opsErrorResult('INVALID_PARAM_TYPE', `param "${key}": ${(e as Error).message}`);
-              }
-            }
-            script = genMaterialSetParamsScript(nodePath, materialIndex, params);
-            break;
-          }
-          case 'create': {
-            const materialType = args.material_type as string;
-            if (!ALLOWED_MATERIAL_TYPES.includes(materialType as typeof ALLOWED_MATERIAL_TYPES[number])) {
-              return opsErrorResult('INVALID_MATERIAL_TYPE', `material_type must be one of: ${ALLOWED_MATERIAL_TYPES.join(', ')}`);
-            }
-            validateIdentifier(materialType, 'material_type');
-            const shaderPath = args.shader_path as string | undefined;
-            if (shaderPath) {
-              try { sanitizeResPath(shaderPath, 'shader_path'); } catch {
-                return opsErrorResult('INVALID_PATH', 'shader_path contains path traversal');
-              }
-            }
-            script = genMaterialCreateScript(nodePath, materialType, shaderPath);
-            break;
-          }
-          case 'save': {
-            const resourcePath = requireResPath(args.resource_path, 'resource_path');
-            script = genMaterialSaveScript(nodePath, materialIndex, resourcePath);
-            break;
-          }
-          case 'load': {
-            const resourcePath = requireResPath(args.resource_path, 'resource_path');
-            script = genMaterialLoadScript(nodePath, resourcePath);
-            break;
-          }
-          default:
-            return opsErrorResult('SCRIPT_EXEC_FAILED', `Unknown action: ${action}`);
-        }
+        const params = args.params as Record<string, unknown>;
+        if (!params || typeof params !== 'object') {
+        return opsErrorResult('INVALID_PARAM_TYPE', 'params must be an object');
+      }
+        for (const [key, val] of Object.entries(params)) {
+        try {
+        validateParamType(val);
+      } catch (e) {
+        return opsErrorResult('INVALID_PARAM_TYPE', `param "${key}": ${(e as Error).message}`);
+      }
+      }
+        script = genMaterialSetParamsScript(nodePath, materialIndex, params);
         break;
       }
-      case 'shader_edit': {
-        const action = args.action as string;
-        if (!action) return opsErrorResult('SCRIPT_EXEC_FAILED', 'action is required');
+      case 'create': {
+        const nodePath = requireNodePath(args.node_path);
+        const materialType = args.material_type as string;
+        if (!ALLOWED_MATERIAL_TYPES.includes(materialType as typeof ALLOWED_MATERIAL_TYPES[number])) {
+        return opsErrorResult('INVALID_MATERIAL_TYPE', `material_type must be one of: ${ALLOWED_MATERIAL_TYPES.join(', ')}`);
+      }
+        validateIdentifier(materialType, 'material_type');
+        const shaderPath = args.shader_path as string | undefined;
+        if (shaderPath) {
+        try { sanitizeResPath(shaderPath, 'shader_path'); } catch {
+        return opsErrorResult('INVALID_PATH', 'shader_path contains path traversal');
+      }
+      }
+        script = genMaterialCreateScript(nodePath, materialType, shaderPath);
+        break;
+      }
+      case 'save': {
+        const nodePath = requireNodePath(args.node_path);
         const materialIndex = requireMaterialIndex(args.material_index);
-
-        switch (action) {
-          case 'read': {
-            const nodePath = requireNodePath(args.node_path);
-            script = genShaderReadScript(nodePath, materialIndex);
-            break;
-          }
-          case 'write': {
-            const nodePath = requireNodePath(args.node_path);
-            const code = args.code as string;
-            if (code === undefined || code === null) return opsErrorResult('SCRIPT_EXEC_FAILED', 'code is required for write action');
-            script = genShaderWriteScript(nodePath, materialIndex, code);
-            break;
-          }
-          case 'load_file': {
-            const nodePath = requireNodePath(args.node_path);
-            const filePath = requireResPath(args.file_path, 'file_path');
-            script = genShaderLoadFileScript(nodePath, materialIndex, filePath);
-            break;
-          }
-          case 'save_file': {
-            const filePath = requireResPath(args.file_path, 'file_path');
-            const code = args.code as string;
-            if (code === undefined || code === null) return opsErrorResult('SCRIPT_EXEC_FAILED', 'code is required for save_file action');
-            script = genShaderSaveFileScript(filePath, code);
-            break;
-          }
-          case 'apply_template': {
-            const nodePath = requireNodePath(args.node_path);
-            const templateName = args.template_name as string;
-            if (!templateName) return opsErrorResult('INVALID_TEMPLATE', 'template_name is required for apply_template action');
-            if (!SHADER_TEMPLATES[templateName]) {
-              return opsErrorResult('INVALID_TEMPLATE', `Unknown template: ${templateName}. Available: ${Object.keys(SHADER_TEMPLATES).join(', ')}`);
-            }
-            script = genShaderApplyTemplateScript(nodePath, materialIndex, templateName);
-            break;
-          }
-          default:
-            return opsErrorResult('SCRIPT_EXEC_FAILED', `Unknown action: ${action}`);
-        }
+        const resourcePath = requireResPath(args.resource_path, 'resource_path');
+        script = genMaterialSaveScript(nodePath, materialIndex, resourcePath);
+        break;
+      }
+      case 'load': {
+        const nodePath = requireNodePath(args.node_path);
+        const resourcePath = requireResPath(args.resource_path, 'resource_path');
+        script = genMaterialLoadScript(nodePath, resourcePath);
+        break;
+      }
+      case 'shader_read': {
+        const materialIndex = requireMaterialIndex(args.material_index);
+        const nodePath = requireNodePath(args.node_path);
+        script = genShaderReadScript(nodePath, materialIndex);
+        break;
+      }
+      case 'shader_write': {
+        const materialIndex = requireMaterialIndex(args.material_index);
+        const nodePath = requireNodePath(args.node_path);
+        const code = args.code as string;
+        if (code === undefined || code === null) return opsErrorResult('SCRIPT_EXEC_FAILED', 'code is required for write action');
+        script = genShaderWriteScript(nodePath, materialIndex, code);
+        break;
+      }
+      case 'shader_load_file': {
+        const materialIndex = requireMaterialIndex(args.material_index);
+        const nodePath = requireNodePath(args.node_path);
+        const filePath = requireResPath(args.file_path, 'file_path');
+        script = genShaderLoadFileScript(nodePath, materialIndex, filePath);
+        break;
+      }
+      case 'shader_save_file': {
+        const filePath = requireResPath(args.file_path, 'file_path');
+        const code = args.code as string;
+        if (code === undefined || code === null) return opsErrorResult('SCRIPT_EXEC_FAILED', 'code is required for save_file action');
+        script = genShaderSaveFileScript(filePath, code);
+        break;
+      }
+      case 'shader_apply_template': {
+        const nodePath = requireNodePath(args.node_path);
+        const materialIndex = requireMaterialIndex(args.material_index);
+        const templateName = args.template_name as string;
+        if (!templateName) return opsErrorResult('INVALID_TEMPLATE', 'template_name is required for apply_template action');
+        if (!SHADER_TEMPLATES[templateName]) {
+        return opsErrorResult('INVALID_TEMPLATE', `Unknown template: ${templateName}. Available: ${Object.keys(SHADER_TEMPLATES).join(', ')}`);
+      }
+        script = genShaderApplyTemplateScript(nodePath, materialIndex, templateName);
         break;
       }
       default:
-        return null;
-    }
+        return opsErrorResult('SCRIPT_EXEC_FAILED', `Unknown action: ${action}`);
+      }
 
     const result = await executeGdscript({
       godotPath: godot,
@@ -808,7 +763,5 @@ export async function handleTool(
 }
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  material_read: { readonly: true, long_running: false },
-  material_write: { readonly: false, long_running: false },
-  shader_edit: { readonly: false, long_running: false },
+  material: { readonly: false, long_running: false },
 };

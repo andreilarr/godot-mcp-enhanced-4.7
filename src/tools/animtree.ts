@@ -6,7 +6,7 @@ import { normalizeNodePath, gdEscape, ensureNumber, SCENE_TREE_HEADER, NON_PERSI
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
-const TOOL_NAMES = [
+const ACTIONS = [
   'animtree_create',
   'animtree_add_state',
   'animtree_add_transition',
@@ -15,7 +15,7 @@ const TOOL_NAMES = [
   'animtree_state_edit',
 ] as const;
 
-export { TOOL_NAMES };
+export { ACTIONS };
 
 const TREE_ROOT_TYPES = [
   'AnimationNodeStateMachine',
@@ -34,65 +34,41 @@ const ERROR_CODES = {
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'animtree_create',
+      name: 'animtree',
       description:
-        '创建 AnimationTree 节点并绑定 AnimationPlayer。支持选择根节点类型（状态机/混合树/混合空间）。' +
+        '查询、控制和编辑 AnimationTree。支持创建节点、添加状态、添加转换、设置混合参数、播放状态、编辑状态属性。' +
         NON_PERSIST,
       inputSchema: {
         type: 'object' as const,
         properties: {
+          action: {
+            type: 'string',
+            enum: [...ACTIONS],
+            description:
+              '操作类型：animtree_create 创建 AnimationTree 节点；animtree_add_state 添加状态；' +
+              'animtree_add_transition 添加转换；animtree_set_blend 设置混合参数；' +
+              'animtree_play 播放状态；animtree_state_edit 编辑状态属性',
+          },
           project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          name: { type: 'string', description: 'AnimationTree 节点名称' },
-          parent: { type: 'string', description: '父节点路径（默认 root）' },
-          animation_player_path: { type: 'string', description: '场景中已有的 AnimationPlayer 的 NodePath' },
+          node_path: { type: 'string', description: 'AnimationTree 节点路径' },
+          name: { type: 'string', description: 'AnimationTree 节点名称（animtree_create 时使用）' },
+          parent: { type: 'string', description: '父节点路径（animtree_create 时使用，默认 root）' },
+          animation_player_path: { type: 'string', description: 'AnimationPlayer 的 NodePath（animtree_create 时使用）' },
           tree_root_type: {
             type: 'string',
             enum: [...TREE_ROOT_TYPES],
-            description: '根节点类型（默认 AnimationNodeStateMachine）',
+            description: '根节点类型（animtree_create 时使用，默认 AnimationNodeStateMachine）',
           },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'name', 'animation_player_path'],
-      },
-    },
-    {
-      name: 'animtree_add_state',
-      description:
-        '向 AnimationTree 的状态机根节点添加一个状态（AnimationNodeAnimation）。' +
-        NON_PERSIST,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'AnimationTree 节点路径' },
           state_name: { type: 'string', description: '状态名称' },
-          animation: { type: 'string', description: '关联的 Animation 名称' },
+          animation: { type: 'string', description: '关联的 Animation 名称（animtree_add_state 时使用）' },
           position: {
             type: 'object',
-            properties: {
-              x: { type: 'number' },
-              y: { type: 'number' },
-            },
-            description: '在状态机编辑器中的位置（可选）',
+            properties: { x: { type: 'number' }, y: { type: 'number' } },
+            description: '位置 {x, y}',
           },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'state_name', 'animation'],
-      },
-    },
-    {
-      name: 'animtree_add_transition',
-      description:
-        '在状态机的两个状态之间添加转换（含条件）。' +
-        NON_PERSIST,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'AnimationTree 节点路径' },
-          from_state: { type: 'string', description: '源状态名称' },
-          to_state: { type: 'string', description: '目标状态名称' },
-          xfade_time: { type: 'number', description: '交叉淡入淡出时间（秒，默认 0.0）' },
+          from_state: { type: 'string', description: '源状态名称（animtree_add_transition 时使用）' },
+          to_state: { type: 'string', description: '目标状态名称（animtree_add_transition 时使用）' },
+          xfade_time: { type: 'number', description: '交叉淡入淡出时间（秒，animtree_add_transition 时使用）' },
           conditions: {
             type: 'array',
             items: {
@@ -103,72 +79,13 @@ export function getToolDefinitions(): Tool[] {
               },
               required: ['name', 'value'],
             },
-            description: '转换条件列表',
+            description: '转换条件列表（animtree_add_transition 时使用）',
           },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'from_state', 'to_state'],
-      },
-    },
-    {
-      name: 'animtree_set_blend',
-      description:
-        '设置 AnimationTree 的混合参数（用于 BlendTree 或 BlendSpace）。' +
-        NON_PERSIST,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'AnimationTree 节点路径' },
           parameter_name: { type: 'string', description: '参数名称' },
           value: { description: '参数值（float 用于 blends，{x,y} 用于 blend spaces）' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'node_path', 'parameter_name', 'value'],
-      },
-    },
-    {
-      name: 'animtree_play',
-      description:
-        '切换 AnimationTree 到指定状态（通过状态机 playback.travel）。' +
-        NON_PERSIST,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'AnimationTree 节点路径' },
-          state_name: { type: 'string', description: '目标状态名称' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'state_name'],
-      },
-    },
-    {
-      name: 'animtree_state_edit',
-      description:
-        '编辑 AnimationTree 状态机中的状态属性：设置状态在编辑器中的位置，或设置混合参数。' +
-        NON_PERSIST,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'AnimationTree 节点路径' },
-          action: {
-            type: 'string',
-            enum: ['set_position', 'set_blend'],
-            description: '操作类型：set_position 设置状态位置，set_blend 设置混合参数',
-          },
-          state_name: { type: 'string', description: '状态名称（set_position 时必填）' },
-          position: {
-            type: 'object',
-            properties: { x: { type: 'number' }, y: { type: 'number' } },
-            description: '状态在编辑器中的位置（set_position 时必填）',
-          },
-          parameter_name: { type: 'string', description: '参数名称（set_blend 时必填）' },
-          value: { description: '参数值（set_blend 时必填，number 或 {x,y}）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'action'],
+        required: ['action', 'project_path'],
       },
     },
   ];
@@ -385,7 +302,12 @@ export async function handleTool(
   args: Record<string, unknown>,
   ctx: ToolContext,
 ): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'animtree') return null;
+
+  const action = args.action as string;
+  if (!action || !(ACTIONS as readonly string[]).includes(action)) {
+    return opsErrorResult('INVALID_PARAMS', `Invalid or missing action. Must be one of: ${(ACTIONS as readonly string[]).join(', ')}`);
+  }
 
   try {
     const projectPath = requireProjectPath(args);
@@ -393,7 +315,7 @@ export async function handleTool(
 
     let code: string;
 
-    switch (name) {
+    switch (action) {
       case 'animtree_create': {
         const nodeName = args.name as string;
         const animPlayerPath = args.animation_player_path as string;
@@ -522,10 +444,5 @@ export async function handleTool(
 }
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  animtree_create: { readonly: false, long_running: false },
-  animtree_add_state: { readonly: false, long_running: false },
-  animtree_add_transition: { readonly: false, long_running: false },
-  animtree_set_blend: { readonly: false, long_running: false },
-  animtree_play: { readonly: false, long_running: false },
-  animtree_state_edit: { readonly: false, long_running: false },
+  animtree: { readonly: false, long_running: false },
 };

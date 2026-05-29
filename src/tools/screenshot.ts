@@ -3,42 +3,41 @@ import { existsSync, readFileSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
+import { opsErrorResult } from './shared.js';
 import { captureScreenshot } from '../screenshot.js';
 import { validatePath, requireProjectPath, resolveWithinRoot, normalizeUserProjectPath, allowOutsideProjectPaths, isPathInAllowedRoots } from '../helpers.js';
 
-const TOOL_NAMES = ['capture_screenshot', 'analyze_screenshot'] as const;
+const TOOL_NAMES = ['screenshot'] as const;
+
+export { TOOL_NAMES };
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'capture_screenshot',
-      description: 'Capture a screenshot of a Godot project scene (experimental). Uses headless mode with opengl3 driver. Falls back gracefully if rendering is not available.',
+      name: 'screenshot',
+      description: 'Screenshot capture and AI visual analysis. capture: capture a Godot scene screenshot in headless mode (experimental). analyze: return an image as base64 for AI visual analysis.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene: { type: 'string', description: 'Scene file path relative to project (res://scenes/main.tscn). If omitted, captures the default scene or an empty viewport.' },
-          output_path: { type: 'string', description: 'Output PNG path (absolute). Defaults to <project_path>/screenshot.png' },
-          frame_delay: { type: 'number', description: 'Frames to wait before capture (default: 15)', default: 15 },
-          viewport_width: { type: 'number', description: 'Viewport width in pixels (default: 1280)', default: 1280 },
-          viewport_height: { type: 'number', description: 'Viewport height in pixels (default: 720)', default: 720 },
+          action: {
+            type: 'string',
+            enum: ['capture', 'analyze'],
+            description: 'Action type: capture (take a screenshot) or analyze (AI visual analysis of an image)',
+          },
+          // capture params
+          scene: { type: 'string', description: 'capture: Scene file path relative to project (res://scenes/main.tscn). If omitted, captures the default scene or an empty viewport.' },
+          output_path: { type: 'string', description: 'capture: Output PNG path (absolute). Defaults to <project_path>/screenshot.png' },
+          frame_delay: { type: 'number', description: 'capture: Frames to wait before capture (default: 15)', default: 15 },
+          viewport_width: { type: 'number', description: 'capture: Viewport width in pixels (default: 1280)', default: 1280 },
+          viewport_height: { type: 'number', description: 'capture: Viewport height in pixels (default: 720)', default: 720 },
+          // analyze params
+          image_path: { type: 'string', description: 'analyze: Absolute path to the image file (PNG or JPG)' },
+          question: { type: 'string', description: 'analyze: Question for the AI to answer about the image. Default: "Describe what you see in this game screenshot."', default: 'Describe what you see in this game screenshot. Focus on: UI elements, character positions, any visual issues or bugs.' },
         },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'analyze_screenshot',
-      description: 'Return a screenshot as a base64 image for AI visual analysis. The AI can then describe what it sees, identify UI elements, spot bugs, etc. Works with any image file (PNG, JPG).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          image_path: { type: 'string', description: 'Absolute path to the image file (PNG or JPG)' },
-          project_path: { type: 'string', description: 'Project path - if provided, image_path is resolved relative to the project directory' },
-          question: { type: 'string', description: 'Question for the AI to answer about the image. Default: "Describe what you see in this game screenshot."', default: 'Describe what you see in this game screenshot. Focus on: UI elements, character positions, any visual issues or bugs.' },
-        },
-        required: [],
+        required: ['project_path', 'action'],
       },
     },
   ];
@@ -47,10 +46,13 @@ export function getToolDefinitions(): Tool[] {
 // ─── Tool handler ───────────────────────────────────────────────────────────
 
 export async function handleTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'screenshot') return null;
 
-  switch (name) {
-    case 'capture_screenshot': {
+  const action = args.action as string;
+  if (!action) return opsErrorResult('INVALID_PARAMS', '"action" is required (capture or analyze).');
+
+  switch (action) {
+    case 'capture': {
       const projectPath = requireProjectPath(args);
       const scene = args.scene as string | undefined;
       const outputPathRaw = args.output_path as string | undefined;
@@ -87,7 +89,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           `File size: ${result.fileSize} bytes\n` +
           `Viewport: ${viewportW}x${viewportH}\n` +
           `Frames waited: ${frameDelay}\n\n` +
-          'Use analyze_screenshot to have the AI examine this image.'
+          'Use screenshot with action=analyze to have the AI examine this image.'
         );
       } else {
         return textResult(
@@ -98,7 +100,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
     }
 
-    case 'analyze_screenshot': {
+    case 'analyze': {
       let imagePath = args.image_path as string | undefined;
       const projectPathRaw = typeof args.project_path === 'string' ? args.project_path : undefined;
       const projectPath = projectPathRaw?.trim() ? validatePath(projectPathRaw) : undefined;
@@ -113,14 +115,14 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           imagePath = validatePath(imagePath);
         } else {
           if (!projectPath) {
-            return textResult('Error: project_path is required when ALLOW_OUTSIDE_PROJECT_PATHS is not set.');
+            return opsErrorResult('INVALID_PARAMS', 'project_path is required when ALLOW_OUTSIDE_PROJECT_PATHS is not set.');
           }
           imagePath = resolveWithinRoot(projectPath, normalizeUserProjectPath(imagePath));
         }
       } else if (projectPath) {
         imagePath = join(projectPath, 'screenshot.png');
       } else {
-        return textResult('Error: either image_path or project_path is required.');
+        return opsErrorResult('INVALID_PARAMS', 'either image_path or project_path is required.');
       }
 
       if (!existsSync(imagePath)) {
@@ -148,11 +150,10 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     default:
-      return null;
+      return textResult(`Unknown action: ${action}. Use "capture" or "analyze".`);
   }
 }
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  capture_screenshot: { readonly: false, long_running: true },
-  analyze_screenshot: { readonly: true, long_running: false },
+  screenshot: { readonly: true, long_running: false },
 };

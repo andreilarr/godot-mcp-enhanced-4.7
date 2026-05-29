@@ -15,13 +15,13 @@ const NAV_ERROR_CODES = {
   SCRIPT_EXEC_FAILED: 'SCRIPT_EXEC_FAILED',
 } as const;
 
-const TOOL_NAMES = [
-  'nav_create_region',
-  'nav_bake_mesh',
-  'nav_create_agent',
-  'nav_set_params',
-  'nav_create_link',
-  'nav_query_path',
+const ACTIONS = [
+  'create_region',
+  'bake_mesh',
+  'create_agent',
+  'set_params',
+  'create_link',
+  'query_path',
 ] as const;
 
 // ─── GDScript Generators ──────────────────────────────────────────────────
@@ -261,73 +261,39 @@ ${regionBlock}
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'nav_create_region',
-      description: `Create NavigationRegion3D with optional navigation mesh. ${NON_PERSIST}`,
+      name: 'nav',
+      description: `导航操作。create_region: 创建 NavigationRegion3D（可选烘焙）。bake_mesh: 烘焙导航网格（耗时较长）。create_agent: 创建 NavigationAgent3D。set_params: 设置导航参数。create_link: 创建 NavigationLink3D。query_path: 查询 3D 导航路径。${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
           project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          name: { type: 'string', description: '节点名称' },
-          parent: { type: 'string', description: '父节点路径（默认 root）' },
+          action: {
+            type: 'string',
+            enum: [...ACTIONS],
+            description: '操作类型',
+          },
+          name: { type: 'string', description: 'create_region/create_agent/create_link: 节点名称' },
+          parent: { type: 'string', description: 'create_region/create_agent/create_link: 父节点路径（默认 root）' },
+          node_path: { type: 'string', description: 'bake_mesh/set_params: 目标节点路径' },
           position: {
             type: 'object',
-            description: '位置 {x,y,z}',
+            description: 'create_region: 位置 {x,y,z}',
             properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
             required: ['x', 'y', 'z'],
           },
-          bake: { type: 'boolean', description: '是否立即烘焙导航网格（默认 false）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'name'],
-      },
-    },
-    {
-      name: 'nav_bake_mesh',
-      description: `Bake navigation mesh for a NavigationRegion3D. This is a long-running operation. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'NavigationRegion3D 节点路径' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path'],
-      },
-    },
-    {
-      name: 'nav_create_agent',
-      description: `Create NavigationAgent3D for pathfinding. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          name: { type: 'string', description: '节点名称' },
-          parent: { type: 'string', description: '父节点路径（默认 root）' },
+          bake: { type: 'boolean', description: 'create_region: 是否立即烘焙导航网格（默认 false）' },
           target_position: {
             type: 'object',
-            description: '目标位置 {x,y,z}',
+            description: 'create_agent: 目标位置 {x,y,z}',
             properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
             required: ['x', 'y', 'z'],
           },
-          path_desired_distance: { type: 'number', description: '路径期望距离（默认 0.5）' },
-          target_desired_distance: { type: 'number', description: '目标期望距离（默认 1.0）' },
-          avoidance_enabled: { type: 'boolean', description: '是否启用避障（默认 false）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'name'],
-      },
-    },
-    {
-      name: 'nav_set_params',
-      description: `Set navigation agent parameters. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'NavigationAgent3D 节点路径' },
+          path_desired_distance: { type: 'number', description: 'create_agent: 路径期望距离（默认 0.5）' },
+          target_desired_distance: { type: 'number', description: 'create_agent: 目标期望距离（默认 1.0）' },
+          avoidance_enabled: { type: 'boolean', description: 'create_agent: 是否启用避障（默认 false）' },
           params: {
             type: 'object',
-            description: '导航参数（仅传入需要修改的字段）',
+            description: 'set_params: 导航参数（仅传入需要修改的字段）',
             properties: {
               path_desired_distance: { type: 'number' },
               target_desired_distance: { type: 'number' },
@@ -341,61 +307,35 @@ export function getToolDefinitions(): Tool[] {
               time_horizon_obstacles: { type: 'number' },
             },
           },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'params'],
-      },
-    },
-    {
-      name: 'nav_create_link',
-      description: `Create NavigationLink3D for jump points or teleportation. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          name: { type: 'string', description: '节点名称' },
-          parent: { type: 'string', description: '父节点路径（默认 root）' },
           start_position: {
             type: 'object',
-            description: '起始位置 {x,y,z}',
+            description: 'create_link: 起始位置 {x,y,z}',
             properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
             required: ['x', 'y', 'z'],
           },
           end_position: {
             type: 'object',
-            description: '终点位置 {x,y,z}',
+            description: 'create_link: 终点位置 {x,y,z}',
             properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
             required: ['x', 'y', 'z'],
           },
-          bidirectional: { type: 'boolean', description: '是否双向通行（默认 true）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'name', 'start_position', 'end_position'],
-      },
-    },
-    {
-      name: 'nav_query_path',
-      description: `Query 3D navigation path. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          bidirectional: { type: 'boolean', description: 'create_link: 是否双向通行（默认 true）' },
           start_pos: {
             type: 'object',
-            description: '起点 {x,y,z}',
+            description: 'query_path: 起点 {x,y,z}',
             properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
             required: ['x', 'y', 'z'],
           },
           end_pos: {
             type: 'object',
-            description: '终点 {x,y,z}',
+            description: 'query_path: 终点 {x,y,z}',
             properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
             required: ['x', 'y', 'z'],
           },
-          navigation_region: { type: 'string', description: 'NavigationRegion3D 节点路径（可选）' },
+          navigation_region: { type: 'string', description: 'query_path: NavigationRegion3D 节点路径（可选）' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'start_pos', 'end_pos'],
+        required: ['project_path', 'action'],
       },
     },
   ];
@@ -406,7 +346,10 @@ export function getToolDefinitions(): Tool[] {
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'nav') return null;
+
+  const action = args.action as string;
+  if (!action) return opsErrorResult('INVALID_PARAMS', 'action is required');
 
   try {
     const projectPath = requireProjectPath(args);
@@ -415,8 +358,8 @@ export async function handleTool(
     let script: string;
     const paramWarnings: string[] = [];
 
-    switch (name) {
-      case 'nav_create_region': {
+    switch (action) {
+      case 'create_region': {
         const nodeName = args.name as string;
         if (!nodeName) return opsErrorResult('INVALID_PARAMS', 'name is required');
         const parentPath = normalizeNodePath((args.parent as string) || 'root');
@@ -425,12 +368,12 @@ export async function handleTool(
         script = genCreateRegionScript(nodeName, parentPath, position, bake);
         break;
       }
-      case 'nav_bake_mesh': {
+      case 'bake_mesh': {
         const nodePath = normalizeNodePath(args.node_path as string);
         script = genBakeMeshScript(nodePath);
         break;
       }
-      case 'nav_create_agent': {
+      case 'create_agent': {
         const nodeName = args.name as string;
         if (!nodeName) return opsErrorResult('INVALID_PARAMS', 'name is required');
         const parentPath = normalizeNodePath((args.parent as string) || 'root');
@@ -441,7 +384,7 @@ export async function handleTool(
         script = genCreateAgentScript(nodeName, parentPath, targetPosition, pathDesiredDistance, targetDesiredDistance, avoidanceEnabled);
         break;
       }
-      case 'nav_set_params': {
+      case 'set_params': {
         const nodePath = normalizeNodePath(args.node_path as string);
         const rawParams = args.params as Record<string, unknown> | undefined;
         if (!rawParams || typeof rawParams !== 'object') {
@@ -486,7 +429,7 @@ export async function handleTool(
         script = genSetParamsScript(nodePath, filteredParams as Parameters<typeof genSetParamsScript>[1]);
         break;
       }
-      case 'nav_create_link': {
+      case 'create_link': {
         const nodeName = args.name as string;
         if (!nodeName) return opsErrorResult('INVALID_PARAMS', 'name is required');
         const parentPath = normalizeNodePath((args.parent as string) || 'root');
@@ -496,7 +439,7 @@ export async function handleTool(
         script = genCreateLinkScript(nodeName, parentPath, startPosition, endPosition, bidirectional);
         break;
       }
-      case 'nav_query_path': {
+      case 'query_path': {
         const startPos = validateVector3(args.start_pos);
         const endPos = validateVector3(args.end_pos);
         const navRegion = args.navigation_region as string | undefined;
@@ -509,7 +452,7 @@ export async function handleTool(
     }
 
     // Determine timeout: baking may take longer
-    const timeout = name === 'nav_bake_mesh' ? 120 : 30;
+    const timeout = action === 'bake_mesh' ? 120 : 30;
 
     const result = await executeGdscript({
       godotPath: godot,
@@ -538,10 +481,5 @@ export async function handleTool(
 // ─── Tool Meta ─────────────────────────────────────────────────────────────
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  nav_create_region: { readonly: false, long_running: false },
-  nav_bake_mesh: { readonly: false, long_running: true },
-  nav_create_agent: { readonly: false, long_running: false },
-  nav_set_params: { readonly: false, long_running: false },
-  nav_create_link: { readonly: false, long_running: false },
-  nav_query_path: { readonly: true, long_running: false },
+  nav: { readonly: false, long_running: false },
 };

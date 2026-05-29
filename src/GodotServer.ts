@@ -19,7 +19,9 @@ import {
 } from './resources.js';
 import { parseGodotConfig, isPathInAllowedRoots } from './helpers.js';
 
-// ─── Import modular tool handlers ───────────────────────────────────────────
+// ─── Import and register tool modules ────────────────────────────────────────
+import { registerModule, getModuleForTool, getAllToolDefinitions, LITE_TOOLS } from './core/tool-registry.js';
+
 import * as runtime from './tools/runtime.js';
 import * as screenshot from './tools/screenshot.js';
 import * as project from './tools/project.js';
@@ -51,11 +53,16 @@ import * as delivery from './tools/delivery.js';
 import * as codeTemplates from './tools/code-templates.js';
 import * as ikTools from './tools/ik-tools.js';
 import * as gameDesign from './tools/game-design.js';
+
+// Self-register all modules into the registry
+for (const mod of [runtime, screenshot, project, scene, script, validation, docs, node3dOps, physicsOps, audioOps, tilemapOps, materialOps, gameBridge, workflow, animationOps, animationTrack, profilerOps, spatialOps, testFramework, animtreeOps, navigationOps, particlesOps, signalOps, batchTools, uiOps, recordingOps, editorSync, delivery, codeTemplates, ikTools, gameDesign]) {
+  registerModule(mod);
+}
+
 import { requiresConfirmation, createPendingToken, consumeToken } from './guard.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pkgVersion = require('../package.json').version;
-import { registerTools, LITE_TOOLS } from './core/tool-registry.js';
 import { ReadOnlyGuard } from './core/ReadOnlyGuard.js';
 import { EditorConnection } from './core/EditorConnection.js';
 import { EditorToolExecutor } from './core/EditorToolExecutor.js';
@@ -65,26 +72,6 @@ import { killProcess } from './core/process-state.js';
 
 // Re-export for backward compatibility (tests import from GodotServer)
 export { clearGodotPathCache, getCachedGodotPath };
-
-const toolModules = [runtime, screenshot, project, scene, script, validation, docs, node3dOps, physicsOps, audioOps, tilemapOps, materialOps, gameBridge, workflow, animationOps, animationTrack, profilerOps, spatialOps, testFramework, animtreeOps, navigationOps, particlesOps, signalOps, batchTools, uiOps, recordingOps, editorSync, delivery, codeTemplates, ikTools, gameDesign];
-
-interface ToolMetaExport {
-  TOOL_META?: Record<string, { readonly: boolean; long_running: boolean }>;
-}
-
-// 注册工具标签 + 构建工具名→模块映射
-const allMeta: Array<{ name: string; readonly: boolean; long_running: boolean }> = [];
-const toolModuleMap = new Map<string, typeof toolModules[number]>();
-for (const mod of toolModules) {
-  const meta = (mod as ToolMetaExport).TOOL_META;
-  if (meta) {
-    for (const [name, m] of Object.entries(meta)) {
-      allMeta.push({ name, ...m });
-      toolModuleMap.set(name, mod);
-    }
-  }
-}
-registerTools(allMeta);
 
 async function dispatchTool(
   toolName: string, args: Record<string, unknown>, ctx: ToolContext, startTime: number
@@ -97,7 +84,7 @@ async function dispatchTool(
   if (typeof args.search_dir === 'string' && !isPathInAllowedRoots(args.search_dir)) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: { code: 'PATH_NOT_ALLOWED', message: `Search directory not in ALLOWED_PROJECT_PATHS: ${args.search_dir}. Set ALLOWED_PROJECT_PATHS or GODOT_MCP_UNRESTRICTED=true.` } }) }], isError: true };
   }
-  const targetMod = toolModuleMap.get(toolName);
+  const targetMod = getModuleForTool(toolName);
   if (!targetMod) {
     return { content: [{ type: 'text', text: `Unknown tool: ${toolName}` }] };
   }
@@ -151,7 +138,7 @@ export class GodotServer {
 
   private setupHandlers(): void {
     // ── Collect tool definitions from all modules ──
-    let allTools = toolModules.flatMap(m => m.getToolDefinitions());
+    let allTools = getAllToolDefinitions();
 
     // Inline tool: confirm_and_execute (for confirmation token flow)
     allTools.push({
@@ -261,7 +248,7 @@ export class GodotServer {
           return dispatchTool(pending.toolName, pending.args, ctx, startTime);
         }
 
-        if (requiresConfirmation(name)) {
+        if (requiresConfirmation(name, args)) {
           const token = createPendingToken(name, args);
           return {
             content: [{

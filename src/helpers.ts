@@ -152,22 +152,30 @@ export function allowOutsideProjectPaths(): boolean {
 
 let _pathAllowWarned = false;
 
+/** Ensure path ends with separator for prefix matching (avoids double-sep on Windows). */
+function ensureSep(p: string): string {
+  return p.endsWith(sep) ? p : p + sep;
+}
+
 /** Check if a requested path is within the ALLOWED_PROJECT_PATHS whitelist.
- *  Unconfigured: allow all paths with a one-time warning (local dev tool, zero-config UX).
- *  Configured: restrict to whitelist entries only (explicit deny-by-default). */
+ *  Unconfigured: fall back to process.cwd() as the only allowed root (deny-by-default).
+ *  Configured: restrict to whitelist entries only.
+ *  Explicit override: GODOT_MCP_UNRESTRICTED=true allows all paths. */
 export function isPathInAllowedRoots(requestedPath: string): boolean {
   if (process.env.GODOT_MCP_UNRESTRICTED === 'true') return true;
   if (allowOutsideProjectPaths()) return true;
   const allowed = getAllowedProjectPaths();
   if (allowed.length === 0) {
     if (!_pathAllowWarned) {
-      console.warn('[SECURITY] ALLOWED_PROJECT_PATHS not set — all paths are allowed. Set it to restrict access.');
+      console.warn('[SECURITY] ALLOWED_PROJECT_PATHS not set — restricted to process.cwd(). Set ALLOWED_PROJECT_PATHS or GODOT_MCP_UNRESTRICTED=true to override.');
       _pathAllowWarned = true;
     }
-    return true;
+    const cwd = resolvePath(process.cwd());
+    const resolved = resolvePath(requestedPath);
+    return resolved === cwd || resolved.startsWith(ensureSep(cwd));
   }
   const resolved = resolvePath(requestedPath);
-  return allowed.some(p => resolved === p || resolved.startsWith(p + sep));
+  return allowed.some(p => resolved === p || resolved.startsWith(ensureSep(p)));
 }
 
 /** Reset warning state (test-only). */

@@ -1,6 +1,6 @@
 import { expect, it, describe } from 'vitest';
 import {
-  TOOL_NAMES,
+  ACTIONS,
   getToolDefinitions,
   TOOL_META,
   handleTool,
@@ -10,11 +10,11 @@ import {
 
 const fakeCtx = { findGodot: async () => '/fake/godot' };
 
-// ─── TOOL_NAMES ──────────────────────────────────────────────────────────────
+// ─── ACTIONS ──────────────────────────────────────────────────────────────
 
-describe('animtree TOOL_NAMES', () => {
-  it('contains 6 tool names', () => {
-    expect(TOOL_NAMES.length).toBe(6);
+describe('animtree ACTIONS', () => {
+  it('contains 6 actions', () => {
+    expect(ACTIONS.length).toBe(6);
   });
   const expected = [
     'animtree_create',
@@ -26,7 +26,7 @@ describe('animtree TOOL_NAMES', () => {
   ];
   for (const name of expected) {
     it(`includes ${name}`, () => {
-      expect(TOOL_NAMES.includes(name)).toBeTruthy();
+      expect(ACTIONS.includes(name)).toBeTruthy();
     });
   }
 });
@@ -39,36 +39,36 @@ describe('animtree getToolDefinitions', () => {
     expect(Array.isArray(defs)).toBeTruthy();
     expect(defs.length).toBeGreaterThan(0);
   });
-  it('returns 6 definitions matching TOOL_NAMES', () => {
+  it('returns 1 definition named animtree', () => {
     const defs = getToolDefinitions();
-    expect(defs.length).toBe(6);
-    const names = defs.map(d => d.name);
-    for (const tn of TOOL_NAMES) {
-      expect(names.includes(tn)).toBeTruthy();
+    expect(defs.length).toBe(1);
+    expect(defs[0].name).toBe('animtree');
+  });
+  it('action enum contains all ACTIONS', () => {
+    const defs = getToolDefinitions();
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    for (const a of ACTIONS) {
+      expect(actionEnum.includes(a)).toBeTruthy();
     }
   });
-  it('each definition has name and inputSchema', () => {
-    for (const def of getToolDefinitions()) {
-      expect(def.name).toBeTruthy();
-      expect(def.inputSchema).toBeTruthy();
-      expect(def.inputSchema.type).toBe('object');
-    }
+  it('definition has name and inputSchema', () => {
+    const def = getToolDefinitions()[0];
+    expect(def.name).toBeTruthy();
+    expect(def.inputSchema).toBeTruthy();
+    expect(def.inputSchema.type).toBe('object');
   });
 });
 
 // ─── TOOL_META ───────────────────────────────────────────────────────────────
 
 describe('animtree TOOL_META', () => {
-  it('has entries for all tool names', () => {
-    for (const name of TOOL_NAMES) {
-      expect(name in TOOL_META).toBeTruthy();
-    }
+  it('has exactly 1 entry for animtree', () => {
+    expect('animtree' in TOOL_META).toBeTruthy();
+    expect(Object.keys(TOOL_META).length).toBe(1);
   });
-  it('all tools are non-readonly and non-long-running', () => {
-    for (const name of TOOL_NAMES) {
-      expect(TOOL_META[name].readonly).toBe(false);
-      expect(TOOL_META[name].long_running).toBe(false);
-    }
+  it('animtree is non-readonly and non-long-running', () => {
+    expect(TOOL_META['animtree'].readonly).toBe(false);
+    expect(TOOL_META['animtree'].long_running).toBe(false);
   });
 });
 
@@ -86,7 +86,8 @@ describe('animtree handleTool', () => {
   });
 
   it('animtree_create rejects missing name', async () => {
-    const result = await handleTool('animtree_create', {
+    const result = await handleTool('animtree', {
+      action: 'animtree_create',
       project_path: '/fake/project',
       animation_player_path: 'root/AP',
     }, fakeCtx);
@@ -97,7 +98,8 @@ describe('animtree handleTool', () => {
   });
 
   it('animtree_create rejects missing animation_player_path', async () => {
-    const result = await handleTool('animtree_create', {
+    const result = await handleTool('animtree', {
+      action: 'animtree_create',
       project_path: '/fake/project',
       name: 'MyTree',
     }, fakeCtx);
@@ -107,7 +109,8 @@ describe('animtree handleTool', () => {
   });
 
   it('animtree_add_state rejects missing state_name', async () => {
-    const result = await handleTool('animtree_add_state', {
+    const result = await handleTool('animtree', {
+      action: 'animtree_add_state',
       project_path: '/fake/project',
       node_path: 'root/Tree',
       animation: 'idle',
@@ -118,7 +121,8 @@ describe('animtree handleTool', () => {
   });
 
   it('animtree_play rejects missing state_name', async () => {
-    const result = await handleTool('animtree_play', {
+    const result = await handleTool('animtree', {
+      action: 'animtree_play',
       project_path: '/fake/project',
       node_path: 'root/Tree',
     }, fakeCtx);
@@ -128,7 +132,8 @@ describe('animtree handleTool', () => {
   });
 
   it('animtree_set_blend rejects missing parameter_name', async () => {
-    const result = await handleTool('animtree_set_blend', {
+    const result = await handleTool('animtree', {
+      action: 'animtree_set_blend',
       project_path: '/fake/project',
       node_path: 'root/Tree',
       value: 0.5,
@@ -139,7 +144,8 @@ describe('animtree handleTool', () => {
   });
 
   it('animtree_state_edit rejects missing action', async () => {
-    const result = await handleTool('animtree_state_edit', {
+    const result = await handleTool('animtree', {
+      action: 'animtree_state_edit',
       project_path: '/fake/project',
       node_path: 'root/Tree',
     }, fakeCtx);
@@ -149,7 +155,8 @@ describe('animtree handleTool', () => {
   });
 
   it('animtree_add_transition rejects missing from_state', async () => {
-    const result = await handleTool('animtree_add_transition', {
+    const result = await handleTool('animtree', {
+      action: 'animtree_add_transition',
       project_path: '/fake/project',
       node_path: 'root/Tree',
       to_state: 'run',

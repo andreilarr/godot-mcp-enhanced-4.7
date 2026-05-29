@@ -271,42 +271,34 @@ import { requireProjectPath, resolveWithinRoot } from "../helpers.js";
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: "validate_gdd",
-      description:
-        "Validate a Game Design Document (GDD) markdown file against required sections and quality rules.",
+      name: "game_design",
+      description: "游戏设计工具。validate_gdd: 验证游戏设计文档（GDD）markdown 文件。chain_verify: 对结论运行 Chain-of-Verification 自我挑战，评估置信度。",
       inputSchema: {
         type: "object" as const,
         properties: {
+          action: {
+            type: "string",
+            enum: ["validate_gdd", "chain_verify"],
+            description: "操作类型",
+          },
           project_path: {
             type: "string",
-            description: "Path to the Godot project directory",
+            description: "validate_gdd: Path to the Godot project directory",
           },
           gdd_path: {
             type: "string",
-            description:
-              "Path to the GDD markdown file, relative to project root",
+            description: "validate_gdd: Path to the GDD markdown file, relative to project root",
           },
-        },
-        required: ["project_path", "gdd_path"],
-      },
-    },
-    {
-      name: "chain_verify",
-      description:
-        "Run Chain-of-Verification self-challenge on a verdict to assess confidence and generate challenge questions.",
-      inputSchema: {
-        type: "object" as const,
-        properties: {
           verdict: {
             type: "string",
-            description: "The verdict or conclusion to challenge",
+            description: "chain_verify: The verdict or conclusion to challenge",
           },
           context: {
             type: "string",
-            description: "The supporting context or evidence for the verdict",
+            description: "chain_verify: The supporting context or evidence for the verdict",
           },
         },
-        required: ["verdict", "context"],
+        required: ["action"],
       },
     },
   ];
@@ -317,7 +309,16 @@ export async function handleTool(
   args: Record<string, unknown>,
   _ctx: ToolContext,
 ): Promise<ToolResult | null> {
-  switch (name) {
+  if (name !== "game_design") return null;
+
+  const action = args.action as string;
+  if (!action) return {
+    content: [
+      { type: "text" as const, text: JSON.stringify({ error: "action is required" }) },
+    ],
+  };
+
+  switch (action) {
     case "validate_gdd": {
       const projectPath = requireProjectPath(args);
       const fullPath = resolveWithinRoot(projectPath, args.gdd_path as string);
@@ -354,6 +355,5 @@ export async function handleTool(
 }
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  validate_gdd: { readonly: true, long_running: false },
-  chain_verify: { readonly: true, long_running: false },
+  game_design: { readonly: true, long_running: false },
 };

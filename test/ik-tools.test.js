@@ -1,40 +1,52 @@
 import { expect } from 'vitest';
 import {
-  TOOL_NAMES,
   getToolDefinitions,
+  TOOL_META,
   genIkCreateScript,
   genIkGetScript,
   genIkSetScript,
   genListBonesScript,
 } from '../src/tools/ik-tools.js';
 
-// ─── TOOL_NAMES ─────────────────────────────────────────────────────────────
-
-describe('ik-tools TOOL_NAMES', () => {
-  it('contains exactly 4 tool names', () => {
-    expect(TOOL_NAMES.length).toBe(4);
-  });
-  const expected = ['ik_modifier_create', 'ik_modifier_get', 'ik_modifier_set', 'ik_list_bones'];
-  for (const name of expected) {
-    it(`includes ${name}`, () => {
-      expect(TOOL_NAMES.includes(name)).toBeTruthy();
-    });
-  }
-});
-
 // ─── getToolDefinitions ─────────────────────────────────────────────────────
 
 describe('ik-tools getToolDefinitions', () => {
-  it('returns 4 tool definitions', () => {
+  it('returns 1 merged tool definition', () => {
     const defs = getToolDefinitions();
-    expect(defs.length).toBe(4);
+    expect(defs.length).toBe(1);
   });
-  it('each definition has a name from TOOL_NAMES', () => {
+  it('tool is named "ik"', () => {
     const defs = getToolDefinitions();
-    const names = defs.map(d => d.name);
-    for (const tn of TOOL_NAMES) {
-      expect(names.includes(tn)).toBeTruthy();
-    }
+    expect(defs[0].name).toBe('ik');
+  });
+  it('action enum contains all 4 actions', () => {
+    const defs = getToolDefinitions();
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    expect(actionEnum).toContain('ik_modifier_create');
+    expect(actionEnum).toContain('ik_modifier_get');
+    expect(actionEnum).toContain('ik_modifier_set');
+    expect(actionEnum).toContain('ik_list_bones');
+  });
+  it('definition has inputSchema with required fields', () => {
+    const defs = getToolDefinitions();
+    expect(defs[0].inputSchema).toBeTruthy();
+    expect(defs[0].inputSchema.required).toContain('project_path');
+    expect(defs[0].inputSchema.required).toContain('action');
+  });
+});
+
+// ─── TOOL_META ──────────────────────────────────────────────────────────────
+
+describe('ik-tools TOOL_META', () => {
+  it('has exactly 1 entry', () => {
+    expect(Object.keys(TOOL_META).length).toBe(1);
+  });
+  it('has entry for "ik"', () => {
+    expect(TOOL_META.ik).toBeDefined();
+  });
+  it('ik is non-readonly and non-long-running', () => {
+    expect(TOOL_META.ik.readonly).toBe(false);
+    expect(TOOL_META.ik.long_running).toBe(false);
   });
 });
 

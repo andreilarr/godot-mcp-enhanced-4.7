@@ -6,7 +6,7 @@ import { normalizeNodePath, gdEscape, validateVector3, clampParam, SCENE_TREE_HE
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
-const TOOL_NAMES = [
+const ACTIONS = [
   'particles_create',
   'particles_set_emission',
   'particles_set_process',
@@ -281,45 +281,38 @@ func _initialize():
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'particles_create',
-	      description: `创建 GPUParticles2D 或 GPUParticles3D 节点。可选 preset 参数可在创建时直接应用预设效果（推荐，避免 headless 进程隔离问题）。${NON_PERSIST}`,
-	      inputSchema: {
-	        type: 'object' as const,
-	        properties: {
-	          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-	          node_type: {
-	            type: 'string',
-	            enum: ['GPUParticles2D', 'GPUParticles3D'],
-	            description: '粒子节点类型',
-	          },
-	          name: { type: 'string', description: '节点名称' },
-	          parent: { type: 'string', description: '父节点路径（默认 root）' },
-	          position: {
-	            type: 'object',
-	            description: '位置。3D 用 {x,y,z}，2D 用 {x,y}',
-	            properties: {
-	              x: { type: 'number' },
-	              y: { type: 'number' },
-	              z: { type: 'number' },
-	            },
-	          },
-	          preset: {
-	            type: 'string',
-	            enum: ['fire', 'smoke', 'rain', 'snow', 'sparkle', 'explosion'],
-	            description: '可选预设效果，创建时立即应用（推荐，避免 headless 进程隔离导致节点不可见）',
-	          },
-	          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-	        },
-	        required: ['project_path', 'node_type', 'name'],
-	      },
-    },
-    {
-      name: 'particles_set_emission',
-      description: `设置粒子发射参数。${NON_PERSIST}`,
+      name: 'particles',
+      description: `创建 GPUParticles2D/3D 节点、设置发射/处理参数、加载预设效果、设置粒子材质。运行时操作，仅影响当前执行上下文。如需持久化，请编辑 .tscn 文件。${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
+          action: {
+            type: 'string',
+            enum: ['particles_create', 'particles_set_emission', 'particles_set_process', 'particles_load_preset', 'particles_set_material'],
+            description: '操作类型',
+          },
           project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          node_type: {
+            type: 'string',
+            enum: ['GPUParticles2D', 'GPUParticles3D'],
+            description: '粒子节点类型（particles_create）',
+          },
+          name: { type: 'string', description: '节点名称（particles_create）' },
+          parent: { type: 'string', description: '父节点路径（默认 root）' },
+          position: {
+            type: 'object',
+            description: '位置。3D 用 {x,y,z}，2D 用 {x,y}',
+            properties: {
+              x: { type: 'number' },
+              y: { type: 'number' },
+              z: { type: 'number' },
+            },
+          },
+          preset: {
+            type: 'string',
+            enum: ['fire', 'smoke', 'rain', 'snow', 'sparkle', 'explosion'],
+            description: '预设效果名称',
+          },
           node_path: { type: 'string', description: '粒子节点路径' },
           amount: { type: 'number', description: '发射数量（正整数）' },
           emission_shape: {
@@ -341,19 +334,6 @@ export function getToolDefinitions(): Tool[] {
             required: ['x', 'y', 'z'],
           },
           spread: { type: 'number', description: '扩散角度（0-180 度）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path'],
-      },
-    },
-    {
-      name: 'particles_set_process',
-      description: `设置粒子处理参数。${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: '粒子节点路径' },
           gravity: {
             type: 'object',
             description: '重力 {x,y,z}',
@@ -365,44 +345,13 @@ export function getToolDefinitions(): Tool[] {
           randomness: { type: 'number', description: '随机性（0-1）' },
           lifetime: { type: 'number', description: '粒子生命周期（秒）' },
           damping: { type: 'number', description: '阻尼' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path'],
-      },
-    },
-    {
-      name: 'particles_load_preset',
-	      description: `加载预设粒子效果（纯参数配置，不引用外部资源）。注意：Headless 模式下仅对已存在于场景文件中的节点有效，运行时创建的节点不跨进程持久。推荐使用 particles_create 的 preset 参数在创建时直接应用。${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: '粒子节点路径' },
-          preset: {
-            type: 'string',
-            enum: ['fire', 'smoke', 'rain', 'snow', 'sparkle', 'explosion'],
-            description: '预设效果名称',
-          },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'preset'],
-      },
-    },
-    {
-      name: 'particles_set_material',
-      description: `设置粒子材质，创建新的 ParticleProcessMaterial。${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: '粒子节点路径' },
           material_type: {
             type: 'string',
             description: '材质类型（ParticleProcessMaterial）',
           },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'node_path'],
+        required: ['action', 'project_path'],
       },
     },
   ];
@@ -413,7 +362,9 @@ export function getToolDefinitions(): Tool[] {
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'particles') return null;
+  const action = args.action as string;
+  if (!(ACTIONS as readonly string[]).includes(action)) return null;
 
   try {
     const projectPath = requireProjectPath(args);
@@ -422,7 +373,7 @@ export async function handleTool(
     let script: string;
     const paramWarnings: string[] = [];
 
-    switch (name) {
+    switch (action) {
       case 'particles_create': {
         const nodeType = args.node_type as string;
         const nodeName = args.name as string;
@@ -561,9 +512,5 @@ export async function handleTool(
 // ─── Tool Meta ─────────────────────────────────────────────────────────────
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  particles_create: { readonly: false, long_running: false },
-  particles_set_emission: { readonly: false, long_running: false },
-  particles_set_process: { readonly: false, long_running: false },
-  particles_load_preset: { readonly: false, long_running: false },
-  particles_set_material: { readonly: false, long_running: false },
+  particles: { readonly: false, long_running: false },
 };

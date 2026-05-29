@@ -11,7 +11,7 @@ import {
 } from './claudemd-builder.js';
 import { validatePath, requireString, requireProjectPath, resolveWithinRoot, type GodotConfig } from '../helpers.js';
 
-const TOOL_NAMES = [
+const ACTIONS = [
   'list_projects',
   'get_project_info',
   'list_files',
@@ -25,73 +25,28 @@ const TOOL_NAMES = [
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'list_projects',
-      description: 'Search for Godot projects in a directory.',
+      name: 'project',
+      description: '搜索 Godot 项目、获取项目信息、列出文件、读取配置、创建项目、设置项目规则。',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          search_dir: { type: 'string', description: 'Directory to search in', default: '.' },
-          max_depth: { type: 'number', description: 'Max directory depth (default: 3)', default: 3 },
+          action: {
+            type: 'string',
+            enum: ['list_projects', 'get_project_info', 'list_files', 'read_project_config', 'create_project', 'setup_project_rules'],
+            description: '操作类型',
+          },
+          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          search_dir: { type: 'string', description: '搜索目录（list_projects）', default: '.' },
+          max_depth: { type: 'number', description: '最大搜索深度（默认 3）', default: 3 },
+          extensions: { type: 'array', items: { type: 'string' }, description: '按扩展名过滤（如 [".gd", ".tscn"]）' },
+          subdirectory: { type: 'string', description: '限定子目录' },
+          project_name: { type: 'string', description: '项目名称（默认取文件夹名）', default: '' },
+          renderer: { type: 'string', description: '渲染器："forward_plus"（默认）、"mobile"、"gl_compatibility"', default: 'forward_plus', enum: ['forward_plus', 'mobile', 'gl_compatibility'] },
+          hooks: { type: 'boolean', description: '创建 .claude/settings.json 的 PostToolUse hook（默认 true）', default: true },
+          claude_md: { type: 'boolean', description: '创建/追加 CLAUDE.md 验证规则（默认 true）', default: true },
+          force: { type: 'boolean', description: '覆盖已有配置（默认 false）', default: false },
         },
-        required: ['search_dir'],
-      },
-    },
-    {
-      name: 'get_project_info',
-      description: 'Get detailed info about a Godot project (name, version, file stats).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: { project_path: { type: 'string', description: 'Path to Godot project directory' } },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'list_files',
-      description: 'List files in a Godot project with optional filtering.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          extensions: { type: 'array', items: { type: 'string' }, description: 'Filter by extensions (e.g. [".gd", ".tscn"])' },
-          subdirectory: { type: 'string', description: 'Restrict to a subdirectory' },
-        },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'read_project_config',
-      description: 'Parse project.godot into structured JSON.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: { project_path: { type: 'string', description: 'Path to Godot project directory' } },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'create_project',
-      description: 'Create a complete Godot 4.6 project structure with project.godot, main scene, main script, and assets directory.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Directory path where the project will be created' },
-          project_name: { type: 'string', description: 'Project name (default: folder name)', default: '' },
-          renderer: { type: 'string', description: 'Renderer to use: "forward_plus" (default), "mobile", or "gl_compatibility"', default: 'forward_plus', enum: ['forward_plus', 'mobile', 'gl_compatibility'] },
-        },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'setup_project_rules',
-      description: 'One-time setup: generate Claude Code hooks and CLAUDE.md rules for a Godot project. Creates .claude/settings.json with PostToolUse hook for auto GDScript validation, and appends verify_delivery release gate rule to CLAUDE.md. Recommended to run this once when starting work on a new Godot project.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          hooks: { type: 'boolean', description: 'Create .claude/settings.json with PostToolUse hook (default: true)', default: true },
-          claude_md: { type: 'boolean', description: 'Create/append CLAUDE.md with validation rules (default: true)', default: true },
-          force: { type: 'boolean', description: 'Overwrite existing configuration (default: false)', default: false },
-        },
-        required: ['project_path'],
+        required: ['action'],
       },
     },
   ];
@@ -100,9 +55,11 @@ export function getToolDefinitions(): Tool[] {
 // ─── Tool handler ───────────────────────────────────────────────────────────
 
 export async function handleTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'project') return null;
+  const action = args.action as string;
+  if (!(ACTIONS as readonly string[]).includes(action)) return null;
 
-  switch (name) {
+  switch (action) {
     case 'list_projects': {
       const searchDir = validatePath(requireString(args, 'search_dir'));
       const maxDepth = (args.max_depth as number) || 3;
@@ -408,12 +365,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 }
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  list_projects: { readonly: true, long_running: false },
-  get_project_info: { readonly: true, long_running: false },
-  list_files: { readonly: true, long_running: false },
-  read_project_config: { readonly: true, long_running: false },
-  create_project: { readonly: false, long_running: false },
-  setup_project_rules: { readonly: false, long_running: false },
+  project: { readonly: false, long_running: false },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

@@ -134,27 +134,19 @@ The system should work correctly and players should enjoy using it.`;
 // ─── MCP Tool Registration Tests ──────────────────────────────────────────────
 
 describe("Game Design MCP Tool Registration", () => {
-  it("should register validate_gdd tool", () => {
+  it("should register game_design merged tool with validate_gdd and chain_verify actions", () => {
     const tools = getToolDefinitions();
-    const validateGddTool = tools.find((t) => t.name === "validate_gdd");
+    const gameDesignTool = tools.find((t) => t.name === "game_design");
 
-    expect(validateGddTool).toBeTruthy();
-    expect(validateGddTool.inputSchema.required).toContain("project_path");
-    expect(validateGddTool.inputSchema.required).toContain("gdd_path");
+    expect(gameDesignTool).toBeTruthy();
+    expect(gameDesignTool.inputSchema.required).toContain("action");
+    const actionEnum = gameDesignTool.inputSchema.properties.action.enum;
+    expect(actionEnum).toContain("validate_gdd");
+    expect(actionEnum).toContain("chain_verify");
   });
 
-  it("should register chain_verify tool", () => {
-    const tools = getToolDefinitions();
-    const chainVerifyTool = tools.find((t) => t.name === "chain_verify");
-
-    expect(chainVerifyTool).toBeTruthy();
-    expect(chainVerifyTool.inputSchema.required).toContain("verdict");
-    expect(chainVerifyTool.inputSchema.required).toContain("context");
-  });
-
-  it("should have correct TOOL_META", () => {
-    expect(TOOL_META.validate_gdd).toEqual({ readonly: true, long_running: false });
-    expect(TOOL_META.chain_verify).toEqual({ readonly: true, long_running: false });
+  it("should have correct TOOL_META for game_design", () => {
+    expect(TOOL_META.game_design).toEqual({ readonly: true, long_running: false });
   });
 
   it("handleTool should return null for unknown tool", async () => {

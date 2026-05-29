@@ -16,59 +16,39 @@ describe('navigation getToolDefinitions', () => {
     expect(Array.isArray(defs)).toBeTruthy();
     expect(defs.length).toBeGreaterThan(0);
   });
-  it('returns 6 definitions', () => {
+  it('returns 1 merged definition named "nav"', () => {
     const defs = getToolDefinitions();
-    expect(defs.length).toBe(6);
+    expect(defs.length).toBe(1);
+    expect(defs[0].name).toBe('nav');
   });
-  const expected = [
-    'nav_create_region',
-    'nav_bake_mesh',
-    'nav_create_agent',
-    'nav_set_params',
-    'nav_create_link',
-    'nav_query_path',
-  ];
-  for (const name of expected) {
-    it(`includes ${name}`, () => {
-      const defs = getToolDefinitions();
-      const names = defs.map(d => d.name);
-      expect(names.includes(name)).toBeTruthy();
-    });
-  }
-  it('each definition has name and inputSchema', () => {
-    for (const def of getToolDefinitions()) {
-      expect(def.name).toBeTruthy();
-      expect(def.inputSchema).toBeTruthy();
-      expect(def.inputSchema.type).toBe('object');
-    }
+  it('action enum contains all 6 actions', () => {
+    const defs = getToolDefinitions();
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    expect(actionEnum).toContain('create_region');
+    expect(actionEnum).toContain('bake_mesh');
+    expect(actionEnum).toContain('create_agent');
+    expect(actionEnum).toContain('set_params');
+    expect(actionEnum).toContain('create_link');
+    expect(actionEnum).toContain('query_path');
+  });
+  it('definition has name and inputSchema', () => {
+    const def = getToolDefinitions()[0];
+    expect(def.name).toBeTruthy();
+    expect(def.inputSchema).toBeTruthy();
+    expect(def.inputSchema.type).toBe('object');
   });
 });
 
 // ─── TOOL_META ───────────────────────────────────────────────────────────────
 
 describe('navigation TOOL_META', () => {
-  it('has entries for all nav tools', () => {
-    const expected = [
-      'nav_create_region',
-      'nav_bake_mesh',
-      'nav_create_agent',
-      'nav_set_params',
-      'nav_create_link',
-      'nav_query_path',
-    ];
-    for (const name of expected) {
-      expect(name in TOOL_META).toBeTruthy();
-    }
+  it('has exactly 1 entry for "nav"', () => {
+    expect(Object.keys(TOOL_META).length).toBe(1);
+    expect(TOOL_META.nav).toBeDefined();
   });
-  it('nav_bake_mesh is long_running', () => {
-    expect(TOOL_META.nav_bake_mesh.long_running).toBe(true);
-  });
-  it('nav_query_path is readonly', () => {
-    expect(TOOL_META.nav_query_path.readonly).toBe(true);
-  });
-  it('nav_create_region is non-readonly and not long_running', () => {
-    expect(TOOL_META.nav_create_region.readonly).toBe(false);
-    expect(TOOL_META.nav_create_region.long_running).toBe(false);
+  it('nav is non-readonly and non-long-running', () => {
+    expect(TOOL_META.nav.readonly).toBe(false);
+    expect(TOOL_META.nav.long_running).toBe(false);
   });
 });
 
@@ -85,18 +65,20 @@ describe('navigation handleTool', () => {
     expect(result).toBe(null);
   });
 
-  it('nav_create_region rejects missing name', async () => {
-    const result = await handleTool('nav_create_region', {
+  it('create_region action rejects missing name', async () => {
+    const result = await handleTool('nav', {
       project_path: '/fake/project',
+      action: 'create_region',
     }, fakeCtx);
     expect(result).toBeTruthy();
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.success).toBe(false);
   });
 
-  it('nav_set_params rejects missing params', async () => {
-    const result = await handleTool('nav_set_params', {
+  it('set_params action rejects missing params', async () => {
+    const result = await handleTool('nav', {
       project_path: '/fake/project',
+      action: 'set_params',
       node_path: 'root/Agent',
     }, fakeCtx);
     expect(result).toBeTruthy();
@@ -104,9 +86,10 @@ describe('navigation handleTool', () => {
     expect(parsed.success).toBe(false);
   });
 
-  it('nav_set_params rejects empty params object', async () => {
-    const result = await handleTool('nav_set_params', {
+  it('set_params action rejects empty params object', async () => {
+    const result = await handleTool('nav', {
       project_path: '/fake/project',
+      action: 'set_params',
       node_path: 'root/Agent',
       params: {},
     }, fakeCtx);
@@ -115,9 +98,10 @@ describe('navigation handleTool', () => {
     expect(parsed.success).toBe(false);
   });
 
-  it('nav_create_link rejects missing name', async () => {
-    const result = await handleTool('nav_create_link', {
+  it('create_link action rejects missing name', async () => {
+    const result = await handleTool('nav', {
       project_path: '/fake/project',
+      action: 'create_link',
       start_position: { x: 0, y: 0, z: 0 },
       end_position: { x: 1, y: 0, z: 1 },
     }, fakeCtx);
@@ -126,9 +110,10 @@ describe('navigation handleTool', () => {
     expect(parsed.success).toBe(false);
   });
 
-  it('nav_create_agent rejects missing name', async () => {
-    const result = await handleTool('nav_create_agent', {
+  it('create_agent action rejects missing name', async () => {
+    const result = await handleTool('nav', {
       project_path: '/fake/project',
+      action: 'create_agent',
     }, fakeCtx);
     expect(result).toBeTruthy();
     const parsed = JSON.parse(result.content[0].text);

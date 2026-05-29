@@ -29,7 +29,7 @@ const IK_SETTABLE_PROPS = [
   'use_magnet', 'magnet_position',
 ] as const;
 
-export const TOOL_NAMES = [
+const ACTIONS = [
   'ik_modifier_create',
   'ik_modifier_get',
   'ik_modifier_set',
@@ -165,73 +165,40 @@ func _initialize():
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'ik_modifier_create',
-      description: `Create IK modifier node. ${NON_PERSIST}`,
+      name: 'ik',
+      description: `IK 操作。create: 创建 IK 修饰器节点。get: 读取属性。set: 设置参数。list_bones: 列出骨骼。${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
           project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          action: {
+            type: 'string',
+            enum: [...ACTIONS],
+            description: '操作类型',
+          },
           type: {
             type: 'string',
-            description: 'IK 类型: TwoBoneIK3D, FABRIK3D, CCDIK3D, SplineIK3D, JacobianIK3D',
             enum: [...IK_TYPE_WHITELIST],
+            description: 'create: IK 类型',
           },
-          name: { type: 'string', description: '节点名称' },
-          parent: { type: 'string', description: '父节点路径（默认 root）', default: 'root' },
+          name: { type: 'string', description: 'create: 节点名称' },
+          parent: { type: 'string', description: 'create: 父节点路径（默认 root）' },
           position: {
             type: 'object',
-            description: '位置 {x,y,z}',
+            description: 'create: 位置 {x,y,z}',
             properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
           },
-          bone_name: { type: 'string', description: '要控制的骨骼名（TwoBoneIK3D）' },
-          target_nodepath: { type: 'string', description: 'IK 目标节点路径' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'type', 'name'],
-      },
-    },
-    {
-      name: 'ik_modifier_get',
-      description: `Read IK modifier node properties. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'IK 节点路径' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path'],
-      },
-    },
-    {
-      name: 'ik_modifier_set',
-      description: `Set IK modifier parameters. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'IK 节点路径' },
+          bone_name: { type: 'string', description: 'create: 要控制的骨骼名（TwoBoneIK3D）' },
+          target_nodepath: { type: 'string', description: 'create: IK 目标节点路径' },
+          node_path: { type: 'string', description: 'get/set/list_bones: 节点路径' },
           properties: {
             type: 'object',
-            description: '属性键值对: active(bool), influence(float 0-1), bone_name(string), target_nodepath(string), use_magnet(bool), magnet_position({x,y,z})',
+            description: 'set: 属性键值对（active, influence, bone_name, target_nodepath, use_magnet, magnet_position）',
           },
+          limit: { type: 'number', description: 'list_bones: 最大返回数量' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'node_path', 'properties'],
-      },
-    },
-    {
-      name: 'ik_list_bones',
-      description: `List Skeleton3D bones. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'Skeleton3D 节点路径' },
-          limit: { type: 'number', description: '最大返回数量（可选）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path'],
+        required: ['project_path', 'action'],
       },
     },
   ];
@@ -242,7 +209,10 @@ export function getToolDefinitions(): Tool[] {
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'ik') return null;
+
+  const action = args.action as string;
+  if (!action) return opsErrorResult('INVALID_PARAMS', 'action is required');
 
   try {
     const projectPath = requireProjectPath(args);
@@ -250,7 +220,7 @@ export async function handleTool(
     const loadAutoloads = args.load_autoloads !== false;
     let script: string;
 
-    switch (name) {
+    switch (action) {
       case 'ik_modifier_create': {
         const ikType = args.type as string;
         if (!(IK_TYPE_WHITELIST as readonly string[]).includes(ikType)) {
@@ -346,8 +316,5 @@ export async function handleTool(
 // ─── Tool Meta ──────────────────────────────────────────────────────────────
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  ik_modifier_create: { readonly: false, long_running: false },
-  ik_modifier_get: { readonly: true, long_running: false },
-  ik_modifier_set: { readonly: false, long_running: false },
-  ik_list_bones: { readonly: true, long_running: false },
+  ik: { readonly: false, long_running: false },
 };

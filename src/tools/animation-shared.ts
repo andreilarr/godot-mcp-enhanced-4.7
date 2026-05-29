@@ -1,7 +1,10 @@
-import { gdEscape, ensureNumber } from './shared.js';
+import { ensureNumber, valueToGd } from './shared.js';
 
 // Re-export ensureNumber for backward compatibility with animation-ops and animation-track
 export { ensureNumber };
+
+// Re-export the unified valueToGd from shared.ts (replaces the old local implementation)
+export { valueToGd };
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -23,25 +26,6 @@ export const TRACK_TYPES = [
 export const LOOP_MODES = ['none', 'linear', 'pingpong'] as const;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
-
-export function valueToGd(v: unknown, trackType?: string): string {
-  if (v === null || v === undefined) return 'null';
-  if (typeof v === 'number') return String(v);
-  if (typeof v === 'boolean') return v ? 'true' : 'false';
-  if (typeof v === 'string') return `"${gdEscape(v)}"`;
-  if (Array.isArray(v)) {
-    if (v.length === 2) return `Vector2(${Number(v[0])}, ${Number(v[1])})`;
-    if (v.length === 3) {
-      if (trackType === 'rotation_3d') {
-        return `Quaternion.from_euler(Vector3(${Number(v[0])}, ${Number(v[1])}, ${Number(v[2])}))`;
-      }
-      return `Vector3(${Number(v[0])}, ${Number(v[1])}, ${Number(v[2])})`;
-    }
-    if (v.length === 4) return `Color(${Number(v[0])}, ${Number(v[1])}, ${Number(v[2])}, ${Number(v[3])})`;
-    return JSON.stringify(v);
-  }
-  throw new Error(`Cannot convert value to GDScript literal: ${typeof v}`);
-}
 
 export function argsToGd(args?: unknown[]): string {
   if (!args || args.length === 0) return '[]';

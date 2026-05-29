@@ -2,18 +2,18 @@ import { expect } from 'vitest';
 import {
   TOOL_NAMES,
   getToolDefinitions,
-  genCollisionOverlayScript,
+  TOOL_META,
   genCreate3DScript,
 } from '../src/tools/node-3d-ops.js';
+import {
+  genCollisionOverlayScript,
+} from '../src/tools/physics-ops.js';
 
 // ─── TOOL_NAMES ─────────────────────────────────────────────────────────────
 
 describe('node-3d-ops TOOL_NAMES', () => {
-  it('contains exactly 2 tool names', () => {
-    expect(TOOL_NAMES.length).toBe(2);
-  });
-  it('includes collision_overlay', () => {
-    expect(TOOL_NAMES.includes('collision_overlay')).toBeTruthy();
+  it('contains exactly 1 tool name', () => {
+    expect(TOOL_NAMES.length).toBe(1);
   });
   it('includes node_create_3d', () => {
     expect(TOOL_NAMES.includes('node_create_3d')).toBeTruthy();
@@ -23,20 +23,32 @@ describe('node-3d-ops TOOL_NAMES', () => {
 // ─── getToolDefinitions ─────────────────────────────────────────────────────
 
 describe('node-3d-ops getToolDefinitions', () => {
-  it('returns 2 tool definitions', () => {
+  it('returns 1 tool definition', () => {
     const defs = getToolDefinitions();
-    expect(defs.length).toBe(2);
+    expect(defs.length).toBe(1);
   });
-  it('each definition has a name from TOOL_NAMES', () => {
+  it('definition name matches TOOL_NAMES', () => {
     const defs = getToolDefinitions();
-    const names = defs.map(d => d.name);
-    for (const tn of TOOL_NAMES) {
-      expect(names.includes(tn)).toBeTruthy();
-    }
+    expect(defs[0].name).toBe('node_create_3d');
   });
 });
 
-// ─── genCollisionOverlayScript ──────────────────────────────────────────────
+// ─── TOOL_META ──────────────────────────────────────────────────────────────
+
+describe('node-3d-ops TOOL_META', () => {
+  it('has exactly 1 entry', () => {
+    expect(Object.keys(TOOL_META).length).toBe(1);
+  });
+  it('has entry for node_create_3d', () => {
+    expect(TOOL_META.node_create_3d).toBeDefined();
+  });
+  it('node_create_3d is non-readonly and non-long-running', () => {
+    expect(TOOL_META.node_create_3d.readonly).toBe(false);
+    expect(TOOL_META.node_create_3d.long_running).toBe(false);
+  });
+});
+
+// ─── genCollisionOverlayScript (now in physics-ops) ─────────────────────────
 
 describe('genCollisionOverlayScript', () => {
   it('generates overlay script', () => {

@@ -69,22 +69,16 @@ describe('validation-tools: getToolDefinitions', () => {
     expect(defs.length).toBeGreaterThan(0);
   });
 
-  it('includes validate_scripts tool', () => {
+  it('includes validation merged tool with all actions', () => {
     const defs = getToolDefinitions();
-    const names = defs.map(d => d.name);
-    expect(names).toContain('validate_scripts');
-  });
-
-  it('includes validate_project tool', () => {
-    const defs = getToolDefinitions();
-    const names = defs.map(d => d.name);
-    expect(names).toContain('validate_project');
-  });
-
-  it('includes run_and_verify tool', () => {
-    const defs = getToolDefinitions();
-    const names = defs.map(d => d.name);
-    expect(names).toContain('run_and_verify');
+    const vd = defs.find(d => d.name === 'validation');
+    expect(vd).toBeDefined();
+    const actionEnum = vd.inputSchema.properties.action.enum;
+    expect(actionEnum).toContain('validate_scripts');
+    expect(actionEnum).toContain('validate_project');
+    expect(actionEnum).toContain('run_and_verify');
+    expect(actionEnum).toContain('analyze_error');
+    expect(actionEnum).toContain('import_resources');
   });
 });
 
@@ -93,14 +87,10 @@ describe('validation-tools: TOOL_META', () => {
     expect(Object.keys(TOOL_META).length).toBeGreaterThan(0);
   });
 
-  it('has readonly flag on validate_project', () => {
-    expect(TOOL_META.validate_project).toBeDefined();
-    expect(TOOL_META.validate_project.readonly).toBe(true);
-  });
-
-  it('has long_running flag on run_and_verify', () => {
-    expect(TOOL_META.run_and_verify).toBeDefined();
-    expect(TOOL_META.run_and_verify.long_running).toBe(true);
+  it('has validation entry with correct flags', () => {
+    expect(TOOL_META.validation).toBeDefined();
+    expect(TOOL_META.validation.readonly).toBe(false);
+    expect(TOOL_META.validation.long_running).toBe(true);
   });
 });
 

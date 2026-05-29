@@ -1,61 +1,110 @@
 // src/core/tool-registry.ts
 
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { ToolResult, ToolContext } from '../types.js';
+
+// ─── Tool metadata ──────────────────────────────────────────────────────────
+
 export interface ToolMeta {
   name: string;
   readonly: boolean;
   long_running: boolean;
 }
 
-const registry = new Map<string, ToolMeta>();
+// ─── Tool module interface ───────────────────────────────────────────────────
 
-export function registerTools(tools: ToolMeta[]): void {
-  for (const t of tools) {
-    registry.set(t.name, t);
+export interface ToolModule {
+  TOOL_META?: Record<string, { readonly: boolean; long_running: boolean }>;
+  getToolDefinitions(): Tool[];
+  handleTool(toolName: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null>;
+}
+
+// ─── Internal state ─────────────────────────────────────────────────────────
+
+const metaRegistry = new Map<string, ToolMeta>();
+const moduleRegistry = new Map<string, ToolModule>();
+const modules: ToolModule[] = [];
+
+// ─── Module registration ────────────────────────────────────────────────────
+
+/** Register a tool module. Called once per module at import time. */
+export function registerModule(mod: ToolModule): void {
+  if (modules.includes(mod)) return; // idempotent
+  modules.push(mod);
+  const meta = mod.TOOL_META;
+  if (meta) {
+    for (const [name, m] of Object.entries(meta)) {
+      const entry: ToolMeta = { name, ...m };
+      metaRegistry.set(name, entry);
+      moduleRegistry.set(name, mod);
+    }
   }
 }
 
-/** Clear all registered tools (test-only). */
-export function clearRegistry(): void {
-  registry.clear();
-}
+// ─── Query functions ─────────────────────────────────────────────────────────
 
 export function isReadOnly(name: string): boolean {
-  return registry.get(name)?.readonly ?? false;
+  return metaRegistry.get(name)?.readonly ?? false;
 }
 
 export function isLongRunning(name: string): boolean {
-  return registry.get(name)?.long_running ?? false;
+  return metaRegistry.get(name)?.long_running ?? false;
 }
 
 export function getReadOnlyTools(): string[] {
-  return [...registry.entries()].filter(([, m]) => m.readonly).map(([n]) => n);
+  return [...metaRegistry.entries()].filter(([, m]) => m.readonly).map(([n]) => n);
 }
 
 export function getWriteTools(): string[] {
-  return [...registry.entries()].filter(([, m]) => !m.readonly).map(([n]) => n);
+  return [...metaRegistry.entries()].filter(([, m]) => !m.readonly).map(([n]) => n);
 }
 
 export function getAllToolNames(): string[] {
-  return [...registry.keys()];
+  return [...metaRegistry.keys()];
 }
 
 export function getToolMeta(name: string): ToolMeta | undefined {
-  return registry.get(name);
+  return metaRegistry.get(name);
 }
 
+export function getModuleForTool(name: string): ToolModule | undefined {
+  return moduleRegistry.get(name);
+}
+
+export function getAllToolDefinitions(): Tool[] {
+  return modules.flatMap(m => m.getToolDefinitions());
+}
+
+export function getModules(): readonly ToolModule[] {
+  return modules;
+}
+
+// ─── Legacy API (backward compat) ───────────────────────────────────────────
+
+/** Register tools from flat array (legacy, used by tests). */
+export function registerTools(tools: ToolMeta[]): void {
+  for (const t of tools) {
+    metaRegistry.set(t.name, t);
+  }
+}
+
+/** Clear all registered tools and modules (test-only). */
+export function clearRegistry(): void {
+  metaRegistry.clear();
+  moduleRegistry.clear();
+  modules.length = 0;
+}
+
+// ─── Mode filters ────────────────────────────────────────────────────────────
+
 export const LITE_TOOLS = new Set([
-  'list_projects', 'get_project_info', 'list_files', 'read_project_config',
-  'read_scene', 'create_scene', 'add_node', 'save_scene',
-  'read_script', 'write_script', 'edit_script',
-  'execute_gdscript', 'get_godot_version',
-  'run_and_verify', 'confirm_and_execute',
+  'project', 'scene', 'script',
+  'runtime',
+  'validation', 'confirm_and_execute',
 ]);
 
-// ─── L1 Quick Verify eligible tools ─────────────────────────────────────────
-
 export const VERIFY_ELIGIBLE_TOOLS = new Set([
-  'add_node', 'edit_node', 'write_script', 'edit_script',
-  'load_sprite', 'ui_build_layout',
+  'scene', 'script', 'ui',
 ]);
 
 export function isVerifyEligible(name: string): boolean {

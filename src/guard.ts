@@ -11,8 +11,7 @@ const TOKEN_TTL_MS = 180_000; // 3 minutes
 const MAX_TOKENS = 100;
 const pendingTokens = new Map<string, PendingToken>();
 
-// 后台定期清理过期 token（每 60 秒）
-const _cleanupTimer = setInterval(() => {
+let _cleanupTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
   const now = Date.now();
   for (const [key, pending] of pendingTokens) {
     if (now - pending.createdAt > TOKEN_TTL_MS) pendingTokens.delete(key);
@@ -21,20 +20,34 @@ const _cleanupTimer = setInterval(() => {
 // 允许进程正常退出（不阻塞事件循环）
 if (_cleanupTimer.unref) _cleanupTimer.unref();
 
-export const GUARDED_TOOLS = new Set([
-  'remove_node',
-  'execute_gdscript',
-  'project_replace',
-  'write_script',
-  'save_scene',
-  'detach_instance',
-]);
+/** Restart the background cleanup interval if it isn't running. */
+function ensureCleanupTimer(): void {
+  if (_cleanupTimer !== null) return;
+  _cleanupTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [key, pending] of pendingTokens) {
+      if (now - pending.createdAt > TOKEN_TTL_MS) pendingTokens.delete(key);
+    }
+  }, 60_000);
+  if (_cleanupTimer.unref) _cleanupTimer.unref();
+}
 
-export function requiresConfirmation(toolName: string): boolean {
-  return GUARDED_TOOLS.has(toolName);
+// Map: merged tool name → Set of guarded actions (null = entire tool is guarded)
+const GUARDED: Record<string, Set<string> | null> = {
+  scene: new Set(['remove_node', 'save_scene', 'detach_instance']),
+  script: null,
+};
+
+export function requiresConfirmation(toolName: string, args?: Record<string, unknown>): boolean {
+  const guarded = GUARDED[toolName];
+  if (guarded === undefined) return false;
+  if (guarded === null) return true;
+  const action = (args?.action ?? args?.method) as string | undefined;
+  return action != null && guarded.has(action);
 }
 
 export function createPendingToken(toolName: string, args: Record<string, unknown>): string {
+  ensureCleanupTimer();
   const now = Date.now();
   // 清理过期 token
   for (const [key, pending] of pendingTokens) {
@@ -70,4 +83,31 @@ export function consumeToken(token: string): { toolName: string; args: Record<st
 
 export function pendingCount(): number {
   return pendingTokens.size;
+}
+
+/**
+ * Reset all mutable state: clear pending tokens and stop the cleanup interval.
+ * Useful for test teardown or hot-reload scenarios.
+ * The cleanup interval will be recreated on the next `createPendingToken()` call.
+ */
+export function resetState(): void {
+  pendingTokens.clear();
+  if (_cleanupTimer !== null) {
+    clearInterval(_cleanupTimer);
+    _cleanupTimer = null;
+  }
+}
+
+/**
+ * Graceful shutdown: stop the cleanup interval and clear all pending tokens.
+ * After calling this, the module is still usable — the interval restarts on
+ * the next `createPendingToken()` call.
+ */
+export function cleanup(): void {
+  resetState();
+}
+
+/** @internal Exposed for testing — check whether the cleanup timer is active. */
+export function isCleanupTimerRunning(): boolean {
+  return _cleanupTimer !== null;
 }

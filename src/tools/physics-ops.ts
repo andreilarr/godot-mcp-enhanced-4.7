@@ -10,17 +10,19 @@ const ERROR_CODES = {
   INVALID_PATH: 'INVALID_PATH',
   NODE_NOT_FOUND: 'NODE_NOT_FOUND',
   INVALID_VECTOR: 'INVALID_VECTOR',
+  INVALID_ACTION: 'INVALID_ACTION',
   SCRIPT_EXEC_FAILED: 'SCRIPT_EXEC_FAILED',
 } as const;
 
-export const TOOL_NAMES = [
-  'physics_raycast',
-  'physics_body_info',
-  'diagnose_physics',
+const ACTIONS = [
+  'raycast',
+  'body_info',
+  'diagnose',
   'query_spatial',
+  'collision_overlay',
 ] as const;
 
-// ─── GDScript Generators: Physics ──────────────────────────────────────────
+// ─── GDScript Generators ───────────────────────────────────────────────────
 
 export function genRaycastScript(
   from: { x: number; y: number; z: number },
@@ -236,80 +238,120 @@ func _initialize():
 `;
 }
 
-// ─── Tool Definitions ──────────────────────────────────────────────────────
+export function genCollisionOverlayScript(parentPath: string, colorOverride?: string): string {
+  let colorInit = 'var base_color = null';
+  if (colorOverride) {
+    colorInit = `var base_color = Color(${colorOverride})`;
+  }
+
+  return `${SCENE_TREE_HEADER}
+func _initialize():
+\t_mcp_load_main_scene()
+\tvar parent = _mcp_get_node("${gdEscape(parentPath)}")
+\tif parent == null:
+\t\t_mcp_output("error", "Node not found: ${gdEscape(parentPath)}")
+\t\t_mcp_done()
+\t\treturn
+\t${colorInit}
+\tvar existing_overlay = parent.get_node_or_null("_MCP_CollisionOverlay")
+\tif existing_overlay:
+\t\tparent.remove_child(existing_overlay)
+\t\texisting_overlay.queue_free()
+\tvar overlay_parent = Node3D.new()
+\toverlay_parent.name = "_MCP_CollisionOverlay"
+\tparent.add_child(overlay_parent)
+\tvar overlays = []
+\tvar _collect_fn: Callable
+\t_collect_fn = func(node: Node):
+\t\tif node is CollisionShape3D and node.shape:
+\t\t\tvar phys_parent = node.get_parent()
+\t\t\tvar color: Color
+\t\t\tif base_color != null:
+\t\t\t\tcolor = base_color
+\t\t\telif phys_parent is StaticBody3D:
+\t\t\t\tcolor = Color(0.3, 0.5, 1.0, 0.5)
+\t\t\telif phys_parent is CharacterBody3D:
+\t\t\t\tcolor = Color(0.2, 0.9, 0.3, 0.5)
+\t\t\telif phys_parent is RigidBody3D:
+\t\t\t\tcolor = Color(1.0, 0.3, 0.3, 0.5)
+\t\t\telif phys_parent is Area3D:
+\t\t\t\tcolor = Color(1.0, 0.9, 0.2, 0.5)
+\t\t\telse:
+\t\t\t\tcolor = Color(1.0, 1.0, 1.0, 0.5)
+\t\t\tvar debug_mesh = node.shape.get_debug_mesh()
+\t\t\tvar mesh_inst = MeshInstance3D.new()
+\t\t\tmesh_inst.mesh = debug_mesh
+\t\t\tvar mat = StandardMaterial3D.new()
+\t\t\tmat.albedo_color = color
+\t\t\tmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+\t\t\tmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+\t\t\tmesh_inst.material_override = mat
+\t\t\tmesh_inst.global_transform = node.global_transform
+\t\t\toverlay_parent.add_child(mesh_inst)
+\t\t\tvar parent_type = phys_parent.get_class() if phys_parent else "Unknown"
+\t\t\toverlays.append({"path": str(node.get_path()), "shape": node.shape.get_class(), "color": {"r": color.r, "g": color.g, "b": color.b, "a": color.a}, "parent_type": parent_type})
+\t\tfor child in node.get_children():
+\t\t\t_collect_fn.call(child)
+\t_collect_fn.call(parent)
+\t_mcp_output("overlay_count", overlays.size())
+\t_mcp_output("overlays", overlays)
+\t_mcp_done()
+`;
+}
+
+// ─── Tool Definition ────────────────────────────────────────────────────────
 
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'physics_raycast',
-      description: `Perform 3D raycast. ${NON_PERSIST}`,
+      name: 'physics',
+      description:
+        '物理系统统一工具。支持 5 种操作：raycast（3D 射线检测）、body_info（物理体碰撞信息）、' +
+        'diagnose（物理诊断，含速度/接触点/碰撞形状/ConcavePolygonShape3D 警告）、' +
+        'query_spatial（空间范围查询碰撞体）、collision_overlay（碰撞形状可视化覆盖层）。' +
+        NON_PERSIST,
       inputSchema: {
         type: 'object' as const,
         properties: {
           project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          action: {
+            type: 'string',
+            enum: [...ACTIONS],
+            description: '操作类型：raycast | body_info | diagnose | query_spatial | collision_overlay',
+          },
+          // raycast 参数
           from: {
             type: 'object',
-            description: '起点 {x,y,z}',
+            description: '射线起点 {x,y,z}（raycast 必填）',
             properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
             required: ['x', 'y', 'z'],
           },
           to: {
             type: 'object',
-            description: '终点 {x,y,z}',
+            description: '射线终点 {x,y,z}（raycast 必填）',
             properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
             required: ['x', 'y', 'z'],
           },
-          collision_mask: { type: 'number', description: '碰撞掩码（可选）' },
-          exclude_paths: { type: 'array', description: '排除节点路径数组（可选）', items: { type: 'string' } },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'from', 'to'],
-      },
-    },
-    {
-      name: 'physics_body_info',
-      description: `Get physics body collision info. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          body_path: { type: 'string', description: '物理体节点路径' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'body_path'],
-      },
-    },
-    {
-      name: 'diagnose_physics',
-      description: `Diagnose physics collision state for a body. Returns velocity, contact points (position/normal), collision shape info, and warns about ConcavePolygonShape3D traps. WARNING: Uses move_and_collide with test_only=true which may have side effects on physics state. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          body_path: { type: 'string', description: '物理体节点路径（如 root/Player）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'body_path'],
-      },
-    },
-    {
-      name: 'query_spatial',
-      description: `Query 3D space for collision bodies within a radius. Returns body paths, types, distances sorted nearest-first. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          // body_info / diagnose 参数
+          body_path: { type: 'string', description: '物理体节点路径（body_info / diagnose 必填）' },
+          // query_spatial 参数
           center: {
             type: 'object',
-            description: '查询中心点 {x,y,z}',
+            description: '查询中心点 {x,y,z}（query_spatial 必填）',
             properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
             required: ['x', 'y', 'z'],
           },
-          radius: { type: 'number', description: '查询半径（默认 10.0）', default: 10.0 },
-          collision_mask: { type: 'number', description: '碰撞掩码（可选）' },
+          radius: { type: 'number', description: '查询半径（query_spatial，默认 10.0）', default: 10.0 },
+          // raycast / query_spatial 通用参数
+          collision_mask: { type: 'number', description: '碰撞掩码（raycast / query_spatial 可选）' },
+          exclude_paths: { type: 'array', description: '排除节点路径数组（raycast 可选）', items: { type: 'string' } },
+          // collision_overlay 参数
+          parent_path: { type: 'string', description: '父节点路径（collision_overlay，默认 root）' },
+          color_override: { type: 'string', description: '统一颜色，如 "1,0,0,0.5"（collision_overlay 可选）' },
+          // 通用参数
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'center'],
+        required: ['project_path', 'action'],
       },
     },
   ];
@@ -320,16 +362,22 @@ export function getToolDefinitions(): Tool[] {
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'physics') return null;
 
   try {
     const projectPath = requireProjectPath(args);
+    const action = args.action as string;
+    if (!(ACTIONS as readonly string[]).includes(action)) {
+      return opsErrorResult('INVALID_ACTION', `未知操作: ${action}。支持: ${ACTIONS.join(', ')}`);
+    }
+
     const godot = await ctx.findGodot();
     const loadAutoloads = args.load_autoloads !== false;
     let script: string;
 
-    switch (name) {
-      case 'physics_raycast': {
+    switch (action) {
+      case 'raycast': {
+        if (!args.from || !args.to) return opsErrorResult('INVALID_VECTOR', 'raycast 需要 from 和 to 参数');
         const from = validateVector3(args.from);
         const to = validateVector3(args.to);
         const mask = args.collision_mask as number | undefined;
@@ -339,22 +387,39 @@ export async function handleTool(
         script = genRaycastScript(from, to, mask, excludePaths);
         break;
       }
-      case 'physics_body_info': {
+      case 'body_info': {
+        if (!args.body_path) return opsErrorResult('INVALID_PATH', 'body_info 需要 body_path 参数');
         const bodyPath = normalizeNodePath(args.body_path as string);
         script = genBodyInfoScript(bodyPath);
         break;
       }
-      case 'diagnose_physics': {
+      case 'diagnose': {
+        if (!args.body_path) return opsErrorResult('INVALID_PATH', 'diagnose 需要 body_path 参数');
         const bodyPath = normalizeNodePath(args.body_path as string);
         script = genDiagnosePhysicsScript(bodyPath);
         break;
       }
       case 'query_spatial': {
+        if (!args.center) return opsErrorResult('INVALID_VECTOR', 'query_spatial 需要 center 参数');
         const center = validateVector3(args.center);
         const radius = typeof args.radius === 'number' ? Math.max(0.1, args.radius) : 10.0;
         const mask = args.collision_mask as number | undefined;
         if (mask !== undefined && typeof mask !== 'number') return opsErrorResult('INVALID_VECTOR', 'collision_mask must be a number');
         script = genQuerySpatialScript(center, radius, mask);
+        break;
+      }
+      case 'collision_overlay': {
+        const parentPath = normalizeNodePath((args.parent_path as string) || 'root');
+        const rawColor = args.color_override as string | undefined;
+        let safeColor: string | undefined;
+        if (rawColor) {
+          const parts = rawColor.split(',').map(p => p.trim());
+          if (parts.length < 3 || parts.length > 4 || !parts.every(p => /^[\d.]+$/.test(p) && isFinite(Number(p)))) {
+            return opsErrorResult('INVALID_VECTOR', 'color_override must be 3-4 comma-separated finite numbers (e.g. "1,0,0,0.5")');
+          }
+          safeColor = parts.map(p => String(Number(p))).join(', ');
+        }
+        script = genCollisionOverlayScript(parentPath, safeColor);
         break;
       }
       default:
@@ -384,8 +449,5 @@ export async function handleTool(
 // ─── Tool Meta ──────────────────────────────────────────────────────────────
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  physics_raycast: { readonly: true, long_running: false },
-  physics_body_info: { readonly: true, long_running: false },
-  diagnose_physics: { readonly: true, long_running: false },
-  query_spatial: { readonly: true, long_running: false },
+  physics: { readonly: true, long_running: false },
 };

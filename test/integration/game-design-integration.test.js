@@ -9,10 +9,17 @@ describe('Game Design Integration', () => {
     const deliveryDefs = getDeliveryDefs();
     const workflowDefs = getWorkflowDefs();
 
-    expect(gddDefs.find(d => d.name === 'validate_gdd')).toBeDefined();
-    expect(gddDefs.find(d => d.name === 'chain_verify')).toBeDefined();
+    expect(gddDefs.find(d => d.name === 'game_design')).toBeDefined();
     expect(deliveryDefs.find(d => d.name === 'verify_delivery')).toBeDefined();
-    expect(workflowDefs.find(d => d.name === 'dev_loop')).toBeDefined();
+    expect(workflowDefs.find(d => d.name === 'workflow')).toBeDefined();
+  });
+
+  it('game_design tool supports validate_gdd and chain_verify actions', () => {
+    const gddDefs = getGDDDefs();
+    const gd = gddDefs.find(d => d.name === 'game_design');
+    const actionEnum = gd.inputSchema.properties.action.enum;
+    expect(actionEnum).toContain('validate_gdd');
+    expect(actionEnum).toContain('chain_verify');
   });
 
   it('gdd_standards dimension is in verify_delivery schema', () => {
@@ -23,16 +30,17 @@ describe('Game Design Integration', () => {
     expect(checksProps.gdd_dirs).toBeDefined();
   });
 
-  it('save_state is in dev_loop schema', () => {
+  it('save_state is in workflow schema', () => {
     const workflowDefs = getWorkflowDefs();
-    const dl = workflowDefs.find(d => d.name === 'dev_loop');
-    const props = dl.inputSchema.properties;
+    const wf = workflowDefs.find(d => d.name === 'workflow');
+    const props = wf.inputSchema.properties;
     expect(props.save_state).toBeDefined();
-    expect(props.save_state.description).toContain('file-as-memory');
+    expect(props.save_state.description).toContain('session state');
   });
 
-  it('TOOL_META has correct entries for new tools', () => {
-    expect(gddMeta.validate_gdd.readonly).toBe(true);
-    expect(gddMeta.chain_verify.readonly).toBe(true);
+  it('TOOL_META has correct entry for game_design', () => {
+    expect(gddMeta.game_design).toBeDefined();
+    expect(gddMeta.game_design.readonly).toBe(true);
+    expect(gddMeta.game_design.long_running).toBe(false);
   });
 });

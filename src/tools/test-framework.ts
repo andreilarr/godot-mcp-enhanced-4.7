@@ -5,7 +5,11 @@ import { validatePath } from '../helpers.js';
 import { SCENE_TREE_HEADER, opsErrorResult, parseGdscriptResult } from './shared.js';
 import { gdEscape } from './shared.js';
 
-const TOOL_NAMES = ['test_assert', 'test_stress', 'export_list_presets', 'export_get_preset', 'export_build'] as const;
+const TOOL_NAMES = ['test'] as const;
+
+export { TOOL_NAMES };
+
+const ACTIONS = ['assert', 'stress', 'export_list_presets', 'export_get_preset', 'export_build'] as const;
 
 const VALID_ASSERTIONS = new Set(['node_exists', 'property_equals', 'signal_connected', 'node_count']);
 
@@ -14,76 +18,40 @@ const VALID_ASSERTIONS = new Set(['node_exists', 'property_equals', 'signal_conn
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'test_assert',
-      description: 'Assert conditions on the Godot scene tree or runtime state. Supports: node_exists, property_equals, signal_connected, node_count.',
+      name: 'test',
+      description: 'Testing and export operations. assert: assert conditions on scene tree. stress: stress test node create/destroy for leak detection. export_list_presets/export_get_preset/export_build: export preset management (Editor mode only).',
       inputSchema: {
         type: 'object' as const,
         properties: {
           project_path: { type: 'string', description: 'Path to Godot project directory' },
+          action: {
+            type: 'string',
+            enum: [...ACTIONS],
+            description: 'Action type',
+          },
+          // assert params
           assertion_type: {
             type: 'string',
             enum: ['node_exists', 'property_equals', 'signal_connected', 'node_count'],
-            description: 'Type of assertion to perform',
+            description: 'assert: Type of assertion to perform',
           },
-          path: { type: 'string', description: 'Node path (e.g. root/Player)' },
-          property: { type: 'string', description: 'Property name (for property_equals)' },
-          expected: { description: 'Expected value (for property_equals)' },
-          signal: { type: 'string', description: 'Signal name (for signal_connected)' },
-          target: { type: 'string', description: 'Target node path (for signal_connected)' },
-          method: { type: 'string', description: 'Target method name (for signal_connected)' },
-          parent: { type: 'string', description: 'Parent node path (for node_count)' },
-          count: { type: 'number', description: 'Expected child count (for node_count)' },
+          path: { type: 'string', description: 'assert: Node path (e.g. root/Player)' },
+          property: { type: 'string', description: 'assert: Property name (for property_equals)' },
+          expected: { description: 'assert: Expected value (for property_equals)' },
+          signal: { type: 'string', description: 'assert: Signal name (for signal_connected)' },
+          target: { type: 'string', description: 'assert: Target node path (for signal_connected)' },
+          method: { type: 'string', description: 'assert: Target method name (for signal_connected)' },
+          parent: { type: 'string', description: 'assert: Parent node path (for node_count)' },
+          count: { type: 'number', description: 'assert: Expected child count (for node_count)' },
+          // stress params
+          node_type: { type: 'string', description: 'stress: Node type to create/destroy (default: Node)', default: 'Node' },
+          iterations: { type: 'number', description: 'stress: Number of iterations (default: 100)', default: 100 },
+          // export params
+          name: { type: 'string', description: 'export_get_preset: Export preset name' },
+          preset: { type: 'string', description: 'export_build: Export preset name' },
+          output_path: { type: 'string', description: 'export_build: Output directory for the build' },
         },
-        required: ['project_path', 'assertion_type'],
-      },
-    },
-    {
-      name: 'test_stress',
-      description: 'Stress test: repeatedly create/destroy nodes to detect memory leaks. Returns iterations, peak memory, and leak status.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          node_type: { type: 'string', description: 'Node type to create/destroy (default: Node)', default: 'Node' },
-          iterations: { type: 'number', description: 'Number of iterations (default: 100)', default: 100 },
-        },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'export_list_presets',
-      description: 'List export presets in the Godot project. Editor mode only.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-        },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'export_get_preset',
-      description: 'Get detailed configuration of an export preset. Sensitive fields (keystore, certificates) are sanitized. Editor mode only.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          name: { type: 'string', description: 'Export preset name' },
-        },
-        required: ['project_path', 'name'],
-      },
-    },
-    {
-      name: 'export_build',
-      description: 'Execute an export build. This is a long-running operation. Editor mode only.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          preset: { type: 'string', description: 'Export preset name' },
-          output_path: { type: 'string', description: 'Output directory for the build' },
-        },
-        required: ['project_path', 'preset'],
+        required: ['project_path', 'action'],
       },
     },
   ];
@@ -92,13 +60,19 @@ export function getToolDefinitions(): Tool[] {
 // ─── Tool handler ───────────────────────────────────────────────────────────
 
 export async function handleTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'test') return null;
+
+  const action = args.action as string;
+  if (!action) return opsErrorResult('INVALID_PARAMS', 'action is required');
+  if (!(ACTIONS as readonly string[]).includes(action)) {
+    return opsErrorResult('INVALID_ACTION', `Unknown action: ${action}. Supported: ${ACTIONS.join(', ')}`);
+  }
 
   try {
     // Export tools: Editor-only. In Editor mode, GodotServer.ts dispatches to editorExecutor
     // before reaching this module, so this path only fires in Headless mode.
-    if (name === 'export_list_presets' || name === 'export_get_preset' || name === 'export_build') {
-      return opsErrorResult('EDITOR_ONLY', `Tool "${name}" requires Editor mode. Set GODOT_MCP_MODE=editor and install the Godot plugin.`);
+    if (action === 'export_list_presets' || action === 'export_get_preset' || action === 'export_build') {
+      return opsErrorResult('EDITOR_ONLY', `Action "${action}" requires Editor mode. Set GODOT_MCP_MODE=editor and install the Godot plugin.`);
     }
 
     if (typeof args.project_path !== 'string' || !args.project_path) {
@@ -107,9 +81,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     const projectPath = validatePath(args.project_path);
     const godot = await ctx.findGodot();
 
-    switch (name) {
-      case 'test_assert': return await handleTestAssert(args, godot, projectPath);
-      case 'test_stress': return await handleTestStress(args, godot, projectPath);
+    switch (action) {
+      case 'assert': return await handleTestAssert(args, godot, projectPath);
+      case 'stress': return await handleTestStress(args, godot, projectPath);
       default: return null;
     }
   } catch (err) {
@@ -259,11 +233,6 @@ func _initialize():
   const result = await executeGdscript({ godotPath: godot, projectPath, code: script, timeout: 120 });
   return parseGdscriptResult(result, [], (_msg) => 'STRESS_TEST_FAILED');
 }
-
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  test_assert: { readonly: true, long_running: false },
-  test_stress: { readonly: false, long_running: true },
-  export_list_presets: { readonly: true, long_running: false },
-  export_get_preset: { readonly: true, long_running: false },
-  export_build: { readonly: false, long_running: true },
+  test: { readonly: true, long_running: false },
 };

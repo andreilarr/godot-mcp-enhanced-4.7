@@ -49,45 +49,43 @@ describe('particles getToolDefinitions', () => {
     expect(defs.length).toBeGreaterThan(0);
   });
 
-  it('has 5 tool definitions matching the module tools', () => {
+  it('has 1 merged tool definition named "particles"', () => {
     const defs = getToolDefinitions();
-    expect(defs.length).toBe(5);
-    const names = defs.map(d => d.name);
-    expect(names).toContain('particles_create');
-    expect(names).toContain('particles_set_emission');
-    expect(names).toContain('particles_set_process');
-    expect(names).toContain('particles_load_preset');
-    expect(names).toContain('particles_set_material');
+    expect(defs.length).toBe(1);
+    expect(defs[0].name).toBe('particles');
   });
 
-  it('each definition has required inputSchema fields', () => {
+  it('action enum contains all 5 actions', () => {
     const defs = getToolDefinitions();
-    for (const def of defs) {
-      expect(def.name).toBeTruthy();
-      expect(def.description).toBeTruthy();
-      expect(def.inputSchema).toBeDefined();
-      expect(def.inputSchema.type).toBe('object');
-    }
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    expect(actionEnum).toContain('particles_create');
+    expect(actionEnum).toContain('particles_set_emission');
+    expect(actionEnum).toContain('particles_set_process');
+    expect(actionEnum).toContain('particles_load_preset');
+    expect(actionEnum).toContain('particles_set_material');
+  });
+
+  it('definition has required inputSchema fields', () => {
+    const defs = getToolDefinitions();
+    const def = defs[0];
+    expect(def.name).toBeTruthy();
+    expect(def.description).toBeTruthy();
+    expect(def.inputSchema).toBeDefined();
+    expect(def.inputSchema.type).toBe('object');
   });
 });
 
 // ─── TOOL_META ──────────────────────────────────────────────────────────────
 
 describe('particles TOOL_META', () => {
-  it('has entries for all 5 tools', () => {
-    expect(Object.keys(TOOL_META).length).toBe(5);
-    expect(TOOL_META.particles_create).toBeDefined();
-    expect(TOOL_META.particles_set_emission).toBeDefined();
-    expect(TOOL_META.particles_set_process).toBeDefined();
-    expect(TOOL_META.particles_load_preset).toBeDefined();
-    expect(TOOL_META.particles_set_material).toBeDefined();
+  it('has exactly 1 entry for "particles"', () => {
+    expect(Object.keys(TOOL_META).length).toBe(1);
+    expect(TOOL_META.particles).toBeDefined();
   });
 
-  it('all tools are marked non-readonly and non-long-running', () => {
-    for (const [, meta] of Object.entries(TOOL_META)) {
-      expect(meta.readonly).toBe(false);
-      expect(meta.long_running).toBe(false);
-    }
+  it('particles is non-readonly and non-long-running', () => {
+    expect(TOOL_META.particles.readonly).toBe(false);
+    expect(TOOL_META.particles.long_running).toBe(false);
   });
 });
 
@@ -109,8 +107,9 @@ describe('particles handleTool — particles_create', () => {
 
   it('calls executeGdscript and returns result for GPUParticles3D', async () => {
     const ctx = createMockCtx();
-    const result = await handleTool('particles_create', {
+    const result = await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_create',
       node_type: 'GPUParticles3D',
       name: 'FireParticles',
     }, ctx);
@@ -124,8 +123,9 @@ describe('particles handleTool — particles_create', () => {
 
   it('uses Vector2 for GPUParticles2D position', async () => {
     const ctx = createMockCtx();
-    const result = await handleTool('particles_create', {
+    const result = await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_create',
       node_type: 'GPUParticles2D',
       name: 'Spark',
       position: { x: 10, y: 20 },
@@ -138,8 +138,9 @@ describe('particles handleTool — particles_create', () => {
 
   it('uses Vector3 for GPUParticles3D position', async () => {
     const ctx = createMockCtx();
-    await handleTool('particles_create', {
+    await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_create',
       node_type: 'GPUParticles3D',
       name: 'Smoke3D',
       position: { x: 1, y: 2, z: 3 },
@@ -151,8 +152,9 @@ describe('particles handleTool — particles_create', () => {
 
   it('returns error for invalid node_type', async () => {
     const ctx = createMockCtx();
-    const result = await handleTool('particles_create', {
+    const result = await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_create',
       node_type: 'InvalidType',
       name: 'Bad',
     }, ctx);
@@ -164,8 +166,9 @@ describe('particles handleTool — particles_create', () => {
 
   it('returns error for empty name', async () => {
     const ctx = createMockCtx();
-    const result = await handleTool('particles_create', {
+    const result = await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_create',
       node_type: 'GPUParticles3D',
       name: '',
     }, ctx);
@@ -177,8 +180,9 @@ describe('particles handleTool — particles_create', () => {
 
   it('applies fire preset lines when preset is specified', async () => {
     const ctx = createMockCtx();
-    await handleTool('particles_create', {
+    await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_create',
       node_type: 'GPUParticles3D',
       name: 'MyFire',
       preset: 'fire',
@@ -190,8 +194,9 @@ describe('particles handleTool — particles_create', () => {
 
   it('returns error for unknown preset', async () => {
     const ctx = createMockCtx();
-    const result = await handleTool('particles_create', {
+    const result = await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_create',
       node_type: 'GPUParticles3D',
       name: 'MyParticles',
       preset: 'nonexistent',
@@ -212,8 +217,9 @@ describe('particles handleTool — particles_set_emission', () => {
 
   it('generates emission script with amount', async () => {
     const ctx = createMockCtx();
-    const result = await handleTool('particles_set_emission', {
+    const result = await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_set_emission',
       node_path: 'root/Particles',
       amount: 100,
     }, ctx);
@@ -226,8 +232,9 @@ describe('particles handleTool — particles_set_emission', () => {
 
   it('generates emission script with emission_shape sphere', async () => {
     const ctx = createMockCtx();
-    await handleTool('particles_set_emission', {
+    await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_set_emission',
       node_path: 'root/Particles',
       emission_shape: 'sphere',
       emission_sphere_radius: 5,
@@ -240,8 +247,9 @@ describe('particles handleTool — particles_set_emission', () => {
 
   it('returns error for invalid emission_shape', async () => {
     const ctx = createMockCtx();
-    const result = await handleTool('particles_set_emission', {
+    const result = await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_set_emission',
       node_path: 'root/Particles',
       emission_shape: 'invalid',
     }, ctx);
@@ -261,8 +269,9 @@ describe('particles handleTool — particles_set_process', () => {
 
   it('generates process script with gravity', async () => {
     const ctx = createMockCtx();
-    await handleTool('particles_set_process', {
+    await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_set_process',
       node_path: 'root/Particles',
       gravity: { x: 0, y: -9.8, z: 0 },
     }, ctx);
@@ -273,8 +282,9 @@ describe('particles handleTool — particles_set_process', () => {
 
   it('generates process script with lifetime and speed_scale', async () => {
     const ctx = createMockCtx();
-    await handleTool('particles_set_process', {
+    await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_set_process',
       node_path: 'root/Particles',
       lifetime: 3.0,
       speed_scale: 2.0,
@@ -287,8 +297,9 @@ describe('particles handleTool — particles_set_process', () => {
 
   it('returns error for negative lifetime', async () => {
     const ctx = createMockCtx();
-    const result = await handleTool('particles_set_process', {
+    const result = await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_set_process',
       node_path: 'root/Particles',
       lifetime: -1,
     }, ctx);
@@ -308,8 +319,9 @@ describe('particles handleTool — particles_load_preset', () => {
 
   it('loads fire preset and calls executor', async () => {
     const ctx = createMockCtx();
-    await handleTool('particles_load_preset', {
+    await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_load_preset',
       node_path: 'root/Particles',
       preset: 'fire',
     }, ctx);
@@ -321,8 +333,9 @@ describe('particles handleTool — particles_load_preset', () => {
 
   it('returns error for unknown preset', async () => {
     const ctx = createMockCtx();
-    const result = await handleTool('particles_load_preset', {
+    const result = await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_load_preset',
       node_path: 'root/Particles',
       preset: 'nonexistent',
     }, ctx);
@@ -342,8 +355,9 @@ describe('particles handleTool — particles_set_material', () => {
 
   it('generates material creation script', async () => {
     const ctx = createMockCtx();
-    const result = await handleTool('particles_set_material', {
+    const result = await handleTool('particles', {
       project_path: '/fake/project',
+      action: 'particles_set_material',
       node_path: 'root/Particles',
     }, ctx);
 

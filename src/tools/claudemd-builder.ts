@@ -55,10 +55,11 @@ export const GODOT_MCP_RULES = `# Godot MCP 开发规则
 - 坐标为 Vector2i 格式
 
 ## 物理
-- diagnose_physics 有副作用（使用 move_and_collide test_only）
+- physics 工具包含 raycast / body_info / diagnose / query_spatial / collision_overlay 五种操作
+- diagnose 操作有副作用（使用 move_and_collide test_only）
 
 ## 导航
-- nav_bake_mesh 为长耗时操作
+- nav(action=bake_mesh) 为长耗时操作
 - 运行时操作，不持久化
 
 ## 粒子

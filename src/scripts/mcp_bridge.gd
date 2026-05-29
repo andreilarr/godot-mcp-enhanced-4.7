@@ -157,11 +157,11 @@ func _server_take_connection() -> StreamPeerTCP:
 # DUPLICATE: Keep in sync with addons/godot_mcp_server/websocket_server.gd:_constant_time_compare
 # Cannot share because editor plugin and game autoload have separate script contexts.
 func _constant_time_compare(a: String, b: String) -> bool:
-	# When lengths differ, result=1 ensures false; loop only maintains constant-time execution.
 	var result := 0
 	if a.length() != b.length():
 		result = 1
-	for i in range(b.length()):
+	var max_len := maxi(a.length(), b.length())
+	for i in range(max_len):
 		var ca := ord(a[i]) if i < a.length() else 0
 		var cb := ord(b[i]) if i < b.length() else 0
 		result = result | (ca ^ cb)

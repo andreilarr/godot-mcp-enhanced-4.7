@@ -7,7 +7,7 @@ import { requireProjectPath, checkVersionMismatch, buildSafeEnv } from '../helpe
 import { existsSync } from 'fs';
 import { join } from 'path';
 
-const TOOL_NAMES = [
+const ACTIONS = [
   'launch_editor',
   'run_project',
   'stop_project',
@@ -46,52 +46,22 @@ function classifyOutput(lines: string[]): {
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'launch_editor',
-      description: 'Launch the Godot editor GUI for a project.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: { project_path: { type: 'string', description: 'Path to Godot project directory' } },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'run_project',
-      description: 'Run a Godot project in debug mode, capturing output. Supports timeout to auto-stop.',
+      name: 'runtime',
+      description: '启动编辑器、运行/停止项目、获取调试输出、运行测试、获取 Godot 版本。',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          timeout: { type: 'number', description: 'Auto-stop after N seconds (default: 30)', default: 30 },
+          action: {
+            type: 'string',
+            enum: ['launch_editor', 'run_project', 'stop_project', 'get_debug_output', 'run_tests', 'get_godot_version'],
+            description: '操作类型',
+          },
+          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          timeout: { type: 'number', description: '自动停止秒数（默认 30）', default: 30 },
+          test_script: { type: 'string', description: '测试脚本或目录路径（默认 res://test/）', default: 'res://test/' },
         },
-        required: ['project_path'],
+        required: ['action'],
       },
-    },
-    {
-      name: 'stop_project',
-      description: 'Stop the currently running Godot project and return categorized output.',
-      inputSchema: { type: 'object' as const, properties: {} },
-    },
-    {
-      name: 'get_debug_output',
-      description: 'Get structured debug output (errors first) from the running project.',
-      inputSchema: { type: 'object' as const, properties: {} },
-    },
-    {
-      name: 'run_tests',
-      description: 'Run GUT unit tests and parse results.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          test_script: { type: 'string', description: 'Path to test script or directory (res://test/)', default: 'res://test/' },
-        },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'get_godot_version',
-      description: 'Get the Godot engine version.',
-      inputSchema: { type: 'object' as const, properties: {} },
     },
   ];
 }
@@ -99,9 +69,11 @@ export function getToolDefinitions(): Tool[] {
 // ─── Tool handler ───────────────────────────────────────────────────────────
 
 export async function handleTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'runtime') return null;
+  const action = args.action as string;
+  if (!(ACTIONS as readonly string[]).includes(action)) return null;
 
-  switch (name) {
+  switch (action) {
     case 'launch_editor': {
       const p = requireProjectPath(args);
       if (!existsSync(join(p, 'project.godot'))) {
@@ -293,10 +265,5 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 }
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  launch_editor: { readonly: false, long_running: false },
-  run_project: { readonly: false, long_running: false },
-  stop_project: { readonly: false, long_running: false },
-  get_debug_output: { readonly: true, long_running: false },
-  run_tests: { readonly: false, long_running: true },
-  get_godot_version: { readonly: true, long_running: false },
+  runtime: { readonly: false, long_running: true },
 };

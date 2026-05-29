@@ -8,36 +8,35 @@ import { getToolDefinitions } from '../src/tools/scene.js';
 describe('scene-tools getToolDefinitions', () => {
   const defs = getToolDefinitions();
 
-  it('returns 14 tool definitions', () => {
-    expect(defs.length).toBe(14);
+  it('returns 1 merged tool definition (scene)', () => {
+    expect(defs.length).toBe(1);
+    expect(defs[0].name).toBe('scene');
   });
 
-  const expected = [
-    'read_scene', 'create_scene', 'add_node', 'save_scene', 'load_sprite',
-    'quick_scene', 'query_scene_tree', 'inspect_node', 'batch_add_nodes',
-    'edit_node', 'remove_node', 'instance_scene', 'set_instance_property',
-    'detach_instance',
-  ];
-  for (const name of expected) {
-    it(`includes ${name}`, () => {
-      expect(defs.some(d => d.name === name)).toBeTruthy();
-    });
-  }
-
-  it('every tool has description and inputSchema', () => {
-    for (const d of defs) {
-      expect(d.description).toBeTruthy();
-      expect(d.inputSchema).toBeTruthy();
-      expect(d.inputSchema.type).toBe('object');
+  it('action enum includes all 14 operations', () => {
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    const expected = [
+      'read_scene', 'create_scene', 'add_node', 'save_scene', 'load_sprite',
+      'quick_scene', 'query_scene_tree', 'inspect_node', 'batch_add_nodes',
+      'edit_node', 'remove_node', 'instance_scene', 'set_instance_property',
+      'detach_instance',
+    ];
+    for (const op of expected) {
+      expect(actionEnum).toContain(op);
     }
   });
 
-  it('destructive tools have project_path as required', () => {
-    const destructive = ['add_node', 'edit_node', 'remove_node', 'create_scene'];
-    for (const name of destructive) {
-      const d = defs.find(t => t.name === name);
-      expect(d?.inputSchema.required?.includes('project_path')).toBeTruthy();
-    }
+  it('tool has description and inputSchema', () => {
+    const d = defs[0];
+    expect(d.description).toBeTruthy();
+    expect(d.inputSchema).toBeTruthy();
+    expect(d.inputSchema.type).toBe('object');
+  });
+
+  it('tool has project_path and action as required', () => {
+    const d = defs[0];
+    expect(d.inputSchema.required).toContain('project_path');
+    expect(d.inputSchema.required).toContain('action');
   });
 });
 

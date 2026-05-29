@@ -55,8 +55,9 @@ describe('Level B: Scene Operations', () => {
 
   // --- 用例 1: add_node — 添加 Sprite2D 到场景 ---
   it('add_node — 添加 Sprite2D 到 main.tscn', async () => {
-    const result = await scene.handleTool('add_node', {
+    const result = await scene.handleTool('scene', {
       project_path: dirRef.path,
+      action: 'add_node',
       scene_path: 'res://scenes/main.tscn',
       node_type: 'Sprite2D',
       node_name: 'TestSprite',
@@ -66,15 +67,17 @@ describe('Level B: Scene Operations', () => {
 
   // --- 用例 2: edit_node — 添加节点后修改位置 ---
   it('edit_node — add_node + edit_node position', async () => {
-    await scene.handleTool('add_node', {
+    await scene.handleTool('scene', {
       project_path: dirRef.path,
+      action: 'add_node',
       scene_path: 'res://scenes/main.tscn',
       node_type: 'Node2D',
       node_name: 'MovableNode',
     }, ctx);
 
-    const editResult = await scene.handleTool('edit_node', {
+    const editResult = await scene.handleTool('scene', {
       project_path: dirRef.path,
+      action: 'edit_node',
       scene_path: 'res://scenes/main.tscn',
       node_path: 'root/Root/MovableNode',
       properties: { position: [100, 200] },
@@ -84,8 +87,9 @@ describe('Level B: Scene Operations', () => {
 
   // --- 用例 3: query_scene_tree — 查询场景树 ---
   it('query_scene_tree — 查询 main.tscn 场景树', async () => {
-    const result = await scene.handleTool('read_scene', {
+    const result = await scene.handleTool('scene', {
       project_path: dirRef.path,
+      action: 'read_scene',
       scene_path: 'res://scenes/main.tscn',
     }, ctx);
     expect(isSuccessful(result)).toBeTruthy();
@@ -98,8 +102,9 @@ describe('Level B: Scene Operations', () => {
     const scenePath = 'res://scenes/main.tscn';
 
     // 创建
-    const addResult = await scene.handleTool('add_node', {
+    const addResult = await scene.handleTool('scene', {
       project_path: dirRef.path,
+      action: 'add_node',
       scene_path: scenePath,
       node_type: 'Node2D',
       node_name: 'CRUDNode',
@@ -107,8 +112,9 @@ describe('Level B: Scene Operations', () => {
     expect(isSuccessful(addResult)).toBeTruthy();
 
     // 编辑
-    const editResult = await scene.handleTool('edit_node', {
+    const editResult = await scene.handleTool('scene', {
       project_path: dirRef.path,
+      action: 'edit_node',
       scene_path: scenePath,
       node_path: 'root/Root/CRUDNode',
       properties: { position: [50, 75] },
@@ -116,8 +122,9 @@ describe('Level B: Scene Operations', () => {
     expect(isSuccessful(editResult)).toBeTruthy();
 
     // 删除
-    const removeResult = await scene.handleTool('remove_node', {
+    const removeResult = await scene.handleTool('scene', {
       project_path: dirRef.path,
+      action: 'remove_node',
       scene_path: scenePath,
       node_path: 'root/Root/CRUDNode',
     }, ctx);
@@ -127,16 +134,18 @@ describe('Level B: Scene Operations', () => {
   // --- 用例 5: remove_node confirmation token 流程 ---
   it('remove_node confirmation token — 无 token 时检查返回值', async () => {
     // 先添加节点
-    await scene.handleTool('add_node', {
+    await scene.handleTool('scene', {
       project_path: dirRef.path,
+      action: 'add_node',
       scene_path: 'res://scenes/main.tscn',
       node_type: 'Node2D',
       node_name: 'TokenNode',
     }, ctx);
 
     // 尝试无 confirmation_token 删除
-    const result = await scene.handleTool('remove_node', {
+    const result = await scene.handleTool('scene', {
       project_path: dirRef.path,
+      action: 'remove_node',
       scene_path: 'res://scenes/main.tscn',
       node_path: 'root/Root/TokenNode',
     }, ctx);
@@ -148,8 +157,9 @@ describe('Level B: Scene Operations', () => {
       try {
         const parsed = JSON.parse(text);
         if (parsed.confirmation_token) {
-          const confirmResult = await scene.handleTool('remove_node', {
+          const confirmResult = await scene.handleTool('scene', {
             project_path: dirRef.path,
+            action: 'remove_node',
             scene_path: 'res://scenes/main.tscn',
             node_path: 'root/Root/TokenNode',
             confirmation_token: parsed.confirmation_token,
@@ -166,8 +176,9 @@ describe('Level B: Scene Operations', () => {
 
   // --- 用例 6: nonexistent scene — 读取不存在的场景 ---
   it('nonexistent scene — read_scene 不存在的 .tscn 应返回错误', async () => {
-    const result = await scene.handleTool('read_scene', {
+    const result = await scene.handleTool('scene', {
       project_path: dirRef.path,
+      action: 'read_scene',
       scene_path: 'res://scenes/DOES_NOT_EXIST.tscn',
     }, ctx);
     const text = result.content?.[0]?.text || '';

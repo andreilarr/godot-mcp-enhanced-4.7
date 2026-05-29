@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.1] - 2026-05-27
+
+### Fixed
+
+- **#7**: Godot 4.6 editor plugin 兼容性 — `undo_manager.gd` 使用 `Callable.bindv()` 替代多参数 `add_do_method`；`scene_commands.gd` 替换已移除的 `String.is_alpha()`；`ui_commands.gd` 替换已移除的 `GROW_DIRECTION_UP/DOWN/LEFT/RIGHT`
+- `nav_commands.gd` 修复遗漏的 `bake_navigation_mesh()` 返回值捕获
+- `navigation.ts` 生成的 GDScript 中 `bake_navigation_mesh()` 返回值捕获 — 去掉 void 返回值捕获，改用 `navigation_mesh != null` 检查
+- `ui_commands.gd` match 语句添加 `_` 默认分支返回错误
+- `undo_manager.gd` 添加 null target 防御
+- `validation.ts` 嵌套 spawn 补上 `buildSafeEnv()`
+- `screenshot.ts` 和 `project.ts` 替换 `as string` 为类型守卫/requireString
+
 ## [0.15.0] - 2026-05-27
 
 ### Security

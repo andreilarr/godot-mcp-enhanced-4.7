@@ -421,51 +421,48 @@ export function getAllTemplates(projectPath?: string): CodeTemplate[] {
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'list_templates',
-      description: '列出可用的代码模板（内置 + 用户自定义）。支持按标签或适用类过滤。',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory (for loading user templates)' },
-          tag: { type: 'string', description: 'Filter by tag keyword' },
-          applies_to: { type: 'string', description: 'Filter by applicable class name' },
-        },
-      },
-    },
-    {
-      name: 'apply_template',
-      description: '将代码模板应用到指定脚本路径，支持变量替换。',
+      name: 'templates',
+      description: '代码模板操作。list: 列出可用模板（内置 + 用户自定义），支持按标签或适用类过滤。apply: 将模板应用到指定脚本路径，支持变量替换。',
       inputSchema: {
         type: 'object' as const,
         properties: {
           project_path: { type: 'string', description: 'Path to Godot project directory' },
-          template_id: { type: 'string', description: 'Template ID to apply (e.g. T008, user-custom)' },
-          script_path: { type: 'string', description: 'Target script path relative to project (e.g. res://scripts/player.gd)' },
+          action: {
+            type: 'string',
+            enum: ['list', 'apply'],
+            description: '操作类型',
+          },
+          tag: { type: 'string', description: 'list: Filter by tag keyword' },
+          applies_to: { type: 'string', description: 'list: Filter by applicable class name' },
+          template_id: { type: 'string', description: 'apply: Template ID to apply (e.g. T008, user-custom)' },
+          script_path: { type: 'string', description: 'apply: Target script path relative to project (e.g. res://scripts/player.gd)' },
           variables: {
             type: 'object',
-            description: 'Template variable overrides (key-value pairs)',
+            description: 'apply: Template variable overrides (key-value pairs)',
             additionalProperties: { type: 'string' },
           },
         },
-        required: ['project_path', 'template_id', 'script_path'],
+        required: ['project_path', 'action'],
       },
     },
   ];
 }
 
-export const TOOL_META = {
-  list_templates: { readonly: true, long_running: false },
-  apply_template: { readonly: false, long_running: false },
+export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
+  templates: { readonly: true, long_running: false },
 };
 
 export async function handleTool(
   name: string, args: Record<string, unknown>, _ctx: unknown
 ): Promise<ToolResult | null> {
-  if (name !== 'list_templates' && name !== 'apply_template') return null;
+  if (name !== 'templates') return null;
+
+  const action = args.action as string;
+  if (!action) return errorResult('action is required');
 
   const projectPath = typeof args.project_path === 'string' && args.project_path ? validateProjectRoot(args.project_path) : undefined;
 
-  if (name === 'list_templates') {
+  if (action === 'list') {
     const templates = getAllTemplates(projectPath);
     const tag = args.tag as string | undefined;
     const appliesTo = args.applies_to as string | undefined;
@@ -487,7 +484,7 @@ export async function handleTool(
     return okResult(`Available templates (${filtered.length}):\n${lines.join('\n')}`);
   }
 
-  if (name === 'apply_template') {
+  if (action === 'apply') {
     const templateId = args.template_id as string;
     const scriptPath = args.script_path as string;
     if (!templateId) return errorResult('template_id is required');

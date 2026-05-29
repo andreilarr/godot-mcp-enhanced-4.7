@@ -8,29 +8,36 @@ export class EditorToolExecutor {
   private static readonly MAX_BUFFER_SIZE = 10000;
   private readonly conn: EditorConnection;
 
+  /** Bound handlers stored so we can remove them on destroy. */
+  private readonly _disconnectHandler = (): void => {
+    this.syncActive = false;
+    this.treeChangeBuffer = [];
+  };
+  private readonly _reconnectHandler = (): void => {
+    if (this.syncActive) {
+      this.conn.onNotification('scene_tree_changed', this.handleTreeChange);
+    }
+  };
+
   constructor(conn: EditorConnection) {
     this.conn = conn;
-    this.conn.onDisconnect = () => {
-      this.syncActive = false;
-      this.treeChangeBuffer = [];
-    };
-    this.conn.onReconnect = () => {
-      if (this.syncActive) {
-        this.conn.onNotification('scene_tree_changed', this.handleTreeChange);
-      }
-    };
+    this.conn.addOnDisconnectHandler(this._disconnectHandler);
+    this.conn.addOnReconnectHandler(this._reconnectHandler);
+  }
+
+  /** Remove all handlers from the connection. Call when discarding this executor. */
+  destroy(): void {
+    this.conn.removeOnDisconnectHandler(this._disconnectHandler);
+    this.conn.removeOnReconnectHandler(this._reconnectHandler);
   }
 
   async execute(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
     try {
-      if (toolName === 'editor_sync_start') {
-        return this.handleSyncStart(args);
-      }
-      if (toolName === 'editor_sync_stop') {
-        return this.handleSyncStop(args);
-      }
-      if (toolName === 'editor_get_scene_tree') {
-        return this.handleGetSceneTree(args);
+      if (toolName === 'editor') {
+        const action = args.action as string;
+        if (action === 'sync_start') return this.handleSyncStart(args);
+        if (action === 'sync_stop') return this.handleSyncStop(args);
+        if (action === 'get_scene_tree') return this.handleGetSceneTree(args);
       }
 
       // Default: forward to plugin

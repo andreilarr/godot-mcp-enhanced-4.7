@@ -213,8 +213,9 @@ describe('test-framework stress test GDScript generation', () => {
 
   async function captureStressScript(args) {
     const mockCtx = { findGodot: vi.fn(async () => '/usr/bin/godot') };
-    await handleTool('test_stress', {
+    await handleTool('test', {
       project_path: '/tmp/test-project',
+      action: 'stress',
       ...args,
     }, mockCtx);
     expect(_capturedScripts.length).toBeGreaterThanOrEqual(1);

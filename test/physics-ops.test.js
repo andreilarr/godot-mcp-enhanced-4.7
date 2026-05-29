@@ -1,46 +1,46 @@
 import { expect } from 'vitest';
 import {
-  TOOL_NAMES,
   getToolDefinitions,
+  TOOL_META,
   genRaycastScript,
   genBodyInfoScript,
   genDiagnosePhysicsScript,
   genQuerySpatialScript,
+  genCollisionOverlayScript,
 } from '../src/tools/physics-ops.js';
-
-// ─── TOOL_NAMES ─────────────────────────────────────────────────────────────
-
-describe('physics-ops TOOL_NAMES', () => {
-  it('contains exactly 4 tool names', () => {
-    expect(TOOL_NAMES.length).toBe(4);
-  });
-  it('includes physics_raycast', () => {
-    expect(TOOL_NAMES.includes('physics_raycast')).toBeTruthy();
-  });
-  it('includes physics_body_info', () => {
-    expect(TOOL_NAMES.includes('physics_body_info')).toBeTruthy();
-  });
-  it('includes diagnose_physics', () => {
-    expect(TOOL_NAMES.includes('diagnose_physics')).toBeTruthy();
-  });
-  it('includes query_spatial', () => {
-    expect(TOOL_NAMES.includes('query_spatial')).toBeTruthy();
-  });
-});
 
 // ─── getToolDefinitions ─────────────────────────────────────────────────────
 
 describe('physics-ops getToolDefinitions', () => {
-  it('returns 4 tool definitions', () => {
+  it('returns 1 merged tool definition', () => {
     const defs = getToolDefinitions();
-    expect(defs.length).toBe(4);
+    expect(defs.length).toBe(1);
   });
-  it('each definition has a name from TOOL_NAMES', () => {
+  it('tool is named "physics"', () => {
     const defs = getToolDefinitions();
-    const names = defs.map(d => d.name);
-    for (const tn of TOOL_NAMES) {
-      expect(names.includes(tn)).toBeTruthy();
-    }
+    expect(defs[0].name).toBe('physics');
+  });
+  it('action enum contains all 5 actions', () => {
+    const defs = getToolDefinitions();
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    expect(actionEnum).toContain('raycast');
+    expect(actionEnum).toContain('body_info');
+    expect(actionEnum).toContain('diagnose');
+    expect(actionEnum).toContain('query_spatial');
+    expect(actionEnum).toContain('collision_overlay');
+  });
+});
+
+// ─── TOOL_META ──────────────────────────────────────────────────────────────
+
+describe('physics-ops TOOL_META', () => {
+  it('has exactly 1 entry for "physics"', () => {
+    expect(Object.keys(TOOL_META).length).toBe(1);
+    expect(TOOL_META.physics).toBeDefined();
+  });
+  it('physics is readonly and non-long-running', () => {
+    expect(TOOL_META.physics.readonly).toBe(true);
+    expect(TOOL_META.physics.long_running).toBe(false);
   });
 });
 
@@ -109,5 +109,25 @@ describe('genQuerySpatialScript', () => {
   it('includes collision_mask when provided', () => {
     const script = genQuerySpatialScript({x:0,y:0,z:0}, 10, 0xFF);
     expect(script.includes('collision_mask')).toBeTruthy();
+  });
+});
+
+// ─── genCollisionOverlayScript ──────────────────────────────────────────────
+
+describe('genCollisionOverlayScript', () => {
+  it('generates overlay script', () => {
+    const script = genCollisionOverlayScript('/root/Level');
+    expect(script.includes('CollisionShape3D')).toBeTruthy();
+    expect(script.includes('_MCP_CollisionOverlay')).toBeTruthy();
+    expect(script.includes('StandardMaterial3D')).toBeTruthy();
+  });
+  it('includes color override when provided', () => {
+    const script = genCollisionOverlayScript('/root/Level', '1,0,0,0.5');
+    expect(script.includes('Color(1,0,0,0.5)')).toBeTruthy();
+  });
+  it('uses auto-detection when no color override', () => {
+    const script = genCollisionOverlayScript('/root/Level');
+    expect(script.includes('StaticBody3D')).toBeTruthy();
+    expect(script.includes('CharacterBody3D')).toBeTruthy();
   });
 });

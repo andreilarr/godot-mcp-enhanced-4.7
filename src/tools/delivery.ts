@@ -5,7 +5,7 @@ import { textResult } from '../types.js';
 import { validatePath, resolveWithinRoot } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { batchValidateScripts } from './validation.js';
-import { SCENE_TREE_HEADER, wrapAssertionCode } from './shared.js';
+import { SCENE_TREE_HEADER, wrapAssertionCode, opsErrorResult } from './shared.js';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
@@ -194,15 +194,15 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
   if (name !== 'verify_delivery') return null;
 
   if (typeof args.project_path !== 'string') {
-    return textResult(JSON.stringify({ passed: false, error: 'project_path must be a string' }));
+    return opsErrorResult('INVALID_PARAMS', 'project_path must be a string');
   }
   if (typeof args.scope !== 'string' || !['scene', 'script', 'full'].includes(args.scope)) {
-    return textResult(JSON.stringify({ passed: false, error: 'scope must be one of: scene, script, full' }));
+    return opsErrorResult('INVALID_PARAMS', 'scope must be one of: scene, script, full');
   }
 
   const projectPath = validatePath(args.project_path);
   if (!existsSync(join(projectPath, 'project.godot'))) {
-    return textResult(JSON.stringify({ passed: false, error: `Not a valid Godot project (missing project.godot): ${projectPath}` }));
+    return opsErrorResult('INVALID_PARAMS', `Not a valid Godot project (missing project.godot): ${projectPath}`);
   }
   // Invalidate scene cache for fresh verification
   resetSceneCache();
@@ -216,14 +216,14 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     try {
       resolvedScenePath = resolveWithinRoot(projectPath, args.scene_path);
     } catch {
-      return textResult(JSON.stringify({ passed: false, error: `scene_path traversal detected: ${args.scene_path}` }));
+      return opsErrorResult('INVALID_PARAMS', `scene_path traversal detected: ${args.scene_path}`);
     }
   }
   if (typeof args.script_path === 'string' && args.script_path) {
     try {
       resolvedScriptPath = resolveWithinRoot(projectPath, args.script_path);
     } catch {
-      return textResult(JSON.stringify({ passed: false, error: `script_path traversal detected: ${args.script_path}` }));
+      return opsErrorResult('INVALID_PARAMS', `script_path traversal detected: ${args.script_path}`);
     }
   }
 

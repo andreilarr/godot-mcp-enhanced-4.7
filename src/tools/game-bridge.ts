@@ -6,6 +6,7 @@ import { execFileSync } from 'child_process';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
+import { opsErrorResult } from './shared.js';
 import { requireProjectPath } from '../helpers.js';
 
 const BRIDGE_PORT = 9081;
@@ -274,110 +275,7 @@ export function sendToBridge(method: string, params: Record<string, unknown> = {
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
-export function getToolDefinitions(): Tool[] {
-  return [
-    {
-      name: 'game_bridge_install',
-      description: 'Install the MCP Bridge autoload into a Godot project. Copies the bridge script and registers it in project.godot.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          port: { type: 'number', description: 'Port for bridge to listen on (currently ignored, always 9081)', default: 9081 },
-        },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'game_bridge_uninstall',
-      description: 'Remove the MCP Bridge autoload from a Godot project.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-        },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'game_query',
-      description: 'Query the running game state via MCP Bridge. Supports: ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info, take_screenshot.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          method: {
-            type: 'string',
-            description: 'Query method: ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info, take_screenshot',
-          },
-          params: { type: 'object', description: 'Method parameters (varies by method)' },
-          timeout: { type: 'number', description: 'Timeout in ms (default: 10000)' },
-        },
-        required: ['method'],
-      },
-    },
-    {
-      name: 'game_write',
-      description: 'Modify the running game state via MCP Bridge. Supports: set_node_property, call_method.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          method: {
-            type: 'string',
-            description: 'Write method: set_node_property, call_method',
-          },
-          params: {
-            type: 'object',
-            description: 'Method parameters. set_node_property: {path, property, value}. call_method: {path, method, args}.',
-          },
-          timeout: { type: 'number', description: 'Timeout in ms (default: 10000)' },
-        },
-        required: ['method', 'params'],
-      },
-    },
-    {
-      name: 'game_input',
-      description: 'Send input events to the running game via MCP Bridge. Supports: send_key, send_mouse_click, send_mouse_move, send_text.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          method: {
-            type: 'string',
-            description: 'Input method: send_key, send_mouse_click, send_mouse_move, send_text',
-          },
-          params: {
-            type: 'object',
-            description: 'Input parameters. send_key: {key, pressed}. send_mouse_click: {x, y, button, pressed}. send_mouse_move: {x, y}. send_text: {text}.',
-          },
-          timeout: { type: 'number', description: 'Timeout in ms (default: 10000)' },
-        },
-        required: ['method', 'params'],
-      },
-    },
-    {
-      name: 'game_wait',
-      description: 'Check a condition in the running game via MCP Bridge. Supports: wait_for_node, wait_for_property.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          method: {
-            type: 'string',
-            description: 'Wait method: wait_for_node, wait_for_property',
-          },
-          params: {
-            type: 'object',
-            description: 'Wait parameters. wait_for_node: {path}. wait_for_property: {path, property, value}.',
-          },
-          timeout: { type: 'number', description: 'Timeout in ms (default: 10000)' },
-        },
-        required: ['method', 'params'],
-      },
-    },
-  ];
-}
-
-// ─── Tool handler ───────────────────────────────────────────────────────────
-
-const TOOL_NAMES = [
+const ACTIONS = [
   'game_bridge_install',
   'game_bridge_uninstall',
   'game_query',
@@ -385,6 +283,39 @@ const TOOL_NAMES = [
   'game_input',
   'game_wait',
 ] as const;
+
+export function getToolDefinitions(): Tool[] {
+  return [
+    {
+      name: 'game',
+      description: '游戏桥接操作。安装/卸载: game_bridge_install, game_bridge_uninstall。查询: game_query (ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info, take_screenshot)。写入: game_write (set_node_property, call_method)。输入: game_input (send_key, send_mouse_click, send_mouse_move, send_text)。等待: game_wait (wait_for_node, wait_for_property)。',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          action: {
+            type: 'string',
+            enum: [...ACTIONS],
+            description: '操作类型',
+          },
+          port: { type: 'number', description: 'game_bridge_install: 桥接监听端口（当前忽略，始终 9081）', default: 9081 },
+          method: {
+            type: 'string',
+            description: 'game_query/game_write/game_input/game_wait 的具体方法。game_query: ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info, take_screenshot。game_write: set_node_property, call_method。game_input: send_key, send_mouse_click, send_mouse_move, send_text。game_wait: wait_for_node, wait_for_property',
+          },
+          params: {
+            type: 'object',
+            description: '方法参数。game_query: 因方法而异。game_write: set_node_property {path, property, value}, call_method {path, method, args}。game_input: send_key {key, pressed}, send_mouse_click {x, y, button, pressed}, send_mouse_move {x, y}, send_text {text}。game_wait: wait_for_node {path}, wait_for_property {path, property, value}',
+          },
+          timeout: { type: 'number', description: 'game_query/game_write/game_input/game_wait: 超时时间（毫秒，默认 10000）' },
+        },
+        required: ['project_path', 'action'],
+      },
+    },
+  ];
+}
+
+// ─── Tool handler ───────────────────────────────────────────────────────────
 
 const QUERY_METHODS = new Set([
   'ping', 'get_tree', 'find_nodes', 'get_node_properties',
@@ -410,10 +341,13 @@ const WAIT_METHODS = new Set([
 ]);
 
 export async function handleTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'game') return null;
+
+  const action = args.action as string;
+  if (!action) return opsErrorResult('INVALID_PARAMS', 'action is required');
 
   try {
-    switch (name) {
+    switch (action) {
       case 'game_bridge_install': {
         const projectPath = requireProjectPath(args);
         const port = (args.port as number) || 9081;
@@ -465,7 +399,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           return textResult(`Error: project.godot not found at ${configPath}`);
         }
 
-        let config = readFileSync(configPath, 'utf-8');
+        const config = readFileSync(configPath, 'utf-8');
         if (!config.includes(AUTOLOAD_KEY)) {
           return textResult('MCP Bridge autoload not found in project.godot.');
         }
@@ -497,7 +431,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           game_input: INPUT_METHODS,
           game_wait: WAIT_METHODS,
         };
-        const allowed = methodSets[name];
+        const allowed = methodSets[action];
         const method = args.method as string;
         if (!allowed.has(method)) {
           return textResult(`Error: Unknown method "${method}". Supported: ${[...allowed].join(', ')}`);
@@ -526,17 +460,12 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
   } catch (err) {
     const msg = (err as Error).message;
     if (msg.includes('ECONNREFUSED')) {
-      return textResult('Error: Cannot connect to MCP Bridge. Is the game running with the bridge autoload installed?');
+      return opsErrorResult('BRIDGE_NOT_CONNECTED', 'Cannot connect to MCP Bridge. Is the game running with the bridge autoload installed?');
     }
     return textResult(`Error: ${msg}`);
   }
 }
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  game_bridge_install: { readonly: false, long_running: false },
-  game_bridge_uninstall: { readonly: false, long_running: false },
-  game_query: { readonly: true, long_running: false },
-  game_write: { readonly: false, long_running: false },
-  game_input: { readonly: false, long_running: false },
-  game_wait: { readonly: true, long_running: false },
+  game: { readonly: false, long_running: false },
 };

@@ -43,49 +43,40 @@ function makeCtx(overrides = {}) {
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('screenshot-tools: getToolDefinitions', () => {
-  it('returns non-empty array', () => {
+  it('returns 1 merged tool definition (screenshot)', () => {
     const defs = getToolDefinitions();
     expect(Array.isArray(defs)).toBe(true);
-    expect(defs.length).toBeGreaterThan(0);
+    expect(defs.length).toBe(1);
+    expect(defs[0].name).toBe('screenshot');
   });
 
-  it('includes capture_screenshot tool', () => {
+  it('action enum includes capture and analyze', () => {
     const defs = getToolDefinitions();
-    const names = defs.map(d => d.name);
-    expect(names).toContain('capture_screenshot');
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    expect(actionEnum).toContain('capture');
+    expect(actionEnum).toContain('analyze');
   });
 
-  it('includes analyze_screenshot tool', () => {
+  it('tool has inputSchema with properties', () => {
     const defs = getToolDefinitions();
-    const names = defs.map(d => d.name);
-    expect(names).toContain('analyze_screenshot');
-  });
-
-  it('tools have inputSchema with properties', () => {
-    const defs = getToolDefinitions();
-    for (const def of defs) {
-      expect(def.inputSchema).toBeDefined();
-      expect(def.inputSchema.type).toBe('object');
-      expect(def.inputSchema.properties).toBeDefined();
-    }
+    const d = defs[0];
+    expect(d.inputSchema).toBeDefined();
+    expect(d.inputSchema.type).toBe('object');
+    expect(d.inputSchema.properties).toBeDefined();
+    expect(d.inputSchema.properties.action).toBeDefined();
   });
 });
 
 describe('screenshot-tools: TOOL_META', () => {
-  it('has entries', () => {
+  it('has screenshot entry', () => {
     expect(Object.keys(TOOL_META).length).toBeGreaterThan(0);
+    expect(TOOL_META.screenshot).toBeDefined();
   });
 
-  it('capture_screenshot is not readonly and is long_running', () => {
-    expect(TOOL_META.capture_screenshot).toBeDefined();
-    expect(TOOL_META.capture_screenshot.readonly).toBe(false);
-    expect(TOOL_META.capture_screenshot.long_running).toBe(true);
-  });
-
-  it('analyze_screenshot is readonly and not long_running', () => {
-    expect(TOOL_META.analyze_screenshot).toBeDefined();
-    expect(TOOL_META.analyze_screenshot.readonly).toBe(true);
-    expect(TOOL_META.analyze_screenshot.long_running).toBe(false);
+  it('screenshot tool is readonly', () => {
+    expect(TOOL_META.screenshot).toBeDefined();
+    expect(TOOL_META.screenshot.readonly).toBe(true);
+    expect(TOOL_META.screenshot.long_running).toBe(false);
   });
 });
 
@@ -100,10 +91,11 @@ describe('screenshot-tools: handleTool', () => {
     expect(result).toBeNull();
   });
 
-  it('handleTool for capture_screenshot returns text result on success', async () => {
+  it('handleTool for screenshot action=capture returns text result on success', async () => {
     const ctx = makeCtx();
-    const result = await handleTool('capture_screenshot', {
+    const result = await handleTool('screenshot', {
       project_path: '/tmp/test-project',
+      action: 'capture',
     }, ctx);
 
     expect(result).not.toBeNull();
@@ -115,9 +107,11 @@ describe('screenshot-tools: handleTool', () => {
     expect(textContent.text).toContain('Screenshot saved');
   });
 
-  it('handleTool for analyze_screenshot without image returns error text', async () => {
+  it('handleTool for screenshot action=analyze without image returns error text', async () => {
     const ctx = makeCtx();
-    const result = await handleTool('analyze_screenshot', {}, ctx);
+    const result = await handleTool('screenshot', {
+      action: 'analyze',
+    }, ctx);
 
     expect(result).not.toBeNull();
     expect(result.content).toBeDefined();

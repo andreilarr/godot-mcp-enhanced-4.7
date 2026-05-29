@@ -6,27 +6,34 @@ import { getToolDefinitions } from '../src/tools/script.js';
 describe('script-tools getToolDefinitions', () => {
   const defs = getToolDefinitions();
 
-  it('returns 7 tool definitions', () => {
-    expect(defs.length).toBe(7);
+  it('returns 1 merged tool definition (script)', () => {
+    expect(defs.length).toBe(1);
+    expect(defs[0].name).toBe('script');
   });
 
-  const expected = [
-    'read_script', 'write_script', 'edit_script',
-    'generate_test', 'create_test_scene',
-    'execute_gdscript', 'project_replace',
-  ];
-  for (const name of expected) {
-    it(`includes ${name}`, () => {
-      expect(defs.some(d => d.name === name)).toBeTruthy();
-    });
-  }
-
-  it('every tool has description and inputSchema', () => {
-    for (const d of defs) {
-      expect(d.description).toBeTruthy();
-      expect(d.inputSchema).toBeTruthy();
-      expect(d.inputSchema.type).toBe('object');
+  it('action enum includes all 7 operations', () => {
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    const expected = [
+      'read_script', 'write_script', 'edit_script',
+      'generate_test', 'create_test_scene',
+      'execute_gdscript', 'project_replace',
+    ];
+    for (const op of expected) {
+      expect(actionEnum).toContain(op);
     }
+  });
+
+  it('tool has description and inputSchema', () => {
+    const d = defs[0];
+    expect(d.description).toBeTruthy();
+    expect(d.inputSchema).toBeTruthy();
+    expect(d.inputSchema.type).toBe('object');
+  });
+
+  it('tool has project_path and action as required', () => {
+    const d = defs[0];
+    expect(d.inputSchema.required).toContain('project_path');
+    expect(d.inputSchema.required).toContain('action');
   });
 });
 
@@ -34,10 +41,10 @@ describe('script-tools getToolDefinitions', () => {
 
 describe('script-tools edit_script schema', () => {
   const defs = getToolDefinitions();
-  const editDef = defs.find(d => d.name === 'edit_script');
+  const props = defs[0].inputSchema.properties;
 
   it('has search_and_replace optional property', () => {
-    const sr = editDef.inputSchema.properties.search_and_replace;
+    const sr = props.search_and_replace;
     expect(sr).toBeTruthy();
     expect(sr.type).toBe('object');
     expect(sr.properties.search).toBeTruthy();
@@ -45,13 +52,13 @@ describe('script-tools edit_script schema', () => {
   });
 
   it('has auto_validate with default true', () => {
-    const av = editDef.inputSchema.properties.auto_validate;
+    const av = props.auto_validate;
     expect(av).toBeTruthy();
     expect(av.default).toBe(true);
   });
 
   it('has indent_mode with raw and smart options', () => {
-    const im = editDef.inputSchema.properties.indent_mode;
+    const im = props.indent_mode;
     expect(im).toBeTruthy();
     expect(im.enum.includes('raw')).toBeTruthy();
     expect(im.enum.includes('smart')).toBeTruthy();
@@ -81,16 +88,16 @@ describe('script-tools lint integration', () => {
 
 describe('script-tools project_replace schema', () => {
   const defs = getToolDefinitions();
-  const prDef = defs.find(d => d.name === 'project_replace');
+  const props = defs[0].inputSchema.properties;
 
   it('has dry_run with default false', () => {
-    const dr = prDef.inputSchema.properties.dry_run;
+    const dr = props.dry_run;
     expect(dr).toBeTruthy();
     expect(dr.default).toBe(false);
   });
 
   it('has extensions with default .gd', () => {
-    const ext = prDef.inputSchema.properties.extensions;
+    const ext = props.extensions;
     expect(ext).toBeTruthy();
     expect(ext.default).toEqual(['.gd']);
   });

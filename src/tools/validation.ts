@@ -8,6 +8,7 @@ import { promisify } from 'util';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
+import { opsErrorResult, scanFiles } from './shared.js';
 import { requireProjectPath, resolveWithinRoot, parseMcpScriptOutput, normalizeUserProjectPath, checkVersionMismatch, buildSafeEnv } from '../helpers.js';
 import { analyzeOutput, type AnalysisResult } from '../error-analyzer.js';
 import { forceKillTree } from '../core/process-state.js';
@@ -89,7 +90,7 @@ interface ExtendedAnalysisResult extends AnalysisResult {
 
 const execFileAsync = promisify(execFile);
 
-const TOOL_NAMES = [
+const ACTIONS = [
   'run_and_verify',
   'analyze_error',
   'validate_project',
@@ -140,24 +141,7 @@ export function isErrorFalsePositive(line: string): boolean {
 // ─── Script file collection ────────────────────────────────────────────────
 
 function collectFilesByExt(projectPath: string, extensions: string[], excludeDirs: string[] = ['.godot', '.import', 'addons', 'tools']): string[] {
-  const results: string[] = [];
-  function scan(dir: string, depth: number): void {
-    if (depth > 15) return;
-    try {
-      for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        if (entry.name.startsWith('.')) continue;
-        if (excludeDirs.includes(entry.name)) continue;
-        const full = join(dir, entry.name);
-        if (entry.isDirectory()) {
-          scan(full, depth + 1);
-        } else if (extensions.some(ext => entry.name.endsWith(ext))) {
-          results.push(full);
-        }
-      }
-    } catch (err) { console.debug('[validation] scan script files:', err); }
-  }
-  scan(projectPath, 0);
-  return results;
+  return scanFiles(projectPath, extensions, { skipDirs: excludeDirs });
 }
 
 // ─── Batch script validation ────────────────────────────────────────────────
@@ -419,90 +403,45 @@ function validateShaderFile(filePath: string, relPath: string): { errors: string
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'run_and_verify',
-      description: 'One-click run a Godot project in headless mode and return structured analysis (errors, warnings, suggestions). Automatically stops after timeout. '
-        + 'Optionally captures a scene tree snapshot for runtime inspection.',
+      name: 'validation',
+      description: '运行验证、分析错误、验证项目/脚本、导入资源。一键 headless 运行 + 错误分析，或按需单项检查。',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene: { type: 'string', description: 'Optional scene file to run (e.g. res://scenes/main.tscn)' },
-          timeout: { type: 'number', description: 'Auto-stop after N seconds (default: 20)', default: 20 },
-          capture_tree: { type: 'boolean', description: 'Also capture a scene tree snapshot (default: false)', default: false },
-        },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'analyze_error',
-      description: 'Analyze existing Godot error output text and return structured analysis with fix suggestions. Use this to re-analyze previous output.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          output: { type: 'string', description: 'The Godot runtime output to analyze (full text)' },
-        },
-        required: ['output'],
-      },
-    },
-    {
-      name: 'validate_project',
-      description: 'Validate a Godot project for common issues: missing resource references, broken script paths, '
-        + 'invalid scene files, and orphaned .import files. Returns a structured report of all issues found.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          check_resources: { type: 'boolean', description: 'Check for missing resource files (default: true)', default: true },
-          check_scripts: { type: 'boolean', description: 'Check for broken script references (default: true)', default: true },
-          check_scenes: { type: 'boolean', description: 'Validate scene file structure (default: true)', default: true },
+          action: {
+            type: 'string',
+            enum: ['run_and_verify', 'analyze_error', 'validate_project', 'validate_scripts', 'import_resources'],
+            description: '操作类型',
+          },
+          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          scene: { type: 'string', description: '可选场景文件路径（run_and_verify）' },
+          timeout: { type: 'number', description: '超时秒数（默认 20）', default: 20 },
+          capture_tree: { type: 'boolean', description: '同时捕获场景树快照（默认 false）', default: false },
+          output: { type: 'string', description: 'Godot 运行时输出全文（analyze_error）' },
+          check_resources: { type: 'boolean', description: '检查缺失资源文件（默认 true）', default: true },
+          check_scripts: { type: 'boolean', description: '检查断裂脚本引用（默认 true）', default: true },
+          check_scenes: { type: 'boolean', description: '验证场景文件结构（默认 true）', default: true },
           exclude_paths: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Directory paths (relative to project root) to exclude from validation. '
-              + 'Default excludes: .godot, .import, tools, addons. Directories containing .gdignore are always skipped.',
+            description: '排除的目录路径（相对项目根）。默认排除：.godot, .import, tools, addons',
             default: ['.godot', '.import', 'tools', 'addons'],
           },
-        },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'validate_scripts',
-      description: 'Validate GDScript files by running each through the Godot parser. '
-        + 'Detects parse errors, indentation issues, and type mismatches that headless run may miss. '
-        + 'Returns per-file error details with fix suggestions.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
           scripts: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Optional array of script paths (relative to project) to validate. If omitted, scans all .gd files.',
+            description: '要验证的脚本路径数组（相对项目）。省略则扫描全部 .gd 文件',
           },
-          timeout: { type: 'number', description: 'Timeout per script in seconds (default: 10)', default: 10 },
-        },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'import_resources',
-      description: 'Scan a directory for assets and register them with the Godot project. Generates .import stubs '
-        + 'so Godot recognizes the files. Supports images, audio, fonts, and other common asset types.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          directory: { type: 'string', description: 'Directory to scan (relative to project, e.g. "assets/ui")' },
+          directory: { type: 'string', description: '扫描目录（相对项目，如 "assets/ui"）' },
           extensions: {
             type: 'array',
             items: { type: 'string' },
-            description: 'File extensions to import (default: common image/audio/font types)',
+            description: '导入文件扩展名（默认常见图片/音频/字体类型）',
             default: ['.png', '.jpg', '.jpeg', '.webp', '.svg', '.mp3', '.ogg', '.wav', '.ttf', '.otf', '.glb', '.gltf'],
           },
-          recursive: { type: 'boolean', description: 'Scan subdirectories recursively (default: true)', default: true },
+          recursive: { type: 'boolean', description: '递归扫描子目录（默认 true）', default: true },
         },
-        required: ['project_path', 'directory'],
+        required: ['action'],
       },
     },
   ];
@@ -511,9 +450,11 @@ export function getToolDefinitions(): Tool[] {
 // ─── Tool handler ───────────────────────────────────────────────────────────
 
 export async function handleTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'validation') return null;
+  const action = args.action as string;
+  if (!(ACTIONS as readonly string[]).includes(action)) return null;
 
-  switch (name) {
+  switch (action) {
     case 'run_and_verify': {
       const projectPath = requireProjectPath(args);
       const timeout = (args.timeout as number) || 20;
@@ -588,7 +529,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     case 'analyze_error': {
       const outputText = args.output as string;
       if (!outputText || !outputText.trim()) {
-        return textResult('Error: "output" parameter is required and must not be empty.');
+        return opsErrorResult('INVALID_PARAMS', '"output" parameter is required and must not be empty.');
       }
       const lines = outputText.split('\n');
       const analysis = analyzeOutput(lines);
@@ -841,7 +782,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const normalizedDir = normalizeUserProjectPath(directoryRaw);
 
       if (!normalizedDir) {
-        return textResult('Error: directory must be a non-empty path inside project.');
+        return opsErrorResult('INVALID_PARAMS', 'directory must be a non-empty path inside project.');
       }
 
       const defaultExts = ['.png', '.jpg', '.jpeg', '.webp', '.svg', '.mp3', '.ogg', '.wav', '.ttf', '.otf', '.glb', '.gltf'];
@@ -850,7 +791,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       const targetDir = resolveWithinRoot(p, normalizedDir);
       if (!existsSync(targetDir)) {
-        return textResult(`Error: Directory not found: ${targetDir}`);
+        return opsErrorResult('NOT_FOUND', `Directory not found: ${targetDir}`);
       }
 
       const importedFiles: string[] = [];
@@ -937,9 +878,5 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 }
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  run_and_verify: { readonly: true, long_running: true },
-  analyze_error: { readonly: true, long_running: false },
-  validate_project: { readonly: true, long_running: false },
-  validate_scripts: { readonly: true, long_running: false },
-  import_resources: { readonly: false, long_running: false },
+  validation: { readonly: false, long_running: true },
 };

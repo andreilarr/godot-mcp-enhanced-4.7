@@ -3,6 +3,7 @@ import { existsSync, writeFileSync, readFileSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
+import { opsErrorResult } from './shared.js';
 import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath, ensureDir, buildSafeEnv } from '../helpers.js';
 import { analyzeOutput } from '../error-analyzer.js';
 import { batchValidateScripts } from './validation.js';
@@ -15,15 +16,20 @@ import { parseTscn } from '../tscn-parser.js';
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'batch_create_files',
-      description: 'Batch create multiple files. Supports auto-validation of .gd files after creation.',
+      name: 'batch',
+      description: '批量操作。create_files: 批量创建文件（支持自动验证 .gd）。run_verify: 批量运行 headless 验证场景。diff_scenes: 比较两个场景文件差异。',
       inputSchema: {
         type: 'object' as const,
         properties: {
           project_path: { type: 'string', description: 'Path to Godot project directory' },
+          action: {
+            type: 'string',
+            enum: [...ACTIONS],
+            description: '操作类型',
+          },
           files: {
             type: 'array',
-            description: 'Array of files to create',
+            description: 'create_files: Array of files to create',
             items: {
               type: 'object',
               properties: {
@@ -34,46 +40,24 @@ export function getToolDefinitions(): Tool[] {
               required: ['path', 'content'],
             },
           },
-          validate: { type: 'boolean', description: 'Validate .gd files after creation (default: true)', default: true },
-        },
-        required: ['project_path', 'files'],
-      },
-    },
-    {
-      name: 'batch_run_verify',
-      description: 'Run headless verification on multiple scenes, returning a summary report.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
+          validate: { type: 'boolean', description: 'create_files: Validate .gd files after creation (default: true)', default: true },
           scenes: {
             type: 'array',
-            description: 'Array of scene paths relative to project',
+            description: 'run_verify: Array of scene paths relative to project',
             items: { type: 'string' },
           },
-          timeout: { type: 'number', description: 'Timeout per scene in seconds (default: 10)', default: 10 },
-          capture_tree: { type: 'boolean', description: 'Capture scene tree snapshot (default: false)', default: false },
-        },
-        required: ['project_path', 'scenes'],
-      },
-    },
-    {
-      name: 'diff_scenes',
-      description: 'Compare two scene files and report node tree differences.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_a: { type: 'string', description: 'First scene path relative to project' },
-          scene_b: { type: 'string', description: 'Second scene path relative to project' },
+          timeout: { type: 'number', description: 'run_verify: Timeout per scene in seconds (default: 10)', default: 10 },
+          capture_tree: { type: 'boolean', description: 'run_verify: Capture scene tree snapshot (default: false)', default: false },
+          scene_a: { type: 'string', description: 'diff_scenes: First scene path relative to project' },
+          scene_b: { type: 'string', description: 'diff_scenes: Second scene path relative to project' },
           ignore_properties: {
             type: 'array',
-            description: 'Property names to ignore in diff (default: metadata/_edit_lock)',
+            description: 'diff_scenes: Property names to ignore in diff (default: metadata/_edit_lock)',
             items: { type: 'string' },
             default: ['metadata/_edit_lock'],
           },
         },
-        required: ['project_path', 'scene_a', 'scene_b'],
+        required: ['project_path', 'action'],
       },
     },
   ];
@@ -81,19 +65,22 @@ export function getToolDefinitions(): Tool[] {
 
 // ─── Tool handler ───────────────────────────────────────────────────────────
 
-const TOOL_NAMES = ['batch_create_files', 'batch_run_verify', 'diff_scenes'] as const;
+const ACTIONS = ['create_files', 'run_verify', 'diff_scenes'] as const;
 
 export async function handleTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'batch') return null;
 
-  switch (name) {
-    case 'batch_create_files': {
+  const action = args.action as string;
+  if (!action) return opsErrorResult('INVALID_PARAMS', '"action" is required.');
+
+  switch (action) {
+    case 'create_files': {
       const projectPath = requireProjectPath(args);
       const files = args.files as Array<{ path: string; content: string; overwrite?: boolean }>;
       const doValidate = args.validate !== false;
 
       if (!files || !Array.isArray(files) || files.length === 0) {
-        return textResult('Error: "files" must be a non-empty array.');
+        return opsErrorResult('INVALID_PARAMS', '"files" must be a non-empty array.');
       }
 
       const created: string[] = [];
@@ -162,14 +149,14 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       return textResult(JSON.stringify(result, null, 2) + lintSummary);
     }
 
-    case 'batch_run_verify': {
+    case 'run_verify': {
       const projectPath = requireProjectPath(args);
       const scenes = args.scenes as string[];
       const timeout = Math.min((args.timeout as number) || 10, 60);
       const captureTree = args.capture_tree === true;
 
       if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
-        return textResult('Error: "scenes" must be a non-empty array of scene paths.');
+        return opsErrorResult('INVALID_PARAMS', '"scenes" must be a non-empty array of scene paths.');
       }
 
       const godot = await ctx.findGodot();
@@ -214,10 +201,10 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const absB = resolveWithinRoot(projectPath, sceneB);
 
       if (!existsSync(absA)) {
-        return textResult(`Error: Scene A not found: ${sceneA}`);
+        return opsErrorResult('NOT_FOUND', `Scene A not found: ${sceneA}`);
       }
       if (!existsSync(absB)) {
-        return textResult(`Error: Scene B not found: ${sceneB}`);
+        return opsErrorResult('NOT_FOUND', `Scene B not found: ${sceneB}`);
       }
 
       let parsedA: ReturnType<typeof parseTscn>;
@@ -226,7 +213,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         parsedA = parseTscn(readFileSync(absA, 'utf-8'));
         parsedB = parseTscn(readFileSync(absB, 'utf-8'));
       } catch (e: unknown) {
-        return textResult(`Error reading scene files: ${(e as Error).message}`);
+        return opsErrorResult('EXEC_FAILED', `Error reading scene files: ${(e as Error).message}`);
       }
 
       const mapA = parsedA.nodeMap;
@@ -361,7 +348,5 @@ function formatPropVal(val: unknown): string {
 }
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  batch_create_files: { readonly: false, long_running: true },
-  batch_run_verify: { readonly: true, long_running: true },
-  diff_scenes: { readonly: true, long_running: false },
+  batch: { readonly: false, long_running: false },
 };

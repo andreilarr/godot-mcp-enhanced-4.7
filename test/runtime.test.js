@@ -87,49 +87,49 @@ describe('runtime getToolDefinitions', () => {
     expect(defs.length).toBeGreaterThan(0);
   });
 
-  it('has 6 tool definitions', () => {
+  it('has 1 merged tool definition with name "runtime"', () => {
     const defs = getToolDefinitions();
-    expect(defs.length).toBe(6);
-    const names = defs.map(d => d.name);
-    expect(names).toContain('launch_editor');
-    expect(names).toContain('run_project');
-    expect(names).toContain('stop_project');
-    expect(names).toContain('get_debug_output');
-    expect(names).toContain('run_tests');
-    expect(names).toContain('get_godot_version');
+    expect(defs.length).toBe(1);
+    expect(defs[0].name).toBe('runtime');
   });
 
-  it('each definition has name, description, and inputSchema', () => {
+  it('tool has action enum with 6 operations', () => {
     const defs = getToolDefinitions();
-    for (const def of defs) {
-      expect(def.name).toBeTruthy();
-      expect(def.description).toBeTruthy();
-      expect(def.inputSchema).toBeDefined();
-      expect(def.inputSchema.type).toBe('object');
-    }
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    expect(actionEnum).toEqual([
+      'launch_editor',
+      'run_project',
+      'stop_project',
+      'get_debug_output',
+      'run_tests',
+      'get_godot_version',
+    ]);
+  });
+
+  it('definition has name, description, and inputSchema', () => {
+    const defs = getToolDefinitions();
+    const def = defs[0];
+    expect(def.name).toBeTruthy();
+    expect(def.description).toBeTruthy();
+    expect(def.inputSchema).toBeDefined();
+    expect(def.inputSchema.type).toBe('object');
   });
 });
 
 // ─── TOOL_META ──────────────────────────────────────────────────────────────
 
 describe('runtime TOOL_META', () => {
-  it('has entries for all 6 tools', () => {
-    expect(Object.keys(TOOL_META).length).toBe(6);
-    expect(TOOL_META.launch_editor).toBeDefined();
-    expect(TOOL_META.run_project).toBeDefined();
-    expect(TOOL_META.stop_project).toBeDefined();
-    expect(TOOL_META.get_debug_output).toBeDefined();
-    expect(TOOL_META.run_tests).toBeDefined();
-    expect(TOOL_META.get_godot_version).toBeDefined();
+  it('has single entry for "runtime"', () => {
+    expect(Object.keys(TOOL_META).length).toBe(1);
+    expect(TOOL_META.runtime).toBeDefined();
   });
 
-  it('marks run_tests as long_running', () => {
-    expect(TOOL_META.run_tests.long_running).toBe(true);
+  it('marks runtime as long_running', () => {
+    expect(TOOL_META.runtime.long_running).toBe(true);
   });
 
-  it('marks get_debug_output and get_godot_version as readonly', () => {
-    expect(TOOL_META.get_debug_output.readonly).toBe(true);
-    expect(TOOL_META.get_godot_version.readonly).toBe(true);
+  it('marks runtime as not readonly', () => {
+    expect(TOOL_META.runtime.readonly).toBe(false);
   });
 });
 
@@ -153,7 +153,8 @@ describe('runtime handleTool — launch_editor', () => {
     const proc = mockProc();
     setupSpawnMock(proc);
     const ctx = createMockCtx();
-    const result = await handleTool('launch_editor', {
+    const result = await handleTool('runtime', {
+      action: 'launch_editor',
       project_path: '/fake/project',
     }, ctx);
 
@@ -177,7 +178,8 @@ describe('runtime handleTool — run_project', () => {
     const proc = mockProc();
     setupSpawnMock(proc);
     const ctx = createMockCtx();
-    const result = await handleTool('run_project', {
+    const result = await handleTool('runtime', {
+      action: 'run_project',
       project_path: '/fake/project',
       timeout: 30,
     }, ctx);
@@ -195,7 +197,8 @@ describe('runtime handleTool — run_project', () => {
     setupSpawnMock(proc);
     const existingProc = mockProc();
     const ctx = createMockCtx({ runningProcess: existingProc });
-    await handleTool('run_project', {
+    await handleTool('runtime', {
+      action: 'run_project',
       project_path: '/fake/project',
     }, ctx);
 
@@ -206,7 +209,8 @@ describe('runtime handleTool — run_project', () => {
     const proc = mockProc();
     setupSpawnMock(proc);
     const ctx = createMockCtx();
-    await handleTool('run_project', {
+    await handleTool('runtime', {
+      action: 'run_project',
       project_path: '/fake/project',
     }, ctx);
 
@@ -225,7 +229,7 @@ describe('runtime handleTool — stop_project', () => {
 
   it('returns message when no project running', async () => {
     const ctx = createMockCtx({ runningProcess: null });
-    const result = await handleTool('stop_project', {}, ctx);
+    const result = await handleTool('runtime', { action: 'stop_project' }, ctx);
 
     expect(result).not.toBeNull();
     expect(result.content[0].text).toContain('No project is currently running');
@@ -238,7 +242,7 @@ describe('runtime handleTool — stop_project', () => {
       outputBuffer: ['line with error', 'line with warning', 'normal line'],
     });
 
-    const result = await handleTool('stop_project', {}, ctx);
+    const result = await handleTool('runtime', { action: 'stop_project' }, ctx);
 
     expect(result).not.toBeNull();
     expect(killProcess).toHaveBeenCalledWith(existingProc);
@@ -260,7 +264,7 @@ describe('runtime handleTool — get_debug_output', () => {
       outputBuffer: [],
     });
 
-    const result = await handleTool('get_debug_output', {}, ctx);
+    const result = await handleTool('runtime', { action: 'get_debug_output' }, ctx);
     expect(result).not.toBeNull();
     expect(result.content[0].text).toContain('No debug output available');
   });
@@ -272,7 +276,7 @@ describe('runtime handleTool — get_debug_output', () => {
       outputBuffer: ['ERROR: something broke', 'WARNING: deprecated', 'hello world'],
     });
 
-    const result = await handleTool('get_debug_output', {}, ctx);
+    const result = await handleTool('runtime', { action: 'get_debug_output' }, ctx);
     expect(result).not.toBeNull();
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.running).toBe(true);
@@ -292,7 +296,8 @@ describe('runtime handleTool — run_tests', () => {
     const proc = mockProc();
     setupSpawnMock(proc);
     const ctx = createMockCtx();
-    const resultPromise = handleTool('run_tests', {
+    const resultPromise = handleTool('runtime', {
+      action: 'run_tests',
       project_path: '/fake/project',
     }, ctx);
 
@@ -321,7 +326,7 @@ describe('runtime handleTool — get_godot_version', () => {
     const proc = mockProc();
     setupSpawnMock(proc);
     const ctx = createMockCtx();
-    const resultPromise = handleTool('get_godot_version', {}, ctx);
+    const resultPromise = handleTool('runtime', { action: 'get_godot_version' }, ctx);
 
     emitProcessEvents(proc, '4.6.stable');
 

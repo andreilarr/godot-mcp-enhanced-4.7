@@ -9,24 +9,13 @@ import { parseTscn, parseTscnSummary } from '../tscn-parser.js';
 import { findInstanceNode, detachInstance, nodePathToNameAndParent } from '../tscn-editor.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, opsErrorResult, parseGdscriptResult, sanitizeResPath } from './shared.js';
-import { normalizeNodePath, gdEscape, toSnakeCase } from './shared.js';
+import { normalizeNodePath, gdEscape, toSnakeCase, valueToGd } from './shared.js';
 import { forceKillTree, acquireShortRunningSlot, releaseShortRunningSlot } from '../core/process-state.js';
 
-const TOOL_NAMES = [
-  'read_scene',
-  'create_scene',
-  'add_node',
-  'save_scene',
-  'load_sprite',
-  'quick_scene',
-  'batch_add_nodes',
-  'query_scene_tree',
-  'inspect_node',
-  'edit_node',
-  'remove_node',
-  'instance_scene',
-  'set_instance_property',
-  'detach_instance',
+const ACTIONS = [
+  'read_scene', 'create_scene', 'add_node', 'save_scene', 'load_sprite',
+  'quick_scene', 'batch_add_nodes', 'query_scene_tree', 'inspect_node',
+  'edit_node', 'remove_node', 'instance_scene', 'set_instance_property', 'detach_instance',
 ] as const;
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
@@ -34,225 +23,53 @@ const TOOL_NAMES = [
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'read_scene',
-      description: 'Parse a .tscn scene file and return the complete node tree as JSON.',
+      name: 'scene',
+      description: '场景操作。读取/创建: read_scene, create_scene, quick_scene。节点: add_node, batch_add_nodes, edit_node, remove_node。保存/资源: save_scene, load_sprite。查询: query_scene_tree, inspect_node。实例: instance_scene, set_instance_property, detach_instance。',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Absolute path to the .tscn file' },
-          summary_only: { type: 'boolean', description: 'Return human-readable summary instead of full JSON', default: false },
-        },
-        required: ['project_path', 'scene_path'],
-      },
-    },
-    {
-      name: 'create_scene',
-      description: 'Create a new Godot scene with a root node.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Scene path relative to project (res://scenes/new.tscn)' },
-          root_node_type: { type: 'string', description: 'Root node type (default: Node2D)', default: 'Node2D' },
-        },
-        required: ['project_path', 'scene_path'],
-      },
-    },
-    {
-      name: 'add_node',
-      description: 'Add a node to an existing scene.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Scene path relative to project' },
-          node_type: { type: 'string', description: 'Type of node to add (e.g. Sprite2D, Camera2D)' },
-          node_name: { type: 'string', description: 'Name for the new node' },
-          parent_node_path: { type: 'string', description: 'Parent node path (default: root)', default: 'root' },
-          properties: { type: 'object', description: 'Optional properties to set on the node' },
-        },
-        required: ['project_path', 'scene_path', 'node_type', 'node_name'],
-      },
-    },
-    {
-      name: 'save_scene',
-      description: 'Save/resave a scene file.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Scene path relative to project' },
-          new_path: { type: 'string', description: 'Optional new path to save as' },
-        },
-        required: ['project_path', 'scene_path'],
-      },
-    },
-    {
-      name: 'load_sprite',
-      description: 'Load a sprite texture into a Sprite2D node in a scene.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Scene path relative to project' },
-          texture_path: { type: 'string', description: 'Texture path relative to project (res://assets/player.png)' },
-          node_path: { type: 'string', description: 'Sprite node path (default: root)', default: 'root' },
-        },
-        required: ['project_path', 'scene_path', 'texture_path'],
-      },
-    },
-    {
-      name: 'quick_scene',
-      description: 'Create a complete scene with optional script attachment in one step. '
-        + 'Generates .tscn with root node, ext_resource reference, and optionally creates the .gd script file.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Scene path relative to project (e.g. res://scenes/player.tscn)' },
-          script_path: { type: 'string', description: 'Script path relative to project (e.g. res://scripts/player.gd). Optional.' },
-          root_node_type: { type: 'string', description: 'Root node type (default: Node2D)', default: 'Node2D' },
-          root_node_name: { type: 'string', description: 'Root node name (default: derived from scene filename via PascalCase)' },
-          script_content: { type: 'string', description: 'If provided and script does not exist, creates the .gd file with this content' },
-        },
-        required: ['project_path', 'scene_path'],
-      },
-    },
-    {
-      name: 'query_scene_tree',
-      description: 'Load a scene in headless mode and query its runtime node tree with resolved property values. '
-        + 'Unlike read_scene which parses the .tscn file, this instantiates the scene and returns actual runtime properties.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Scene file path relative to project (e.g. res://scenes/main.tscn)' },
-          max_depth: { type: 'number', description: 'Maximum tree traversal depth (default: 5)', default: 5 },
-        },
-        required: ['project_path', 'scene_path'],
-      },
-    },
-    {
-      name: 'inspect_node',
-      description: 'Deep-inspect a specific node in a scene. Returns all properties, signal connections, '
-        + 'and child nodes with recursive depth control. Loads the scene in headless mode for runtime values.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Scene file path relative to project' },
-          node_path: { type: 'string', description: 'Node path within scene (e.g. "root/Player/Sprite2D")', default: 'root' },
-          max_depth: { type: 'number', description: 'Max depth for child traversal (default: 3)', default: 3 },
-          include_signals: { type: 'boolean', description: 'Include signal connection info (default: true)', default: true },
-          include_properties: { type: 'boolean', description: 'Include property values (default: true)', default: true },
-        },
-        required: ['project_path', 'scene_path'],
-      },
-    },
-    {
-      name: 'batch_add_nodes',
-      description: 'Add multiple nodes to a scene in a single call. Much faster than calling add_node repeatedly. '
-        + 'Accepts an array of node definitions, each with type, name, optional parent and properties.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Scene path relative to project' },
+          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          action: {
+            type: 'string',
+            enum: [...ACTIONS],
+            description: '操作类型',
+          },
+          scene_path: { type: 'string', description: '场景路径（read_scene 用绝对路径，其余用相对项目路径）' },
+          summary_only: { type: 'boolean', description: 'read_scene: 返回摘要而非完整 JSON' },
+          root_node_type: { type: 'string', description: 'create_scene/quick_scene: 根节点类型（默认 Node2D）' },
+          root_node_name: { type: 'string', description: 'quick_scene: 根节点名称（默认从文件名推导 PascalCase）' },
+          script_path: { type: 'string', description: 'quick_scene: 脚本路径（可选）' },
+          script_content: { type: 'string', description: 'quick_scene: 脚本内容（脚本不存在时自动创建）' },
+          node_type: { type: 'string', description: 'add_node: 节点类型（如 Sprite2D, Camera2D）' },
+          node_name: { type: 'string', description: 'add_node: 节点名称' },
+          parent_node_path: { type: 'string', description: 'add_node/instance_scene: 父节点路径（默认 root）' },
+          properties: { type: 'object', description: 'add_node/edit_node/instance_scene: 属性对象' },
+          new_path: { type: 'string', description: 'save_scene: 新保存路径（可选）' },
+          texture_path: { type: 'string', description: 'load_sprite: 纹理路径（如 res://assets/player.png）' },
+          node_path: { type: 'string', description: 'inspect_node/edit_node/remove_node/load_sprite/detach_instance/set_instance_property: 节点路径' },
+          max_depth: { type: 'number', description: 'query_scene_tree/inspect_node: 最大遍历深度' },
+          include_signals: { type: 'boolean', description: 'inspect_node: 包含信号连接（默认 true）' },
+          include_properties: { type: 'boolean', description: 'inspect_node: 包含属性值（默认 true）' },
           nodes: {
             type: 'array',
-            description: 'Array of node definitions to add',
+            description: 'batch_add_nodes: 节点定义数组',
             items: {
               type: 'object',
               properties: {
-                node_type: { type: 'string', description: 'Node type (e.g. Sprite2D, Label)' },
-                node_name: { type: 'string', description: 'Name for the node' },
-                parent_node_path: { type: 'string', description: 'Parent path (default: root)', default: 'root' },
-                properties: { type: 'object', description: 'Optional properties to set' },
+                node_type: { type: 'string', description: '节点类型' },
+                node_name: { type: 'string', description: '节点名称' },
+                parent_node_path: { type: 'string', description: '父路径（默认 root）' },
+                properties: { type: 'object', description: '属性' },
               },
               required: ['node_type', 'node_name'],
             },
           },
+          load_autoloads: { type: 'boolean', description: 'edit_node/remove_node/set_instance_property: 加载 Autoload（默认 true）' },
+          instance_path: { type: 'string', description: 'instance_scene: 要实例化的场景文件（res://scenes/player.tscn）' },
+          property: { type: 'string', description: 'set_instance_property: 属性名' },
+          value: { description: 'set_instance_property: 属性值（string/number/bool/null/array/object）' },
         },
-        required: ['project_path', 'scene_path', 'nodes'],
-      },
-    },
-    {
-      name: 'edit_node',
-      description: 'Edit properties of an existing node in a scene. Supports position, scale, rotation, and custom properties.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Scene path relative to project' },
-          node_path: { type: 'string', description: 'Node path within scene (e.g. "root/Player/Sprite2D")' },
-          properties: { type: 'object', description: 'Properties to set. Supports basic types and Vector2/Vector3 as arrays.' },
-          load_autoloads: { type: 'boolean', description: 'Load Autoload context (default: true)', default: true },
-        },
-        required: ['project_path', 'scene_path', 'node_path', 'properties'],
-      },
-    },
-    {
-      name: 'remove_node',
-      description: 'Remove a node from a scene. This is a destructive operation protected by confirmation token.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Scene path relative to project' },
-          node_path: { type: 'string', description: 'Node path to remove (e.g. "root/Player/Sprite2D")' },
-          load_autoloads: { type: 'boolean', description: 'Load Autoload context (default: true)', default: true },
-        },
-        required: ['project_path', 'scene_path', 'node_path'],
-      },
-    },
-    {
-      name: 'instance_scene',
-      description: 'Instantiate a .tscn scene file as a child node in a target scene via headless GDScript execution. '
-        + 'The instanced scene is added at runtime and is not persisted — edit the .tscn file to persist.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Target scene path relative to project' },
-          instance_path: { type: 'string', description: 'Scene file to instantiate (res://scenes/player.tscn)' },
-          parent_node_path: { type: 'string', description: 'Parent node path (default: root)', default: 'root' },
-          node_name: { type: 'string', description: 'Optional instance node name' },
-          properties: { type: 'object', description: 'Optional initial property overrides' },
-        },
-        required: ['project_path', 'scene_path', 'instance_path'],
-      },
-    },
-    {
-      name: 'set_instance_property',
-      description: 'Set a property override on an instanced scene node. '
-        + 'Validates the target node is an instance child (not the scene root) before setting.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Target scene path relative to project' },
-          node_path: { type: 'string', description: 'Path to the instance node (e.g. "root/Player")' },
-          property: { type: 'string', description: 'Property name to set' },
-          value: { description: 'Property value (string, number, bool, null, array for Vector2/Vector3/Color)' },
-          load_autoloads: { type: 'boolean', description: 'Load Autoload context (default: true)', default: true },
-        },
-        required: ['project_path', 'scene_path', 'node_path', 'property', 'value'],
-      },
-    },
-    {
-      name: 'detach_instance',
-      description: 'Detach (inline) an instanced scene node by replacing the instance reference '
-        + 'with the full inlined subtree from the source scene. Equivalent to Godot\'s "Make Local" '
-        + 'operation. This is a pure .tscn text edit — no GDScript execution required.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Target scene path relative to project' },
-          node_path: { type: 'string', description: 'Path to the instance node (e.g. "root/Player")' },
-        },
-        required: ['project_path', 'scene_path', 'node_path'],
+        required: ['project_path', 'action'],
       },
     },
   ];
@@ -261,9 +78,12 @@ export function getToolDefinitions(): Tool[] {
 // ─── Tool handler ───────────────────────────────────────────────────────────
 
 export async function handleTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'scene') return null;
 
-  switch (name) {
+  const action = args.action as string;
+  if (!action) return opsErrorResult('INVALID_PARAMS', 'action is required');
+
+  switch (action) {
     case 'read_scene': {
       const sp = resolveWithinRoot(requireProjectPath(args), normalizeUserProjectPath(args.scene_path as string));
       if (!existsSync(sp)) return textResult(`Scene file not found: ${sp}`);
@@ -290,15 +110,15 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     case 'add_node':
     case 'save_scene':
     case 'load_sprite': {
-      if (!acquireShortRunningSlot()) return textResult('Error: too many concurrent headless operations (max 3). Please wait and retry.');
+      if (!acquireShortRunningSlot()) return opsErrorResult('CONCURRENCY_LIMIT', 'too many concurrent headless operations (max 3). Please wait and retry.');
       const p = requireProjectPath(args);
       const godot = await ctx.findGodot();
 
       const params: Record<string, unknown> = {};
-      if (name === 'create_scene') {
+      if (action === 'create_scene') {
         params.scene_path = normalizeUserProjectPath(args.scene_path as string);
         params.root_node_type = args.root_node_type || 'Node2D';
-      } else if (name === 'add_node') {
+      } else if (action === 'add_node') {
         params.scene_path = normalizeUserProjectPath(args.scene_path as string);
         const safeType = /^[A-Za-z0-9_]+$/;
         const unsafeName = /[\]["/:\\]/;
@@ -312,7 +132,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         params.node_name = args.node_name;
         params.parent_node_path = args.parent_node_path || 'root';
         if (args.properties) params.properties = args.properties;
-      } else if (name === 'save_scene') {
+      } else if (action === 'save_scene') {
         params.scene_path = normalizeUserProjectPath(args.scene_path as string);
         if (args.new_path) {
           try {
@@ -323,7 +143,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             return opsErrorResult('INVALID_PATH', 'new_path contains path traversal');
           }
         }
-      } else if (name === 'load_sprite') {
+      } else if (action === 'load_sprite') {
         params.scene_path = normalizeUserProjectPath(args.scene_path as string);
         const tp = String(args.texture_path);
         try { sanitizeResPath(tp, 'texture_path'); } catch {
@@ -337,20 +157,21 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         const proc = spawn(godot, [
           '--headless', '--path', p,
           '--script', ctx.opsScript,
-          name, JSON.stringify(params),
+          action, JSON.stringify(params),
         ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
 
         let out = '';
         let settled = false;
-        proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
-        proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
+        const MAX_OUTPUT = 100_000;
+        proc.stdout?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
+        proc.stderr?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
 
         const timer = setTimeout(() => {
           if (!settled && !proc.killed) {
             settled = true;
             forceKillTree(proc);
             releaseShortRunningSlot();
-            resolve({ content: [{ type: 'text', text: `${name} timed out.` }] });
+            resolve({ content: [{ type: 'text', text: `${action} timed out.` }] });
           }
         }, 60000);
 
@@ -360,9 +181,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           settled = true;
           releaseShortRunningSlot();
           if (code !== 0) {
-            resolve({ content: [{ type: 'text', text: `${name} failed (exit code ${code}):\n${out}` }] });
+            resolve({ content: [{ type: 'text', text: `${action} failed (exit code ${code}):\n${out}` }] });
           } else {
-            resolve({ content: [{ type: 'text', text: out.trim() || `${name} completed successfully.` }] });
+            resolve({ content: [{ type: 'text', text: out.trim() || `${action} completed successfully.` }] });
           }
         });
 
@@ -456,7 +277,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'query_scene_tree': {
-      if (!acquireShortRunningSlot()) return textResult('Error: too many concurrent headless operations (max 3). Please wait and retry.');
+      if (!acquireShortRunningSlot()) return opsErrorResult('CONCURRENCY_LIMIT', 'too many concurrent headless operations (max 3). Please wait and retry.');
       const p = requireProjectPath(args);
       const godot = await ctx.findGodot();
       const scriptsDir = dirname(ctx.opsScript);
@@ -513,7 +334,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'inspect_node': {
-      if (!acquireShortRunningSlot()) return textResult('Error: too many concurrent headless operations (max 3). Please wait and retry.');
+      if (!acquireShortRunningSlot()) return opsErrorResult('CONCURRENCY_LIMIT', 'too many concurrent headless operations (max 3). Please wait and retry.');
       const p = requireProjectPath(args);
       const godot = await ctx.findGodot();
       const scriptsDir = dirname(ctx.opsScript);
@@ -573,6 +394,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'batch_add_nodes': {
+      if (!acquireShortRunningSlot()) return opsErrorResult('CONCURRENCY_LIMIT', 'too many concurrent headless operations (max 3). Please wait and retry.');
       const p = requireProjectPath(args);
       const scenePath = normalizeUserProjectPath(args.scene_path as string);
       const nodes = args.nodes as Array<{
@@ -583,7 +405,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }>;
 
       if (!nodes || !Array.isArray(nodes) || nodes.length === 0) {
-        return textResult('Error: "nodes" must be a non-empty array of node definitions.');
+        releaseShortRunningSlot();
+        return opsErrorResult('INVALID_PARAMS', '"nodes" must be a non-empty array of node definitions.');
       }
 
       // Input validation for each node
@@ -591,14 +414,17 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const unsafeName = /[\]["/:\\]/;
       const MAX_BATCH_NODES = 100;
       if (nodes.length > MAX_BATCH_NODES) {
+        releaseShortRunningSlot();
         return textResult(`Error: Too many nodes (${nodes.length}). Maximum: ${MAX_BATCH_NODES}`);
       }
       for (let i = 0; i < nodes.length; i++) {
         const n = nodes[i];
         if (!n.node_type || !safeType.test(String(n.node_type))) {
+          releaseShortRunningSlot();
           return textResult(`Error: nodes[${i}].node_type contains invalid characters: "${n.node_type}"`);
         }
         if (!n.node_name || unsafeName.test(String(n.node_name))) {
+          releaseShortRunningSlot();
           return textResult(`Error: nodes[${i}].node_name contains invalid characters: "${n.node_name}"`);
         }
       }
@@ -617,14 +443,16 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
         let out = '';
         let settled = false;
-        proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
-        proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
+        const MAX_OUTPUT = 100_000;
+        proc.stdout?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
+        proc.stderr?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
 
         const timer = setTimeout(() => {
           if (!settled && !proc.killed) {
             settled = true;
             forceKillTree(proc);
-            resolve({ content: [{ type: 'text', text: 'batch_add_nodes timed out after 60s.' }] });
+            releaseShortRunningSlot();
+            resolve({ content: [{ type: 'text', text: `batch_add_nodes timed out after 60s.` }] });
           }
         }, 60000);
 
@@ -632,6 +460,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           clearTimeout(timer);
           if (settled) return;
           settled = true;
+          releaseShortRunningSlot();
           if (code !== 0) {
             resolve({ content: [{ type: 'text', text: `batch_add_nodes failed (exit code ${code}):\n${out}` }] });
           } else {
@@ -643,6 +472,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           clearTimeout(timer);
           if (settled) return;
           settled = true;
+          releaseShortRunningSlot();
           resolve({ content: [{ type: 'text', text: `Error: ${err.message}` }] });
         });
       });
@@ -654,7 +484,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const nodePath = normalizeNodePath(args.node_path as string);
       const properties = args.properties as Record<string, unknown>;
       if (!properties || typeof properties !== 'object' || Object.keys(properties).length === 0) {
-        return textResult('Error: "properties" must be a non-empty object.');
+        return opsErrorResult('INVALID_PARAMS', '"properties" must be a non-empty object.');
       }
 
       // Build GDScript property setter lines
@@ -740,50 +570,42 @@ func _initialize():
   }
 }
 
+/**
+ * Generates a GDScript property-set line for a given key/value pair.
+ *
+ * Simple types (null, bool, number, string) → direct assignment: `node.key = value`
+ * Vector/Color types → _try_set() call: `_try_set(node, "key", Vector2(...))`
+ *
+ * Uses the shared `valueToGd()` serializer from shared.ts for the expression.
+ * On non-finite values, returns a comment line starting with `# skipped`.
+ */
 function gdScriptSetLine(key: string, value: unknown, varName = 'node'): string {
-  if (value === null || value === undefined) return `${varName}.${key} = null`;
-  if (typeof value === 'boolean') return `${varName}.${key} = ${value}`;
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) return `# skipped ${key}: non-finite number`;
-    return `${varName}.${key} = ${value}`;
+  const needsTrySet = isVectorLike(value);
+  const ek = gdEscape(key);
+  try {
+    const expr = valueToGd(value);
+    if (needsTrySet) {
+      return `_try_set(${varName}, "${ek}", ${expr})`;
+    }
+    return `${varName}.${key} = ${expr}`;
+  } catch (e: unknown) {
+    // valueToGd throws on non-finite numbers — convert to a skip comment
+    const msg = (e as Error).message;
+    if (msg.includes('Non-finite')) return `# skipped ${key}: non-finite number`;
+    throw e;
   }
-  if (typeof value === 'string') return `${varName}.${key} = "${gdEscape(value)}"`;
+}
+
+/** Returns true if the value is an array/object that produces a Vector/Color expression. */
+function isVectorLike(value: unknown): boolean {
   if (Array.isArray(value)) {
-    if (value.length === 2 && typeof value[0] === 'number' && typeof value[1] === 'number') {
-      if (!Number.isFinite(value[0]) || !Number.isFinite(value[1])) return `# skipped ${key}: non-finite number in array`;
-      return `_try_set(${varName}, "${gdEscape(key)}", Vector2(${value[0]}, ${value[1]}))`;
-    }
-    if (value.length === 3 && typeof value[0] === 'number' && typeof value[1] === 'number' && typeof value[2] === 'number') {
-      if (!Number.isFinite(value[0]) || !Number.isFinite(value[1]) || !Number.isFinite(value[2])) return `# skipped ${key}: non-finite number in array`;
-      return `_try_set(${varName}, "${gdEscape(key)}", Vector3(${value[0]}, ${value[1]}, ${value[2]}))`;
-    }
-    if (value.length === 4 && value.every(v => typeof v === 'number')) {
-      if (!value.every(v => Number.isFinite(v as number))) return `# skipped ${key}: non-finite number in array`;
-      return `_try_set(${varName}, "${gdEscape(key)}", Color(${value[0]}, ${value[1]}, ${value[2]}, ${value[3]}))`;
-    }
+    return (value.length >= 2 && value.length <= 4 && value.every(v => typeof v === 'number'));
   }
-  // Object format: {x,y} → Vector2, {x,y,z} → Vector3, {r,g,b,a} → Color
-  if (typeof value === 'object' && !Array.isArray(value)) {
+  if (typeof value === 'object' && value !== null) {
     const obj = value as Record<string, unknown>;
-    const keys = Object.keys(obj);
-    if (keys.some(k => !['x', 'y', 'z', 'r', 'g', 'b', 'a'].includes(k))) {
-      throw new Error(`Property "${key}" has unexpected object keys: ${keys.filter(k => !['x', 'y', 'z', 'r', 'g', 'b', 'a'].includes(k)).join(', ')}. Allowed: {x,y}, {x,y,z}, {r,g,b,a}.`);
-    }
-    if (typeof obj.x === 'number' && typeof obj.y === 'number') {
-      if (!Number.isFinite(obj.x as number) || !Number.isFinite(obj.y as number)) return `# skipped ${key}: non-finite number in object`;
-      if (typeof obj.z === 'number') {
-        if (!Number.isFinite(obj.z as number)) return `# skipped ${key}: non-finite number in object`;
-        return `_try_set(${varName}, "${gdEscape(key)}", Vector3(${obj.x}, ${obj.y}, ${obj.z}))`;
-      }
-      return `_try_set(${varName}, "${gdEscape(key)}", Vector2(${obj.x}, ${obj.y}))`;
-    }
-    if (typeof obj.r === 'number' && typeof obj.g === 'number' && typeof obj.b === 'number') {
-      const a = typeof obj.a === 'number' ? obj.a : 1.0;
-      if (!Number.isFinite(obj.r as number) || !Number.isFinite(obj.g as number) || !Number.isFinite(obj.b as number) || !Number.isFinite(a as number)) return `# skipped ${key}: non-finite number in object`;
-      return `_try_set(${varName}, "${gdEscape(key)}", Color(${obj.r}, ${obj.g}, ${obj.b}, ${a}))`;
-    }
+    return !!(typeof obj.x === 'number' || typeof obj.r === 'number');
   }
-  throw new Error(`Property "${key}" has unsupported type. Use string/number/bool/null, array [2]=Vector2/[3]=Vector3/[4]=Color, or object {x,y}/{x,y,z}/{r,g,b,a}.`);
+  return false;
 }
 
 // ─── trySetHelper (shared across edit_node, instance_scene, set_instance_property) ──
@@ -1054,18 +876,5 @@ function handleDetachInstance(args: Record<string, unknown>): ToolResult {
 }
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  read_scene: { readonly: true, long_running: false },
-  create_scene: { readonly: false, long_running: false },
-  add_node: { readonly: false, long_running: false },
-  save_scene: { readonly: false, long_running: false },
-  load_sprite: { readonly: false, long_running: false },
-  quick_scene: { readonly: false, long_running: false },
-  batch_add_nodes: { readonly: false, long_running: false },
-  query_scene_tree: { readonly: true, long_running: false },
-  inspect_node: { readonly: true, long_running: false },
-  edit_node: { readonly: false, long_running: false },
-  remove_node: { readonly: false, long_running: false },
-  instance_scene: { readonly: false, long_running: true },
-  set_instance_property: { readonly: false, long_running: true },
-  detach_instance: { readonly: false, long_running: false },
+  scene: { readonly: false, long_running: true },
 };

@@ -5,40 +5,41 @@ describe('workflow tool definitions', () => {
   const tools = getToolDefinitions();
   const names = tools.map(t => t.name);
 
-  it('has 3 tools', () => {
-    expect(tools.length).toBe(3);
+  it('has 1 tool', () => {
+    expect(tools.length).toBe(1);
   });
 
-  it('includes dev_loop', () => {
-    expect(names.includes('dev_loop')).toBeTruthy();
+  it('includes workflow', () => {
+    expect(names.includes('workflow')).toBeTruthy();
   });
 
-  it('includes scene_snapshot', () => {
-    expect(names.includes('scene_snapshot')).toBeTruthy();
+  it('tool has action parameter with correct enum values', () => {
+    const wf = tools.find(t => t.name === 'workflow');
+    const action = wf.inputSchema.properties.action;
+    expect(action).toBeTruthy();
+    expect(action.enum).toContain('dev_loop');
+    expect(action.enum).toContain('scene_snapshot');
+    expect(action.enum).toContain('batch_validate');
   });
 
-  it('includes batch_validate', () => {
-    expect(names.includes('batch_validate')).toBeTruthy();
-  });
-
-  it('all tools have required fields', () => {
+  it('tool has required fields', () => {
     for (const tool of tools) {
       expect(tool.inputSchema).toBeTruthy();
       expect(tool.description).toBeTruthy();
     }
   });
 
-  it('dev_loop has bridge parameter', () => {
-    const devLoop = tools.find(t => t.name === 'dev_loop');
-    const props = devLoop.inputSchema.properties;
+  it('workflow has bridge parameter', () => {
+    const wf = tools.find(t => t.name === 'workflow');
+    const props = wf.inputSchema.properties;
     expect(props.bridge).toBeTruthy();
     expect(props.bridge.properties.screenshot).toBeTruthy();
     expect(props.bridge.properties.queries).toBeTruthy();
   });
 
   it('bridge.queries has maxItems limit', () => {
-    const devLoop = tools.find(t => t.name === 'dev_loop');
-    const queries = devLoop.inputSchema.properties.bridge.properties.queries;
+    const wf = tools.find(t => t.name === 'workflow');
+    const queries = wf.inputSchema.properties.bridge.properties.queries;
     expect(queries.maxItems).toBe(10);
   });
 });

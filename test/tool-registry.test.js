@@ -65,22 +65,19 @@ describe('tool-registry', () => {
 });
 
 describe('L1 verify eligible tools', () => {
-  it('VERIFY_ELIGIBLE_TOOLS contains expected write tools', () => {
-    expect(VERIFY_ELIGIBLE_TOOLS.has('add_node')).toBeTruthy();
-    expect(VERIFY_ELIGIBLE_TOOLS.has('edit_node')).toBeTruthy();
-    expect(VERIFY_ELIGIBLE_TOOLS.has('write_script')).toBeTruthy();
-    expect(VERIFY_ELIGIBLE_TOOLS.has('edit_script')).toBeTruthy();
-    expect(VERIFY_ELIGIBLE_TOOLS.has('ui_build_layout')).toBeTruthy();
-    expect(VERIFY_ELIGIBLE_TOOLS.has('load_sprite')).toBeTruthy();
+  it('VERIFY_ELIGIBLE_TOOLS contains merged tool names', () => {
+    expect(VERIFY_ELIGIBLE_TOOLS.has('scene')).toBeTruthy();
+    expect(VERIFY_ELIGIBLE_TOOLS.has('script')).toBeTruthy();
+    expect(VERIFY_ELIGIBLE_TOOLS.has('ui')).toBeTruthy();
   });
 
-  it('isVerifyEligible returns true for add_node', () => {
-    expect(isVerifyEligible('add_node')).toBe(true);
+  it('isVerifyEligible returns true for scene', () => {
+    expect(isVerifyEligible('scene')).toBe(true);
   });
 
-  it('isVerifyEligible returns false for read-only tools', () => {
-    expect(isVerifyEligible('read_scene')).toBe(false);
-    expect(isVerifyEligible('execute_gdscript')).toBe(false);
+  it('isVerifyEligible returns false for non-eligible tools', () => {
     expect(isVerifyEligible('profiler')).toBe(false);
+    expect(isVerifyEligible('physics')).toBe(false);
+    expect(isVerifyEligible('docs')).toBe(false);
   });
 });

@@ -221,9 +221,11 @@ describe('isPathInAllowedRoots', () => {
     process.env = originalEnv;
   });
 
-  it('should allow all paths when no whitelist set (zero-config)', () => {
-    expect(isPathInAllowedRoots('/definitely/outside/path')).toBe(true);
+  it('should restrict to process.cwd() when no whitelist set (deny-by-default)', () => {
+    // After security hardening: unconfigured = restricted to cwd, not allow-all
     expect(isPathInAllowedRoots(process.cwd())).toBe(true);
+    // A path that is definitely outside cwd should be denied
+    expect(isPathInAllowedRoots('/definitely/outside/path')).toBe(false);
   });
 
   it('should allow GODOT_MCP_UNRESTRICTED to bypass', () => {

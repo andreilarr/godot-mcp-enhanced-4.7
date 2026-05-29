@@ -2,6 +2,8 @@ import type { ExecuteGdscriptResult } from '../gdscript-executor.js';
 import { textResult, errorResult } from '../types.js';
 import type { ToolResult } from '../types.js';
 import { isVerifyEligible } from '../core/tool-registry.js';
+import { readdirSync } from 'fs';
+import { join } from 'path';
 
 export const MARKER_RESULT = '___MCP_RESULT___';
 
@@ -63,6 +65,86 @@ export function gdEscape(s: string): string {
     .replace(/%/g, '%%')
     .replace(/\$/g, '\\$')
     .replace(/'/g, "\\'");
+}
+
+/**
+ * Unified GDScript value serializer.
+ *
+ * Converts a JS value into a GDScript expression string.
+ * Used by scene.ts, ui-tools.ts, animation-shared.ts, and animation-ops.ts.
+ *
+ * Returns a bare GDScript literal / constructor call:
+ *   null, true/false, 42, "string", Vector2(1,2), Vector3(1,2,3), Color(1,0,0,1)
+ *
+ * Throws on unsupported types (objects with unexpected keys, arbitrary arrays, etc.).
+ * Throws on NaN / Infinity values.
+ *
+ * @param v         The value to serialize.
+ * @param trackType Optional animation track type hint (e.g. 'rotation_3d' → Quaternion).
+ */
+export function valueToGd(v: unknown, trackType?: string): string {
+  // ── null / undefined ──
+  if (v === null || v === undefined) return 'null';
+
+  // ── boolean ──
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
+
+  // ── number (with NaN / Infinity guard) ──
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v)) throw new Error(`Non-finite number not supported: ${v}`);
+    return String(v);
+  }
+
+  // ── string ──
+  if (typeof v === 'string') return `"${gdEscape(v)}"`;
+
+  // ── array → Vector2 / Vector3 / Color ──
+  if (Array.isArray(v)) {
+    if (v.length === 2 && typeof v[0] === 'number' && typeof v[1] === 'number') {
+      if (!Number.isFinite(v[0]) || !Number.isFinite(v[1])) throw new Error('Non-finite number in array');
+      return `Vector2(${v[0]}, ${v[1]})`;
+    }
+    if (v.length === 3 && typeof v[0] === 'number' && typeof v[1] === 'number' && typeof v[2] === 'number') {
+      if (!Number.isFinite(v[0]) || !Number.isFinite(v[1]) || !Number.isFinite(v[2])) throw new Error('Non-finite number in array');
+      if (trackType === 'rotation_3d') {
+        return `Quaternion.from_euler(Vector3(${v[0]}, ${v[1]}, ${v[2]}))`;
+      }
+      return `Vector3(${v[0]}, ${v[1]}, ${v[2]})`;
+    }
+    if (v.length === 4 && v.every(el => typeof el === 'number')) {
+      if (!v.every(el => Number.isFinite(el as number))) throw new Error('Non-finite number in array');
+      return `Color(${v[0]}, ${v[1]}, ${v[2]}, ${v[3]})`;
+    }
+    // Longer arrays → JSON array literal (e.g. keyframe points, polygon vertices)
+    return `[${v.map(el => valueToGd(el)).join(', ')}]`;
+  }
+
+  // ── object → {x,y} / {x,y,z} / {r,g,b,a} ──
+  if (typeof v === 'object') {
+    const obj = v as Record<string, unknown>;
+    const keys = Object.keys(obj);
+    if (keys.some(k => !['x', 'y', 'z', 'r', 'g', 'b', 'a'].includes(k))) {
+      throw new Error(`Unsupported object keys: ${keys.filter(k => !['x', 'y', 'z', 'r', 'g', 'b', 'a'].includes(k)).join(', ')}. Allowed: {x,y}, {x,y,z}, {r,g,b,a}.`);
+    }
+    // Vector2 / Vector3
+    if (typeof obj.x === 'number' && typeof obj.y === 'number') {
+      if (!Number.isFinite(obj.x as number) || !Number.isFinite(obj.y as number)) throw new Error('Non-finite number in object');
+      if (typeof obj.z === 'number') {
+        if (!Number.isFinite(obj.z as number)) throw new Error('Non-finite number in object');
+        return `Vector3(${obj.x}, ${obj.y}, ${obj.z})`;
+      }
+      return `Vector2(${obj.x}, ${obj.y})`;
+    }
+    // Color
+    if (typeof obj.r === 'number' && typeof obj.g === 'number' && typeof obj.b === 'number') {
+      const a = typeof obj.a === 'number' ? obj.a : 1.0;
+      if (!Number.isFinite(obj.r as number) || !Number.isFinite(obj.g as number) || !Number.isFinite(obj.b as number) || !Number.isFinite(a as number)) throw new Error('Non-finite number in object');
+      return `Color(${obj.r}, ${obj.g}, ${obj.b}, ${a})`;
+    }
+    throw new Error(`Cannot convert object to GDScript literal: expected {x,y}, {x,y,z}, or {r,g,b,a}`);
+  }
+
+  throw new Error(`Cannot convert value to GDScript literal: ${typeof v}`);
 }
 
 /** Clamps a timeout value (seconds) to [min, max], defaulting on invalid input. */
@@ -348,4 +430,39 @@ export function genCheckProperties(nodePath: string, props: Record<string, unkno
   }
   lines.push('\t_mcp_output("props", JSON.stringify(_props))');
   return lines.join('\n');
+}
+
+/** Default directories to skip during recursive file scanning. */
+export const DEFAULT_SKIP_DIRS = ['.godot', '.import', 'addons', 'tools'];
+
+/** Recursively scan a directory for files matching extensions, skipping common generated dirs.
+ *  @param rootDir Absolute path to start scanning
+ *  @param extensions File extensions to include (e.g. ['.gd', '.tscn'])
+ *  @param options.skipDirs Directory names to skip (default: DEFAULT_SKIP_DIRS)
+ *  @param options.maxDepth Maximum recursion depth (default: 15)
+ *  @param options.skipDotFiles Skip files/dirs starting with '.' (default: true) */
+export function scanFiles(
+  rootDir: string,
+  extensions: string[],
+  options: { skipDirs?: string[]; maxDepth?: number; skipDotFiles?: boolean } = {},
+): string[] {
+  const { skipDirs = DEFAULT_SKIP_DIRS, maxDepth = 15, skipDotFiles = true } = options;
+  const results: string[] = [];
+  function scan(dir: string, depth: number): void {
+    if (depth > maxDepth) return;
+    try {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (skipDotFiles && entry.name.startsWith('.')) continue;
+        if (skipDirs.includes(entry.name)) continue;
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          scan(full, depth + 1);
+        } else if (extensions.some(ext => entry.name.endsWith(ext))) {
+          results.push(full);
+        }
+      }
+    } catch (err) { console.debug('[shared] scanFiles:', err); }
+  }
+  scan(rootDir, 0);
+  return results;
 }

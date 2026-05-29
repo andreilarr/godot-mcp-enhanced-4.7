@@ -243,20 +243,30 @@ ${tilemapCall('set_cell', 'c, sid, ac, new_alt', layer)}
 
 // ─── Tool Registration ──────────────────────────────────────────────────────
 
+const ACTIONS = [
+  'tilemap_read', 'tilemap_set_cell', 'tilemap_erase_cell', 'tilemap_fill_rect',
+  'tilemap_clear', 'tilemap_copy', 'tilemap_paste', 'tilemap_set_transform',
+] as const;
+
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'tilemap_read',
-      description: `Read tile data from TileMap/TileMapLayer. ${NON_PERSIST}`,
+      name: 'tilemap',
+      description: `TileMap/TileMapLayer 图块操作。读取: tilemap_read, tilemap_copy。写入: tilemap_set_cell, tilemap_erase_cell, tilemap_fill_rect, tilemap_clear, tilemap_paste, tilemap_set_transform。${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
           project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'TileMap/TileMapLayer 节点路径（scene tree path，如 root/Level/TileMap）' },
-          layer: { type: 'number', description: '图层索引（可选，默认 0）' },
+          action: {
+            type: 'string',
+            enum: [...ACTIONS],
+            description: '操作类型',
+          },
+          node_path: { type: 'string', description: 'TileMap/TileMapLayer 节点路径（如 root/Level/TileMap）' },
+          layer: { type: 'number', description: '图层索引（可选，默认 0）。tilemap_read/set_cell/erase_cell/fill_rect/copy/paste/set_transform 使用；tilemap_clear 不传则清除所有图层' },
           region: {
             type: 'object',
-            description: '读取区域 Rect2i（可选，不传则读取全部已用图块）',
+            description: '矩形区域 Rect2i。tilemap_read: 读取区域（可选，不传则读取全部已用图块）；tilemap_fill_rect: 填充区域',
             properties: {
               x: { type: 'number', description: '起始 X 坐标' },
               y: { type: 'number', description: '起始 Y 坐标' },
@@ -265,117 +275,9 @@ export function getToolDefinitions(): Tool[] {
             },
             required: ['x', 'y', 'w', 'h'],
           },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path'],
-      },
-    },
-    {
-      name: 'tilemap_set_cell',
-      description: `Set a single tile on TileMap/TileMapLayer. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'TileMap/TileMapLayer 节点路径' },
-          coords: {
-            type: 'object',
-            description: '图块坐标 Vector2i',
-            properties: { x: { type: 'number' }, y: { type: 'number' } },
-            required: ['x', 'y'],
-          },
-          source_id: { type: 'number', description: 'TileSet 源 ID' },
-          atlas_coords: {
-            type: 'object',
-            description: '图集坐标 Vector2i',
-            properties: { x: { type: 'number' }, y: { type: 'number' } },
-            required: ['x', 'y'],
-          },
-          alternative_tile: { type: 'number', description: '替代图块索引（可选，默认 0）' },
-          layer: { type: 'number', description: '图层索引（可选，默认 0）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'coords', 'source_id', 'atlas_coords'],
-      },
-    },
-    {
-      name: 'tilemap_erase_cell',
-      description: `Erase a single tile on TileMap/TileMapLayer. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'TileMap/TileMapLayer 节点路径' },
-          coords: {
-            type: 'object',
-            description: '图块坐标 Vector2i',
-            properties: { x: { type: 'number' }, y: { type: 'number' } },
-            required: ['x', 'y'],
-          },
-          layer: { type: 'number', description: '图层索引（可选，默认 0）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'coords'],
-      },
-    },
-    {
-      name: 'tilemap_fill_rect',
-      description: `Fill a rectangular region with a tile. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'TileMap/TileMapLayer 节点路径' },
-          region: {
-            type: 'object',
-            description: '填充区域 Rect2i',
-            properties: {
-              x: { type: 'number', description: '起始 X 坐标' },
-              y: { type: 'number', description: '起始 Y 坐标' },
-              w: { type: 'number', description: '宽度（必须 > 0）' },
-              h: { type: 'number', description: '高度（必须 > 0）' },
-            },
-            required: ['x', 'y', 'w', 'h'],
-          },
-          source_id: { type: 'number', description: 'TileSet 源 ID' },
-          atlas_coords: {
-            type: 'object',
-            description: '图集坐标 Vector2i',
-            properties: { x: { type: 'number' }, y: { type: 'number' } },
-            required: ['x', 'y'],
-          },
-          alternative_tile: { type: 'number', description: '替代图块索引（可选，默认 0）' },
-          layer: { type: 'number', description: '图层索引（可选，默认 0）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'region', 'source_id', 'atlas_coords'],
-      },
-    },
-    {
-      name: 'tilemap_clear',
-      description: `Clear all tiles on TileMap/TileMapLayer. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'TileMap/TileMapLayer 节点路径' },
-          layer: { type: 'number', description: '图层索引。不传则清除所有图层；传值则仅清除指定图层' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path'],
-      },
-    },
-    {
-      name: 'tilemap_copy',
-      description: `Copy tile data from a rectangular region on TileMap/TileMapLayer. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'TileMap/TileMapLayer 节点路径' },
           source_region: {
             type: 'object',
-            description: '源区域 Rect2i',
+            description: '源区域 Rect2i。tilemap_copy 使用',
             properties: {
               x: { type: 'number', description: '起始 X 坐标' },
               y: { type: 'number', description: '起始 Y 坐标' },
@@ -384,29 +286,29 @@ export function getToolDefinitions(): Tool[] {
             },
             required: ['x', 'y', 'w', 'h'],
           },
-          layer: { type: 'number', description: '图层索引（可选，默认 0）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'source_region'],
-      },
-    },
-    {
-      name: 'tilemap_paste',
-      description: `Paste a tile pattern at target position on TileMap/TileMapLayer. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'TileMap/TileMapLayer 节点路径' },
+          coords: {
+            type: 'object',
+            description: '图块坐标 Vector2i。tilemap_set_cell/erase_cell/set_transform 使用',
+            properties: { x: { type: 'number' }, y: { type: 'number' } },
+            required: ['x', 'y'],
+          },
+          source_id: { type: 'number', description: 'TileSet 源 ID。tilemap_set_cell/fill_rect 使用' },
+          atlas_coords: {
+            type: 'object',
+            description: '图集坐标 Vector2i。tilemap_set_cell/fill_rect 使用',
+            properties: { x: { type: 'number' }, y: { type: 'number' } },
+            required: ['x', 'y'],
+          },
+          alternative_tile: { type: 'number', description: '替代图块索引（可选，默认 0）。tilemap_set_cell/fill_rect 使用' },
           target: {
             type: 'object',
-            description: '粘贴目标坐标 Vector2i',
+            description: '粘贴目标坐标 Vector2i。tilemap_paste 使用',
             properties: { x: { type: 'number' }, y: { type: 'number' } },
             required: ['x', 'y'],
           },
           pattern: {
             type: 'object',
-            description: '图块图案（由 tilemap_copy 返回的 pattern 对象）',
+            description: '图块图案（由 tilemap_copy 返回的 pattern 对象）。tilemap_paste 使用',
             properties: {
               cells: {
                 type: 'array',
@@ -426,33 +328,12 @@ export function getToolDefinitions(): Tool[] {
               },
             },
           },
-          layer: { type: 'number', description: '图层索引（可选，默认 0）' },
+          flip_h: { type: 'boolean', description: '水平翻转（可选，默认 false）。tilemap_set_transform 使用' },
+          flip_v: { type: 'boolean', description: '垂直翻转（可选，默认 false）。tilemap_set_transform 使用' },
+          transpose: { type: 'boolean', description: '转置（可选，默认 false）。tilemap_set_transform 使用' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'node_path', 'target', 'pattern'],
-      },
-    },
-    {
-      name: 'tilemap_set_transform',
-      description: `Set tile flip/rotation transform. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'TileMap/TileMapLayer 节点路径' },
-          coords: {
-            type: 'object',
-            description: '图块坐标 Vector2i',
-            properties: { x: { type: 'number' }, y: { type: 'number' } },
-            required: ['x', 'y'],
-          },
-          flip_h: { type: 'boolean', description: '水平翻转（可选，默认 false）' },
-          flip_v: { type: 'boolean', description: '垂直翻转（可选，默认 false）' },
-          transpose: { type: 'boolean', description: '转置（可选，默认 false）' },
-          layer: { type: 'number', description: '图层索引（可选，默认 0）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'coords'],
+        required: ['project_path', 'action'],
       },
     },
   ];
@@ -460,15 +341,13 @@ export function getToolDefinitions(): Tool[] {
 
 // ─── Tool Handler ───────────────────────────────────────────────────────────
 
-const TOOL_NAMES = [
-  'tilemap_read', 'tilemap_set_cell', 'tilemap_erase_cell', 'tilemap_fill_rect',
-  'tilemap_clear', 'tilemap_copy', 'tilemap_paste', 'tilemap_set_transform',
-] as const;
-
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'tilemap') return null;
+
+  const action = args.action as string;
+  if (!action) return opsErrorResult('INVALID_PARAMS', 'action is required');
 
   try {
     const projectPath = requireProjectPath(args);
@@ -476,7 +355,7 @@ export async function handleTool(
     const loadAutoloads = args.load_autoloads !== false;
     let script: string;
 
-    switch (name) {
+    switch (action) {
       case 'tilemap_read': {
         const nodePath = normalizeNodePath(args.node_path as string);
         const layer = args.layer as number | undefined;
@@ -579,12 +458,5 @@ export async function handleTool(
 }
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  tilemap_read: { readonly: true, long_running: false },
-  tilemap_set_cell: { readonly: false, long_running: false },
-  tilemap_erase_cell: { readonly: false, long_running: false },
-  tilemap_fill_rect: { readonly: false, long_running: false },
-  tilemap_clear: { readonly: false, long_running: false },
-  tilemap_copy: { readonly: true, long_running: false },
-  tilemap_paste: { readonly: false, long_running: false },
-  tilemap_set_transform: { readonly: false, long_running: false },
+  tilemap: { readonly: false, long_running: false },
 };

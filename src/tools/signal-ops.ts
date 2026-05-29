@@ -13,7 +13,7 @@ const ERROR_CODES = {
   SCRIPT_EXEC_FAILED: 'SCRIPT_EXEC_FAILED',
 } as const;
 
-export const TOOL_NAMES = [
+const ACTIONS = [
   'signal_connect',
   'signal_disconnect',
   'signal_emit',
@@ -114,64 +114,27 @@ func _initialize():
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'signal_connect',
-      description: `Connect a signal between two nodes. ${NON_PERSIST}`,
+      name: 'signal',
+      description: `信号操作。connect/disconnect: 连接/断开信号。emit: 发射信号（参数仅基本类型）。list: 列出节点可用信号。${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
           project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          source_path: { type: 'string', description: '源节点路径（scene tree path，如 root/Player）' },
-          signal_name: { type: 'string', description: '信号名称' },
-          target_path: { type: 'string', description: '目标节点路径' },
-          method_name: { type: 'string', description: '目标方法名称' },
-          flags: { type: 'number', description: '连接标志（可选，默认 0）' },
+          action: {
+            type: 'string',
+            enum: [...ACTIONS],
+            description: '操作类型',
+          },
+          source_path: { type: 'string', description: 'connect/disconnect/emit: 源节点路径（如 root/Player）' },
+          signal_name: { type: 'string', description: 'connect/disconnect/emit: 信号名称' },
+          target_path: { type: 'string', description: 'connect/disconnect: 目标节点路径' },
+          method_name: { type: 'string', description: 'connect/disconnect: 目标方法名称' },
+          flags: { type: 'number', description: 'connect: 连接标志（可选，默认 0）' },
+          args: { type: 'array', description: 'emit: 信号参数（仅 string/number/bool/null）', items: {} },
+          node_path: { type: 'string', description: 'list: 节点路径' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'source_path', 'signal_name', 'target_path', 'method_name'],
-      },
-    },
-    {
-      name: 'signal_disconnect',
-      description: `Disconnect a signal between two nodes. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          source_path: { type: 'string', description: '源节点路径' },
-          signal_name: { type: 'string', description: '信号名称' },
-          target_path: { type: 'string', description: '目标节点路径' },
-          method_name: { type: 'string', description: '目标方法名称' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'source_path', 'signal_name', 'target_path', 'method_name'],
-      },
-    },
-    {
-      name: 'signal_emit',
-      description: `Emit a node signal. Args only support basic types (string/number/bool/null). ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          source_path: { type: 'string', description: '源节点路径' },
-          signal_name: { type: 'string', description: '信号名称' },
-          args: { type: 'array', description: '信号参数（仅 string/number/bool/null）', items: {} },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'source_path', 'signal_name'],
-      },
-    },
-    {
-      name: 'signal_list',
-      description: `List available signals on a node. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: '节点路径' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path'],
+        required: ['project_path', 'action'],
       },
     },
   ];
@@ -182,7 +145,10 @@ export function getToolDefinitions(): Tool[] {
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'signal') return null;
+
+  const action = args.action as string;
+  if (!action) return opsErrorResult('INVALID_PARAMS', 'action is required');
 
   try {
     const projectPath = requireProjectPath(args);
@@ -190,7 +156,7 @@ export async function handleTool(
     const loadAutoloads = args.load_autoloads !== false;
     let script: string;
 
-    switch (name) {
+    switch (action) {
       case 'signal_connect': {
         const sourcePath = normalizeNodePath(args.source_path as string);
         const signalName = args.signal_name as string;
@@ -259,8 +225,5 @@ export async function handleTool(
 // ─── Tool Meta ──────────────────────────────────────────────────────────────
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  signal_connect: { readonly: false, long_running: false },
-  signal_disconnect: { readonly: false, long_running: false },
-  signal_emit: { readonly: false, long_running: false },
-  signal_list: { readonly: true, long_running: false },
+  signal: { readonly: false, long_running: false },
 };

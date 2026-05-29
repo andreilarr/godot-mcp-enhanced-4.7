@@ -2,12 +2,12 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
-import { normalizeNodePath, gdEscape, sanitizeResPath } from './shared.js';
+import { normalizeNodePath, gdEscape, sanitizeResPath, valueToGd } from './shared.js';
 import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } from './shared.js';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
-export const TOOL_NAMES = [
+const ACTIONS = [
   'ui_create_control',
   'ui_set_layout',
   'ui_get_layout',
@@ -65,31 +65,20 @@ const DRAW_OP_KINDS = ['rect', 'circle', 'line', 'arc', 'polygon', 'polyline', '
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-function serializePropertyValue(value: unknown): string {
-  if (value === null || value === undefined) return 'null';
-  if (typeof value === 'boolean') return String(value);
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new Error(`Non-finite number not supported: ${value}`);
-    return String(value);
-  }
-  if (typeof value === 'string') return `"${gdEscape(value)}"`;
-  throw new Error(`Unsupported property type: ${typeof value}`);
-}
-
 function genPropertyLines(properties: Record<string, unknown>): string {
   let lines = '';
   for (const [key, value] of Object.entries(properties)) {
-    lines += `\n\tnode.set("${gdEscape(key)}", ${serializePropertyValue(value)})`;
+    lines += `\n\tnode.set("${gdEscape(key)}", ${valueToGd(value)})`;
   }
   return lines;
 }
 
+/** Convert a color value ([r,g,b] or [r,g,b,a]) to a GDScript Color() expression. */
 function colorToGd(c: unknown): string {
-  if (!Array.isArray(c) || c.length < 3) {
-    throw new Error('Color must be [r, g, b] or [r, g, b, a] (values 0-1)');
+  if (Array.isArray(c) && (c.length === 3 || c.length === 4)) {
+    return valueToGd(c.length === 3 ? [c[0], c[1], c[2], 1] : c) as string;
   }
-  const a = c.length >= 4 ? c[3] : 1;
-  return `Color(${c[0]}, ${c[1]}, ${c[2]}, ${a})`;
+  return valueToGd(c ?? [1, 1, 1, 1]);
 }
 
 // ─── GDScript Generators ───────────────────────────────────────────────────
@@ -776,7 +765,7 @@ function uiNodeToGd(spec: UiNodeSpec, parentVar: string, ownerVar: string, inden
     : '';
   const propLines = spec.properties && Object.keys(spec.properties).length > 0
     ? '\n' + Object.entries(spec.properties).map(
-        ([k, v]) => `${indent}node.set("${gdEscape(k)}", ${serializePropertyValue(v)})`
+        ([k, v]) => `${indent}node.set("${gdEscape(k)}", ${valueToGd(v)})`
       ).join('\n')
     : '';
 
@@ -825,7 +814,7 @@ ${indent}node.name = "${gdEscape(spec.name)}"`;
 
   if (spec.properties && Object.keys(spec.properties).length > 0) {
     lines += '\n' + Object.entries(spec.properties).map(
-      ([k, v]) => `${indent}node.set("${gdEscape(k)}", ${serializePropertyValue(v)})`
+      ([k, v]) => `${indent}node.set("${gdEscape(k)}", ${valueToGd(v)})`
     ).join('\n');
   }
 
@@ -1056,42 +1045,34 @@ ${setLine}
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'ui_create_control',
-      description: `Add a UI Control node to a scene. ${NON_PERSIST}`,
+      name: 'ui',
+      description: `UI 操作。节点: ui_create_control, ui_container_add, ui_build_layout。布局: ui_set_layout, ui_get_layout, ui_anchor_preset。主题: ui_set_theme, theme_create, theme_set_property。绘图: ui_draw_recipe。${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
           project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          scene_path: { type: 'string', description: 'Scene path relative to project' },
+          action: {
+            type: 'string',
+            enum: [...ACTIONS],
+            description: '操作类型',
+          },
+          scene_path: { type: 'string', description: '场景路径（相对项目路径）。ui_set_theme/theme_set_property 可选' },
+          node_path: { type: 'string', description: '节点路径（ui_set_layout/ui_get_layout/ui_anchor_preset/ui_set_theme/ui_container_add/ui_draw_recipe）' },
           node_type: {
             type: 'string',
             enum: [...CONTROL_TYPES],
-            description: 'Control 子类类型',
+            description: 'ui_create_control/ui_container_add: Control 子类类型',
           },
-          node_name: { type: 'string', description: '新节点名称' },
-          parent_node_path: { type: 'string', description: '父节点路径（默认 root）' },
+          node_name: { type: 'string', description: 'ui_create_control: 新节点名称' },
+          parent_node_path: { type: 'string', description: 'ui_create_control: 父节点路径（默认 root）' },
           properties: {
             type: 'object',
-            description: '可选属性（支持 string/number/bool/null）',
+            description: 'ui_create_control: 可选属性（支持 string/number/bool/null）',
             additionalProperties: true,
           },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'scene_path', 'node_type', 'node_name'],
-      },
-    },
-    {
-      name: 'ui_set_layout',
-      description: `Set layout properties (anchors, offsets, min size) on a Control node. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          scene_path: { type: 'string', description: 'Scene path relative to project' },
-          node_path: { type: 'string', description: 'Control 节点路径' },
           anchors: {
             type: 'object',
-            description: '锚点 {left, right, top, bottom}，值 0-1',
+            description: 'ui_set_layout: 锚点 {left, right, top, bottom}，值 0-1',
             properties: {
               left: { type: 'number' },
               right: { type: 'number' },
@@ -1101,7 +1082,7 @@ export function getToolDefinitions(): Tool[] {
           },
           offsets: {
             type: 'object',
-            description: '边距 {left, right, top, bottom}，像素值',
+            description: 'ui_set_layout: 边距 {left, right, top, bottom}，像素值',
             properties: {
               left: { type: 'number' },
               right: { type: 'number' },
@@ -1111,163 +1092,67 @@ export function getToolDefinitions(): Tool[] {
           },
           min_size: {
             type: 'object',
-            description: '最小尺寸 {x, y}',
+            description: 'ui_set_layout: 最小尺寸 {x, y}',
             properties: { x: { type: 'number' }, y: { type: 'number' } },
           },
           custom_minimum_size: {
             type: 'object',
-            description: '自定义最小尺寸 {x, y}',
+            description: 'ui_set_layout: 自定义最小尺寸 {x, y}',
             properties: { x: { type: 'number' }, y: { type: 'number' } },
           },
           grow_direction: {
             type: 'string',
             enum: ['both', 'up', 'down', 'left', 'right'],
-            description: '增长方向',
+            description: 'ui_set_layout: 增长方向',
           },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'scene_path', 'node_path'],
-      },
-    },
-    {
-      name: 'ui_get_layout',
-      description: `Get layout info (anchors, offsets, position, size) of a Control node. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          scene_path: { type: 'string', description: 'Scene path relative to project' },
-          node_path: { type: 'string', description: 'Control 节点路径' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'scene_path', 'node_path'],
-      },
-    },
-    {
-      name: 'ui_anchor_preset',
-      description: `Apply an anchor preset to a Control node. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          scene_path: { type: 'string', description: 'Scene path relative to project' },
-          node_path: { type: 'string', description: 'Control 节点路径' },
           preset: {
             type: 'string',
             enum: Object.keys(ANCHOR_PRESETS),
-            description: '锚点预设名称',
+            description: 'ui_anchor_preset: 锚点预设名称',
           },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'scene_path', 'node_path', 'preset'],
-      },
-    },
-    {
-      name: 'ui_set_theme',
-      description: `Set/create/save/load Theme on a Control node. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          scene_path: { type: 'string', description: 'Scene path relative to project' },
-          node_path: { type: 'string', description: 'Control 节点路径' },
-          action: {
+          theme_action: {
             type: 'string',
             enum: ['set_params', 'create', 'save', 'load'],
-            description: '操作类型：set_params 设置属性 | create 创建新 Theme | save 保存到 .tres | load 从 .tres 加载',
+            description: 'ui_set_theme: 操作类型（set_params/create/save/load）',
           },
-          theme_path: { type: 'string', description: 'Theme 资源路径（save/load 时必填，res://themes/xxx.tres）' },
+          theme_path: { type: 'string', description: 'ui_set_theme: Theme 资源路径（save/load 时必填）' },
           params: {
             type: 'object',
-            description: 'set_params 时的键值对（number/bool/string/array[4]→Color）',
+            description: 'ui_set_theme(set_params): 键值对（number/bool/string/array[4]→Color）',
             additionalProperties: true,
           },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'scene_path', 'node_path', 'action'],
-      },
-    },
-    {
-      name: 'ui_container_add',
-      description: `Add a child Control node to a Container. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          scene_path: { type: 'string', description: 'Scene path relative to project' },
-          node_path: { type: 'string', description: 'Container 节点路径' },
           child_type: {
             type: 'string',
             enum: [...CONTROL_TYPES],
-            description: '子节点 Control 类型',
+            description: 'ui_container_add: 子节点 Control 类型',
           },
-          child_name: { type: 'string', description: '子节点名称' },
+          child_name: { type: 'string', description: 'ui_container_add: 子节点名称' },
           child_properties: {
             type: 'object',
-            description: '子节点属性（支持 string/number/bool/null）',
+            description: 'ui_container_add: 子节点属性（支持 string/number/bool/null）',
             additionalProperties: true,
           },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'scene_path', 'node_path', 'child_type', 'child_name'],
-      },
-    },
-    {
-      name: 'theme_create',
-      description: `Create empty Theme or extract Theme from a node. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          action: {
+          theme_create_action: {
             type: 'string',
             enum: ['create', 'extract'],
-            description: 'create 创建空 Theme | extract 从节点提取 Theme',
+            description: 'theme_create: 操作类型（create 创建空 Theme | extract 从节点提取）',
           },
-          source_node_path: { type: 'string', description: '源节点路径（extract 时必填）' },
-          scene_path: { type: 'string', description: 'Scene file path (res://...)' },
-          save_path: { type: 'string', description: '可选，保存到 .tres 文件路径（res://themes/xxx.tres）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'scene_path', 'action'],
-      },
-    },
-    {
-      name: 'theme_set_property',
-      description: `Set Theme property (font, color, constant, stylebox). ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          theme_node_path: { type: 'string', description: '拥有 Theme 的节点路径' },
+          source_node_path: { type: 'string', description: 'theme_create(extract): 源节点路径' },
+          save_path: { type: 'string', description: 'theme_create: 可选保存路径（res://themes/xxx.tres）' },
+          theme_node_path: { type: 'string', description: 'theme_set_property: 拥有 Theme 的节点路径' },
           item_type: {
             type: 'string',
             enum: ['default_font', 'color', 'constant', 'stylebox'],
-            description: '属性类型',
+            description: 'theme_set_property: 属性类型',
           },
-          name: { type: 'string', description: '属性名' },
-          theme_type: { type: 'string', description: 'Theme 类型名（可选）' },
+          prop_name: { type: 'string', description: 'theme_set_property: 属性名' },
+          theme_type: { type: 'string', description: 'theme_set_property: Theme 类型名（可选）' },
           value: {
-            description: '属性值：default_font/stylebox 为资源路径字符串，color 为 [r,g,b,a] 数组，constant 为数字',
+            description: 'theme_set_property: 属性值（default_font/stylebox 为资源路径，color 为 [r,g,b,a]，constant 为数字）',
           },
-          scene_path: { type: 'string', description: 'Scene path（可选，如提供则先加载场景）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'theme_node_path', 'item_type', 'name', 'value'],
-      },
-    },
-    {
-      name: 'ui_draw_recipe',
-      description: `Attach declarative vector draw operations to a Control node via _draw(). Bypasses layout calculation. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          scene_path: { type: 'string', description: 'Scene path relative to project' },
-          node_path: { type: 'string', description: 'Control 节点路径' },
           ops: {
             type: 'array',
-            description: '绘图操作数组（最多 200 个）',
+            description: 'ui_draw_recipe: 绘图操作数组（最多 200 个）',
             items: {
               type: 'object',
               properties: {
@@ -1290,23 +1175,10 @@ export function getToolDefinitions(): Tool[] {
               required: ['kind'],
             },
           },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'scene_path', 'node_path', 'ops'],
-      },
-    },
-    {
-      name: 'ui_build_layout',
-      description: `Build a UI tree from a nested spec. ui_create_control is the single-node version; this supports recursive tree creation. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          scene_path: { type: 'string', description: 'Scene path relative to project' },
-          parent_path: { type: 'string', description: '父节点路径' },
+          parent_path: { type: 'string', description: 'ui_build_layout: 父节点路径' },
           tree: {
             type: 'object',
-            description: 'UI 节点树（最大深度 10）',
+            description: 'ui_build_layout: UI 节点树（最大深度 10）',
             properties: {
               type: { type: 'string', enum: [...CONTROL_TYPES], description: 'Control 子类' },
               name: { type: 'string', description: '节点名称' },
@@ -1352,7 +1224,7 @@ export function getToolDefinitions(): Tool[] {
           },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'scene_path', 'parent_path', 'tree'],
+        required: ['project_path', 'action'],
       },
     },
   ];
@@ -1363,7 +1235,10 @@ export function getToolDefinitions(): Tool[] {
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'ui') return null;
+
+  const action = args.action as string;
+  if (!action) return opsErrorResult('INVALID_PARAMS', 'action is required');
 
   try {
     const projectPath = requireProjectPath(args);
@@ -1371,7 +1246,7 @@ export async function handleTool(
     const loadAutoloads = args.load_autoloads !== false;
     let script: string;
 
-    switch (name) {
+    switch (action) {
       case 'ui_create_control': {
         const scenePath = resolveWithinRoot(projectPath, normalizeUserProjectPath(args.scene_path as string));
         const nodeType = args.node_type as string;
@@ -1420,14 +1295,14 @@ export async function handleTool(
       case 'ui_set_theme': {
         const scenePath = resolveWithinRoot(projectPath, normalizeUserProjectPath(args.scene_path as string));
         const nodePath = normalizeNodePath(args.node_path as string);
-        const action = args.action as string;
-        if (!['set_params', 'create', 'save', 'load'].includes(action)) {
+        const themeAction = args.theme_action as string;
+        if (!['set_params', 'create', 'save', 'load'].includes(themeAction)) {
           return opsErrorResult(ERROR_CODES.INVALID_PARAMS,
-            `Invalid action "${action}". Must be one of: set_params, create, save, load`);
+            `Invalid theme_action "${themeAction}". Must be one of: set_params, create, save, load`);
         }
         const themePath = args.theme_path as string | undefined;
-        if ((action === 'save' || action === 'load') && !themePath) {
-          return opsErrorResult(ERROR_CODES.INVALID_PARAMS, `theme_path is required for ${action} action`);
+        if ((themeAction === 'save' || themeAction === 'load') && !themePath) {
+          return opsErrorResult(ERROR_CODES.INVALID_PARAMS, `theme_path is required for ${themeAction} action`);
         }
         if (themePath) {
           try { sanitizeResPath(themePath, 'theme_path'); } catch {
@@ -1435,7 +1310,7 @@ export async function handleTool(
           }
         }
         const params = args.params as Record<string, unknown> | undefined;
-        script = genUiSetThemeScript(scenePath, nodePath, action as 'set_params' | 'create' | 'save' | 'load', themePath, params);
+        script = genUiSetThemeScript(scenePath, nodePath, themeAction as 'set_params' | 'create' | 'save' | 'load', themePath, params);
         break;
       }
       case 'ui_container_add': {
@@ -1455,10 +1330,10 @@ export async function handleTool(
         break;
       }
       case 'theme_create': {
-        const action = args.action as string;
-        if (!['create', 'extract'].includes(action)) {
+        const themeCreateAction = args.theme_create_action as string;
+        if (!['create', 'extract'].includes(themeCreateAction)) {
           return opsErrorResult(ERROR_CODES.INVALID_PARAMS,
-            `Invalid action "${action}". Must be one of: create, extract`);
+            `Invalid theme_create_action "${themeCreateAction}". Must be one of: create, extract`);
         }
         const sourceNodePath = args.source_node_path as string | undefined;
         const savePath = args.save_path as string | undefined;
@@ -1467,7 +1342,7 @@ export async function handleTool(
             return opsErrorResult(ERROR_CODES.INVALID_PARAMS, 'save_path contains path traversal');
           }
         }
-        if (action === 'extract' && !sourceNodePath) {
+        if (themeCreateAction === 'extract' && !sourceNodePath) {
           return opsErrorResult(ERROR_CODES.INVALID_PARAMS, 'source_node_path is required for extract action');
         }
         // theme_create needs a scene context — use scene_path if provided, otherwise fallback
@@ -1479,7 +1354,7 @@ export async function handleTool(
           return opsErrorResult(ERROR_CODES.INVALID_PARAMS, 'scene_path is required for theme_create');
         }
         const normalizedSourcePath = sourceNodePath ? normalizeNodePath(sourceNodePath) : undefined;
-        script = genThemeCreateScript(resolvedScenePath, action as 'create' | 'extract', normalizedSourcePath, savePath);
+        script = genThemeCreateScript(resolvedScenePath, themeCreateAction as 'create' | 'extract', normalizedSourcePath, savePath);
         break;
       }
       case 'theme_set_property': {
@@ -1489,9 +1364,9 @@ export async function handleTool(
           return opsErrorResult(ERROR_CODES.INVALID_THEME_ITEM_TYPE,
             `Invalid item_type "${itemType}". Must be one of: default_font, color, constant, stylebox`);
         }
-        const propName = args.name as string;
+        const propName = (args.prop_name || args.name) as string;
         if (!propName) {
-          return opsErrorResult(ERROR_CODES.INVALID_THEME_PROPERTY, 'name is required');
+          return opsErrorResult(ERROR_CODES.INVALID_THEME_PROPERTY, 'prop_name (or name) is required');
         }
         const value = args.value;
         if (value === undefined || value === null) {
@@ -1582,16 +1457,7 @@ export async function handleTool(
 // ─── Tool Meta ──────────────────────────────────────────────────────────────
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  ui_create_control: { readonly: false, long_running: false },
-  ui_set_layout: { readonly: false, long_running: false },
-  ui_get_layout: { readonly: true, long_running: false },
-  ui_anchor_preset: { readonly: false, long_running: false },
-  ui_set_theme: { readonly: false, long_running: false },
-  ui_container_add: { readonly: false, long_running: false },
-  theme_create: { readonly: false, long_running: false },
-  theme_set_property: { readonly: false, long_running: false },
-  ui_draw_recipe: { readonly: false, long_running: false },
-  ui_build_layout: { readonly: false, long_running: false },
+  ui: { readonly: false, long_running: false },
 };
 
 export { colorToGd };

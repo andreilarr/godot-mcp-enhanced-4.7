@@ -53,8 +53,9 @@ describe('Level B: Script editing', () => {
 
   // 用例 1: write_script — 创建新脚本文件
   it('write new script', async () => {
-    const result = await script.handleTool('write_script', {
+    const result = await script.handleTool('script', {
       project_path: dirRef.path,
+      action: 'write_script',
       script_path: 'scripts/new_script.gd',
       content: 'extends Node2D\n\nfunc _ready():\n\tprint("hello")\n',
     }, ctx);
@@ -65,8 +66,9 @@ describe('Level B: Script editing', () => {
   // 用例 2: edit_script — search_and_replace 模式替换内容
   it('search and replace edit', async () => {
     const scriptPath = 'scripts/main.gd';
-    const result = await script.handleTool('edit_script', {
+    const result = await script.handleTool('script', {
       project_path: dirRef.path,
+      action: 'edit_script',
       script_path: scriptPath,
       start_line: 1,
       end_line: 1,
@@ -84,8 +86,9 @@ describe('Level B: Script editing', () => {
       { file: 'scripts/main.gd', errors: [], warnings: [] },
     ]);
 
-    const result = await validation.handleTool('validate_scripts', {
+    const result = await validation.handleTool('validation', {
       project_path: dirRef.path,
+      action: 'validate_scripts',
       scripts: ['scripts/main.gd'],
     }, ctx);
     expect(!result.isError).toBeTruthy();
@@ -97,8 +100,9 @@ describe('Level B: Script editing', () => {
 
   // 用例 4: edit_script — 不存在的文件应返回错误
   it('edit nonexistent script', async () => {
-    const result = await script.handleTool('edit_script', {
+    const result = await script.handleTool('script', {
       project_path: dirRef.path,
+      action: 'edit_script',
       script_path: 'scripts/DOES_NOT_EXIST.gd',
       start_line: 1,
       end_line: 1,

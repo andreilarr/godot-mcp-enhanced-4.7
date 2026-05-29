@@ -1,65 +1,53 @@
-import { expect, vi, beforeEach, afterEach } from 'vitest';
+import { expect, vi } from 'vitest';
 import { getToolDefinitions, handleTool, TOOL_META } from '../src/tools/game-bridge.js';
 
 // ─── Tool definition tests ──────────────────────────────────────────────────
 
 describe('game-bridge tool definitions', () => {
   const tools = getToolDefinitions();
-  const names = tools.map(t => t.name);
 
-  it('has 6 tools', () => {
-    expect(tools.length).toBe(6);
+  it('has 1 merged tool', () => {
+    expect(tools.length).toBe(1);
   });
 
-  it('includes game_bridge_install', () => {
-    expect(names.includes('game_bridge_install')).toBeTruthy();
+  it('tool name is "game"', () => {
+    expect(tools[0].name).toBe('game');
   });
 
-  it('includes game_bridge_uninstall', () => {
-    expect(names.includes('game_bridge_uninstall')).toBeTruthy();
+  it('tool has action enum with 6 operations', () => {
+    const actionEnum = tools[0].inputSchema.properties.action.enum;
+    expect(actionEnum).toEqual([
+      'game_bridge_install',
+      'game_bridge_uninstall',
+      'game_query',
+      'game_write',
+      'game_input',
+      'game_wait',
+    ]);
   });
 
-  it('includes game_query', () => {
-    expect(names.includes('game_query')).toBeTruthy();
-  });
-
-  it('includes game_write', () => {
-    expect(names.includes('game_write')).toBeTruthy();
-  });
-
-  it('includes game_input', () => {
-    expect(names.includes('game_input')).toBeTruthy();
-  });
-
-  it('includes game_wait', () => {
-    expect(names.includes('game_wait')).toBeTruthy();
-  });
-
-  it('all tools have required inputSchema', () => {
-    for (const tool of tools) {
-      expect(tool.inputSchema).toBeTruthy();
-      expect(tool.inputSchema.properties).toBeTruthy();
-    }
+  it('tool has required inputSchema', () => {
+    expect(tools[0].inputSchema).toBeTruthy();
+    expect(tools[0].inputSchema.properties).toBeTruthy();
+    expect(tools[0].inputSchema.required).toContain('project_path');
+    expect(tools[0].inputSchema.required).toContain('action');
   });
 });
 
 // ─── TOOL_META tests ────────────────────────────────────────────────────────
 
 describe('game-bridge TOOL_META', () => {
-  it('game_query is readonly', () => {
-    expect(TOOL_META.game_query.readonly).toBe(true);
+  it('has single entry for "game"', () => {
+    expect(Object.keys(TOOL_META).length).toBe(1);
+    expect(TOOL_META.game).toBeDefined();
   });
 
-  it('game_write is not readonly', () => {
-    expect(TOOL_META.game_write.readonly).toBe(false);
+  it('game is not readonly', () => {
+    expect(TOOL_META.game.readonly).toBe(false);
   });
 
-  it('game_input is not readonly', () => {
-    expect(TOOL_META.game_input.readonly).toBe(false);
-  });
-
-  it('game_wait is readonly', () => {
-    expect(TOOL_META.game_wait.readonly).toBe(true);
+  it('game is not long_running', () => {
+    expect(TOOL_META.game.long_running).toBe(false);
   });
 });
 
@@ -74,7 +62,7 @@ describe('game-bridge handleTool routing', () => {
   });
 
   it('rejects unknown method for game_query', async () => {
-    const result = await handleTool('game_query', { method: 'send_key' }, mockCtx);
+    const result = await handleTool('game', { action: 'game_query', method: 'send_key' }, mockCtx);
     expect(result).toBeTruthy();
     const text = result.content?.[0]?.text ?? '';
     expect(text).toContain('Unknown method');
@@ -82,32 +70,30 @@ describe('game-bridge handleTool routing', () => {
   });
 
   it('rejects unknown method for game_write', async () => {
-    const result = await handleTool('game_write', { method: 'ping' }, mockCtx);
+    const result = await handleTool('game', { action: 'game_write', method: 'ping' }, mockCtx);
     expect(result).toBeTruthy();
     const text = result.content?.[0]?.text ?? '';
     expect(text).toContain('Unknown method');
   });
 
   it('rejects unknown method for game_input', async () => {
-    const result = await handleTool('game_input', { method: 'ping', params: {} }, mockCtx);
+    const result = await handleTool('game', { action: 'game_input', method: 'ping', params: {} }, mockCtx);
     expect(result).toBeTruthy();
     const text = result.content?.[0]?.text ?? '';
     expect(text).toContain('Unknown method');
   });
 
   it('rejects unknown method for game_wait', async () => {
-    const result = await handleTool('game_wait', { method: 'ping', params: {} }, mockCtx);
+    const result = await handleTool('game', { action: 'game_wait', method: 'ping', params: {} }, mockCtx);
     expect(result).toBeTruthy();
     const text = result.content?.[0]?.text ?? '';
     expect(text).toContain('Unknown method');
   });
 
   it('game_query accepts only read methods', async () => {
-    // These should pass method validation (will fail on connection, which is fine)
     const readMethods = ['ping', 'get_tree', 'find_nodes', 'get_node_properties', 'get_performance', 'get_viewport_info', 'take_screenshot'];
     for (const method of readMethods) {
-      const result = await handleTool('game_query', { method }, mockCtx);
-      // Should not be "Unknown method" — will be a connection error instead
+      const result = await handleTool('game', { action: 'game_query', method }, mockCtx);
       const text = result?.content?.[0]?.text ?? '';
       expect(text).not.toContain('Unknown method');
     }
@@ -116,7 +102,7 @@ describe('game-bridge handleTool routing', () => {
   it('game_write accepts only write methods', async () => {
     const writeMethods = ['set_node_property', 'call_method'];
     for (const method of writeMethods) {
-      const result = await handleTool('game_write', { method, params: {} }, mockCtx);
+      const result = await handleTool('game', { action: 'game_write', method, params: {} }, mockCtx);
       const text = result?.content?.[0]?.text ?? '';
       expect(text).not.toContain('Unknown method');
     }
@@ -125,17 +111,16 @@ describe('game-bridge handleTool routing', () => {
   it('game_query rejects write methods', async () => {
     const writeMethods = ['set_node_property', 'call_method'];
     for (const method of writeMethods) {
-      const result = await handleTool('game_query', { method }, mockCtx);
+      const result = await handleTool('game', { action: 'game_query', method }, mockCtx);
       const text = result?.content?.[0]?.text ?? '';
       expect(text).toContain('Unknown method');
     }
   });
 
   it('returns ECONNREFUSED error when bridge is not running', async () => {
-    const result = await handleTool('game_query', { method: 'ping' }, mockCtx);
+    const result = await handleTool('game', { action: 'game_query', method: 'ping' }, mockCtx);
     expect(result).toBeTruthy();
     const text = result.content?.[0]?.text ?? '';
-    // Should be either ECONNREFUSED or "Cannot connect" message
     expect(text).toMatch(/connect|ECONNREFUSED|secret not found/i);
   });
 });

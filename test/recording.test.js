@@ -1,6 +1,5 @@
 import { expect } from 'vitest';
 import {
-  TOOL_NAMES,
   getToolDefinitions,
   sanitizeRecordingFileName,
   generateRecordingFileName,
@@ -9,17 +8,44 @@ import {
   genRecordingPlayScript,
 } from '../src/tools/recording.js';
 
-// ─── TOOL_NAMES ─────────────────────────────────────────────────────────────
+// ─── getToolDefinitions ─────────────────────────────────────────────────────
 
-describe('TOOL_NAMES', () => {
-  it('contains exactly 5 recording tool names', () => {
-    expect(TOOL_NAMES.length).toBe(5);
+describe('getToolDefinitions', () => {
+  it('returns 1 merged tool definition', () => {
+    const defs = getToolDefinitions();
+    expect(defs.length).toBe(1);
   });
-  for (const name of ['recording_start', 'recording_stop', 'recording_save', 'recording_load', 'recording_play']) {
-    it(`includes ${name}`, () => {
-      expect(TOOL_NAMES.includes(name)).toBeTruthy();
-    });
-  }
+
+  it('tool name is "recording"', () => {
+    const defs = getToolDefinitions();
+    expect(defs[0].name).toBe('recording');
+  });
+
+  it('tool has action enum with 5 operations', () => {
+    const defs = getToolDefinitions();
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    expect(actionEnum).toEqual([
+      'recording_start',
+      'recording_stop',
+      'recording_save',
+      'recording_load',
+      'recording_play',
+    ]);
+  });
+
+  it('tool has required fields: action, project_path', () => {
+    const defs = getToolDefinitions();
+    expect(defs[0].inputSchema.required).toContain('action');
+    expect(defs[0].inputSchema.required).toContain('project_path');
+  });
+
+  it('tool has optional events_json, file_name, speed parameters', () => {
+    const defs = getToolDefinitions();
+    const props = defs[0].inputSchema.properties;
+    expect(props.events_json).toBeTruthy();
+    expect(props.file_name).toBeTruthy();
+    expect(props.speed).toBeTruthy();
+  });
 });
 
 // ─── sanitizeRecordingFileName ──────────────────────────────────────────────
@@ -68,7 +94,6 @@ describe('generateRecordingFileName', () => {
 
   it('includes timestamp-like portion', () => {
     const name = generateRecordingFileName();
-    // Format: recording_YYYYMMDD_HHMMSS.json
     expect(/recording_\d{8}_\d{6}\.json/.test(name)).toBeTruthy();
   });
 
@@ -146,67 +171,15 @@ describe('genRecordingPlayScript', () => {
   });
 });
 
-// ─── getToolDefinitions ─────────────────────────────────────────────────────
-
-describe('getToolDefinitions', () => {
-  it('returns 5 tool definitions', () => {
-    const defs = getToolDefinitions();
-    expect(defs.length).toBe(5);
-  });
-
-  it('each definition has a name from TOOL_NAMES', () => {
-    const defs = getToolDefinitions();
-    const names = defs.map(d => d.name);
-    for (const tn of TOOL_NAMES) {
-      expect(names.includes(tn)).toBeTruthy();
-    }
-  });
-
-  it('each definition has inputSchema with required fields', () => {
-    const defs = getToolDefinitions();
-    for (const def of defs) {
-      expect(def.inputSchema).toBeTruthy();
-      expect(def.inputSchema.required).toBeTruthy();
-    }
-  });
-
-  it('recording_start requires project_path', () => {
-    const defs = getToolDefinitions();
-    const start = defs.find(d => d.name === 'recording_start');
-    expect(start.inputSchema.required.includes('project_path')).toBeTruthy();
-  });
-
-  it('recording_save requires events_json', () => {
-    const defs = getToolDefinitions();
-    const save = defs.find(d => d.name === 'recording_save');
-    expect(save.inputSchema.required.includes('events_json')).toBeTruthy();
-  });
-
-  it('recording_load requires file_name', () => {
-    const defs = getToolDefinitions();
-    const load = defs.find(d => d.name === 'recording_load');
-    expect(load.inputSchema.required.includes('file_name')).toBeTruthy();
-  });
-
-  it('recording_play has optional speed parameter', () => {
-    const defs = getToolDefinitions();
-    const play = defs.find(d => d.name === 'recording_play');
-    expect(play.inputSchema.properties.speed).toBeTruthy();
-    expect(play.inputSchema.required.includes('speed')).toBeFalsy();
-  });
-});
-
 // ─── Bridge-mode recording start/stop ───────────────────────────────────────
 
 describe('recording_start/stop use Bridge', () => {
   it('recording_start handler calls sendToBridge with recording.start method', async () => {
-    // Verify that the module no longer exports genRecordingStartScript
     const mod = await import('../src/tools/recording.js');
     expect(mod.genRecordingStartScript).toBeUndefined();
   });
 
   it('recording_stop handler calls sendToBridge with recording.stop method', async () => {
-    // Verify that the module no longer exports genRecordingStopScript
     const mod = await import('../src/tools/recording.js');
     expect(mod.genRecordingStopScript).toBeUndefined();
   });

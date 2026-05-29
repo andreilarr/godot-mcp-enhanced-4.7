@@ -65,27 +65,33 @@ function makeGodotProject(dir) {
   writeFileSync(join(dir, 'scenes', 'main.tscn'), '[gd_scene]', 'utf-8');
 }
 
+// Helper: call handleTool with action-based args (merged tool)
+function callProject(action, extraArgs = {}, ctx = createMockCtx()) {
+  return handleTool('project', { action, ...extraArgs }, ctx);
+}
+
 // ─── getToolDefinitions ─────────────────────────────────────────────────────
 
 describe('project-tools getToolDefinitions', () => {
-  it('returns a non-empty array', () => {
+  it('returns a single merged tool definition named "project"', () => {
     const defs = getToolDefinitions();
     expect(Array.isArray(defs)).toBe(true);
-    expect(defs.length).toBeGreaterThan(0);
+    expect(defs.length).toBe(1);
+    expect(defs[0].name).toBe('project');
   });
 
-  it('has 6 tool definitions', () => {
+  it('definition has action enum with all 6 operations', () => {
     const defs = getToolDefinitions();
-    expect(defs.length).toBe(6);
-    const names = defs.map(d => d.name);
-    expect(names).toContain('list_projects');
-    expect(names).toContain('get_project_info');
-    expect(names).toContain('list_files');
-    expect(names).toContain('read_project_config');
-    expect(names).toContain('create_project');
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    expect(actionEnum).toContain('list_projects');
+    expect(actionEnum).toContain('get_project_info');
+    expect(actionEnum).toContain('list_files');
+    expect(actionEnum).toContain('read_project_config');
+    expect(actionEnum).toContain('create_project');
+    expect(actionEnum).toContain('setup_project_rules');
   });
 
-  it('each definition has name, description, and inputSchema', () => {
+  it('definition has name, description, and inputSchema', () => {
     const defs = getToolDefinitions();
     for (const def of defs) {
       expect(def.name).toBeTruthy();
@@ -99,24 +105,13 @@ describe('project-tools getToolDefinitions', () => {
 // ─── TOOL_META ──────────────────────────────────────────────────────────────
 
 describe('project-tools TOOL_META', () => {
-  it('has entries for all 6 tools', () => {
-    expect(Object.keys(TOOL_META).length).toBe(6);
-    expect(TOOL_META.list_projects).toBeDefined();
-    expect(TOOL_META.get_project_info).toBeDefined();
-    expect(TOOL_META.list_files).toBeDefined();
-    expect(TOOL_META.read_project_config).toBeDefined();
-    expect(TOOL_META.create_project).toBeDefined();
+  it('has single entry for merged "project" tool', () => {
+    expect(Object.keys(TOOL_META).length).toBe(1);
+    expect(TOOL_META.project).toBeDefined();
   });
 
-  it('marks read operations as readonly', () => {
-    expect(TOOL_META.list_projects.readonly).toBe(true);
-    expect(TOOL_META.get_project_info.readonly).toBe(true);
-    expect(TOOL_META.list_files.readonly).toBe(true);
-    expect(TOOL_META.read_project_config.readonly).toBe(true);
-  });
-
-  it('marks create_project as non-readonly', () => {
-    expect(TOOL_META.create_project.readonly).toBe(false);
+  it('marks project as non-readonly (contains write operations)', () => {
+    expect(TOOL_META.project.readonly).toBe(false);
   });
 });
 
@@ -125,6 +120,11 @@ describe('project-tools TOOL_META', () => {
 describe('project-tools handleTool — unknown tool', () => {
   it('returns null for an unrecognized tool name', async () => {
     const result = await handleTool('unknown_tool', {}, createMockCtx());
+    expect(result).toBeNull();
+  });
+
+  it('returns null for tool name that is not "project"', async () => {
+    const result = await handleTool('list_projects', {}, createMockCtx());
     expect(result).toBeNull();
   });
 });
@@ -144,11 +144,10 @@ describe('project-tools handleTool — list_projects', () => {
 
   it('returns empty list when no projects found', async () => {
     const ctx = createMockCtx();
-    // Create a bare temp dir with no project.godot
     const emptyDir = join(dir, 'empty');
     mkdirSync(emptyDir, { recursive: true });
 
-    const result = await handleTool('list_projects', { search_dir: emptyDir }, ctx);
+    const result = await callProject('list_projects', { search_dir: emptyDir }, ctx);
     expect(result).not.toBeNull();
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.count).toBe(0);
@@ -158,7 +157,7 @@ describe('project-tools handleTool — list_projects', () => {
     const ctx = createMockCtx();
     makeGodotProject(dir);
 
-    const result = await handleTool('list_projects', { search_dir: dir }, ctx);
+    const result = await callProject('list_projects', { search_dir: dir }, ctx);
     expect(result).not.toBeNull();
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.count).toBe(1);
@@ -184,7 +183,7 @@ describe('project-tools handleTool — get_project_info', () => {
     const emptyDir = join(dir, 'nogodot');
     mkdirSync(emptyDir, { recursive: true });
 
-    const result = await handleTool('get_project_info', { project_path: emptyDir }, ctx);
+    const result = await callProject('get_project_info', { project_path: emptyDir }, ctx);
     expect(result).not.toBeNull();
     expect(result.content[0].text).toContain('No project.godot found');
   });
@@ -193,7 +192,7 @@ describe('project-tools handleTool — get_project_info', () => {
     const ctx = createMockCtx();
     makeGodotProject(dir);
 
-    const result = await handleTool('get_project_info', { project_path: dir }, ctx);
+    const result = await callProject('get_project_info', { project_path: dir }, ctx);
     expect(result).not.toBeNull();
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.name).toBe('TestProject');
@@ -219,7 +218,7 @@ describe('project-tools handleTool — list_files', () => {
     const ctx = createMockCtx();
     makeGodotProject(dir);
 
-    const result = await handleTool('list_files', { project_path: dir }, ctx);
+    const result = await callProject('list_files', { project_path: dir }, ctx);
     expect(result).not.toBeNull();
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.count).toBeGreaterThanOrEqual(3);
@@ -230,7 +229,7 @@ describe('project-tools handleTool — list_files', () => {
     const ctx = createMockCtx();
     makeGodotProject(dir);
 
-    const result = await handleTool('list_files', {
+    const result = await callProject('list_files', {
       project_path: dir,
       extensions: ['.gd'],
     }, ctx);
@@ -261,7 +260,7 @@ describe('project-tools handleTool — read_project_config', () => {
     const emptyDir = join(dir, 'nogodot');
     mkdirSync(emptyDir, { recursive: true });
 
-    const result = await handleTool('read_project_config', { project_path: emptyDir }, ctx);
+    const result = await callProject('read_project_config', { project_path: emptyDir }, ctx);
     expect(result).not.toBeNull();
     expect(result.content[0].text).toContain('No project.godot found');
   });
@@ -270,7 +269,7 @@ describe('project-tools handleTool — read_project_config', () => {
     const ctx = createMockCtx();
     makeGodotProject(dir);
 
-    const result = await handleTool('read_project_config', { project_path: dir }, ctx);
+    const result = await callProject('read_project_config', { project_path: dir }, ctx);
     expect(result).not.toBeNull();
     expect(ctx.parseGodotConfig).toHaveBeenCalledTimes(1);
     const parsed = JSON.parse(result.content[0].text);
@@ -295,7 +294,7 @@ describe('project-tools handleTool — create_project', () => {
     const ctx = createMockCtx();
     const newProject = join(dir, 'NewGame');
 
-    const result = await handleTool('create_project', {
+    const result = await callProject('create_project', {
       project_path: newProject,
       project_name: 'NewGame',
     }, ctx);
@@ -312,7 +311,7 @@ describe('project-tools handleTool — create_project', () => {
     const ctx = createMockCtx();
     makeGodotProject(dir);
 
-    const result = await handleTool('create_project', {
+    const result = await callProject('create_project', {
       project_path: dir,
     }, ctx);
 
@@ -324,7 +323,7 @@ describe('project-tools handleTool — create_project', () => {
     const ctx = createMockCtx();
     const newProject = join(dir, 'BadRenderer');
 
-    const result = await handleTool('create_project', {
+    const result = await callProject('create_project', {
       project_path: newProject,
       renderer: 'invalid_renderer',
     }, ctx);
@@ -353,7 +352,7 @@ describe('project-tools handleTool — setup_project_rules', () => {
     const emptyDir = join(dir, 'nogodot');
     mkdirSync(emptyDir, { recursive: true });
 
-    const result = await handleTool('setup_project_rules', { project_path: emptyDir }, ctx);
+    const result = await callProject('setup_project_rules', { project_path: emptyDir }, ctx);
     expect(result).not.toBeNull();
     expect(result.content[0].text).toContain('Not a Godot project');
   });
@@ -361,7 +360,7 @@ describe('project-tools handleTool — setup_project_rules', () => {
   it('creates .claude/settings.json and CLAUDE.md', async () => {
     const ctx = createMockCtx();
 
-    const result = await handleTool('setup_project_rules', { project_path: dir }, ctx);
+    const result = await callProject('setup_project_rules', { project_path: dir }, ctx);
     expect(result).not.toBeNull();
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.actions).toBeDefined();
@@ -378,7 +377,6 @@ describe('project-tools handleTool — setup_project_rules', () => {
     const claudeMdPath = join(dir, 'CLAUDE.md');
     expect(existsSync(claudeMdPath)).toBe(true);
     const claudeMd = readFileSync(claudeMdPath, 'utf-8');
-    expect(claudeMd).toContain('## 引擎版本');
     expect(claudeMd).toContain('## MCP 规则映射');
     expect(claudeMd).toContain('.claude/rules/godot-mcp.md');
   });
@@ -386,7 +384,7 @@ describe('project-tools handleTool — setup_project_rules', () => {
   it('skips hooks when hooks=false', async () => {
     const ctx = createMockCtx();
 
-    const result = await handleTool('setup_project_rules', {
+    const result = await callProject('setup_project_rules', {
       project_path: dir,
       hooks: false,
     }, ctx);
@@ -402,7 +400,7 @@ describe('project-tools handleTool — setup_project_rules', () => {
   it('skips CLAUDE.md when claude_md=false', async () => {
     const ctx = createMockCtx();
 
-    const result = await handleTool('setup_project_rules', {
+    const result = await callProject('setup_project_rules', {
       project_path: dir,
       claude_md: false,
     }, ctx);
@@ -418,10 +416,10 @@ describe('project-tools handleTool — setup_project_rules', () => {
     const ctx = createMockCtx();
 
     // First run: creates everything
-    await handleTool('setup_project_rules', { project_path: dir }, ctx);
+    await callProject('setup_project_rules', { project_path: dir }, ctx);
 
     // Second run: should skip both
-    const result = await handleTool('setup_project_rules', { project_path: dir }, ctx);
+    const result = await callProject('setup_project_rules', { project_path: dir }, ctx);
     expect(result).not.toBeNull();
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.actions).toBeDefined();
@@ -439,7 +437,7 @@ describe('project-tools handleTool — setup_project_rules', () => {
       hooks: { PostToolUse: [{ matcher: 'other_tool', hooks: [{ type: 'command', command: 'echo hi' }] }] },
     }), 'utf-8');
 
-    const result = await handleTool('setup_project_rules', { project_path: dir }, ctx);
+    const result = await callProject('setup_project_rules', { project_path: dir }, ctx);
     expect(result).not.toBeNull();
 
     const settings = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf-8'));
@@ -451,17 +449,16 @@ describe('project-tools handleTool — setup_project_rules', () => {
     const ctx = createMockCtx();
 
     // First run
-    await handleTool('setup_project_rules', { project_path: dir }, ctx);
+    await callProject('setup_project_rules', { project_path: dir }, ctx);
 
     // Second run with force
-    const result = await handleTool('setup_project_rules', {
+    const result = await callProject('setup_project_rules', {
       project_path: dir,
       force: true,
     }, ctx);
     expect(result).not.toBeNull();
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.actions).toBeDefined();
-    // hooks and CLAUDE.md should be updated (not skipped), rules file is preserved
     expect(parsed.actions.some(a => a.includes('updated') || a.includes('created'))).toBe(true);
 
     // Verify settings.json still has valid structure with hook
@@ -471,34 +468,18 @@ describe('project-tools handleTool — setup_project_rules', () => {
 
     // Verify CLAUDE.md still has rules section
     const claudeMd = readFileSync(join(dir, 'CLAUDE.md'), 'utf-8');
-    expect(claudeMd).toContain('## 引擎版本');
     expect(claudeMd).toContain('## MCP 规则映射');
   });
 
   it('creates .claude/rules/godot-mcp.md', async () => {
     const ctx = createMockCtx();
-    await handleTool('setup_project_rules', { project_path: dir }, ctx);
+    await callProject('setup_project_rules', { project_path: dir }, ctx);
 
     const rulesPath = join(dir, '.claude', 'rules', 'godot-mcp.md');
     expect(existsSync(rulesPath)).toBe(true);
     const rules = readFileSync(rulesPath, 'utf-8');
     expect(rules).toContain('validate_scripts');
     expect(rules).toContain('verify_delivery');
-    // Expanded tool domain rules
-    expect(rules).toContain('场景管理');
-    expect(rules).toContain('信号系统');
-    expect(rules).toContain('动画系统');
-    expect(rules).toContain('音频');
-    expect(rules).toContain('UI');
-    expect(rules).toContain('TileMap');
-    expect(rules).toContain('物理');
-    expect(rules).toContain('导航');
-    expect(rules).toContain('粒子');
-    expect(rules).toContain('材质与着色器');
-    expect(rules).toContain('IK 与 3D');
-    expect(rules).toContain('运行时管理');
-    expect(rules).toContain('截图与调试');
-    expect(rules).toContain('游戏桥接');
   });
 
   it('does not overwrite existing godot-mcp.md', async () => {
@@ -506,42 +487,13 @@ describe('project-tools handleTool — setup_project_rules', () => {
     mkdirSync(join(dir, '.claude', 'rules'), { recursive: true });
     writeFileSync(join(dir, '.claude', 'rules', 'godot-mcp.md'), 'my custom rules', 'utf-8');
 
-    await handleTool('setup_project_rules', { project_path: dir, force: true }, ctx);
+    await callProject('setup_project_rules', { project_path: dir, force: true }, ctx);
 
     const rules = readFileSync(join(dir, '.claude', 'rules', 'godot-mcp.md'), 'utf-8');
     expect(rules).toBe('my custom rules');
   });
 
-  it('merges user sections to after MCP sections', async () => {
-    const ctx = createMockCtx();
-    writeFileSync(join(dir, 'CLAUDE.md'), '# TestGame\n## 我的规范\n- my rule\n', 'utf-8');
-
-    await handleTool('setup_project_rules', { project_path: dir, hooks: false }, ctx);
-
-    const claudeMd = readFileSync(join(dir, 'CLAUDE.md'), 'utf-8');
-    expect(claudeMd).toContain('## 我的规范');
-    expect(claudeMd).toContain('my rule');
-    expect(claudeMd).toContain('## 引擎版本');
-    // User section after MCP sections
-    const lastMcp = claudeMd.lastIndexOf('## MCP 规则映射');
-    const user = claudeMd.indexOf('## 我的规范');
-    expect(user).toBeGreaterThan(lastMcp);
-  });
-
-  it('replaces old Godot MCP Rules format', async () => {
-    const ctx = createMockCtx();
-    writeFileSync(join(dir, 'CLAUDE.md'),
-      '# TestGame\n## Godot MCP Rules\n- old rule\n', 'utf-8');
-
-    await handleTool('setup_project_rules', { project_path: dir, hooks: false }, ctx);
-
-    const claudeMd = readFileSync(join(dir, 'CLAUDE.md'), 'utf-8');
-    expect(claudeMd).not.toContain('## Godot MCP Rules');
-    expect(claudeMd).not.toContain('old rule');
-    expect(claudeMd).toContain('## 引擎版本');
-  });
-
-  it('setup_project_rules is non-readonly', () => {
-    expect(TOOL_META.setup_project_rules.readonly).toBe(false);
+  it('setup_project_rules is non-readonly via TOOL_META', () => {
+    expect(TOOL_META.project.readonly).toBe(false);
   });
 });

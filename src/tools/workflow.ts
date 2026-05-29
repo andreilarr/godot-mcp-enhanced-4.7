@@ -7,7 +7,7 @@ import { textResult } from '../types.js';
 import { requireProjectPath, resolveWithinRoot, buildSafeEnv } from '../helpers.js';
 import { forceKillTree } from '../core/process-state.js';
 import { executeGdscript } from '../gdscript-executor.js';
-import { SCENE_TREE_HEADER, parseGdscriptResult, wrapAssertionCode } from './shared.js';
+import { SCENE_TREE_HEADER, parseGdscriptResult, wrapAssertionCode, opsErrorResult } from './shared.js';
 import { gdEscape } from './shared.js';
 import { batchValidateScripts } from './validation.js';
 import { sendToBridge, setBridgeProjectDir, BRIDGE_READ_ONLY_METHODS } from './game-bridge.js';
@@ -78,26 +78,34 @@ export function buildStateBlock(epic: string, feature: string, task: string): st
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
+// ─── Tool definitions ──────────────────────────────────────────────────────
+
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'dev_loop',
-      description: 'Run a development loop: execute GDScript code, optionally validate project, capture structured output, and verify via Game Bridge in one step.',
+      name: 'workflow',
+      description: 'Development workflow tools. dev_loop: execute GDScript with optional validation, bridge queries, and state saving. scene_snapshot: capture structured scene tree snapshot. batch_validate: validate multiple GDScript files at once.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           project_path: { type: 'string', description: 'Path to Godot project directory' },
-          code: { type: 'string', description: 'GDScript code to execute (snippet or full extends SceneTree)' },
-          verify: { type: 'boolean', description: 'Also run project validation after execution (default: false)', default: false },
-          timeout: { type: 'number', description: 'Timeout per step in seconds (default: 30)', default: 30 },
-          load_autoloads: { type: 'boolean', description: 'Load Autoload context (default: true)', default: true },
+          action: {
+            type: 'string',
+            enum: ['dev_loop', 'scene_snapshot', 'batch_validate'],
+            description: 'Action type',
+          },
+          // dev_loop params
+          code: { type: 'string', description: 'dev_loop: GDScript code to execute (snippet or full extends SceneTree)' },
+          verify: { type: 'boolean', description: 'dev_loop: Also run project validation after execution (default: false)', default: false },
+          timeout: { type: 'number', description: 'dev_loop: Timeout per step in seconds (default: 30)', default: 30 },
+          load_autoloads: { type: 'boolean', description: 'dev_loop: Load Autoload context (default: true)', default: true },
           bridge: {
             type: 'object',
-            description: 'Optional: connect to running game via Game Bridge for screenshot/query validation. Bridge steps have their own timeout budget (separate from the timeout parameter).',
+            description: 'dev_loop: Optional Game Bridge for screenshot/query validation',
             properties: {
               screenshot: {
                 type: 'object',
-                description: 'Take a screenshot from the running game (saved to game filesystem, not returned to client)',
+                description: 'Take a screenshot from the running game',
                 properties: {
                   path: { type: 'string', description: 'Screenshot save path in game (default: user://mcp_dev_screenshot.png)' },
                 },
@@ -109,9 +117,9 @@ export function getToolDefinitions(): Tool[] {
                 items: {
                   type: 'object',
                   properties: {
-                    method: { type: 'string', description: 'Bridge query method (e.g. ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info)' },
+                    method: { type: 'string', description: 'Bridge query method' },
                     params: { type: 'object', description: 'Query parameters' },
-                    expect: { type: 'string', description: 'Expected result substring (optional, for validation)' },
+                    expect: { type: 'string', description: 'Expected result substring (optional)' },
                   },
                   required: ['method'],
                 },
@@ -120,7 +128,7 @@ export function getToolDefinitions(): Tool[] {
           },
           acceptance: {
             type: 'object',
-            description: 'Optional acceptance criteria to verify after execution',
+            description: 'dev_loop: Optional acceptance criteria',
             properties: {
               assertions: {
                 type: 'array',
@@ -129,7 +137,7 @@ export function getToolDefinitions(): Tool[] {
                   type: 'object',
                   properties: {
                     description: { type: 'string', description: 'Human-readable assertion description' },
-                    gdscript: { type: 'string', description: 'GDScript code using _mcp_output("assert_N", value) to output results' },
+                    gdscript: { type: 'string', description: 'GDScript code using _mcp_output to output results' },
                     expect: { type: 'string', description: 'Expected output value (string comparison)' },
                   },
                   required: ['description', 'gdscript'],
@@ -139,7 +147,7 @@ export function getToolDefinitions(): Tool[] {
           },
           save_state: {
             type: 'object',
-            description: 'Save session state to file for context recovery (file-as-memory pattern from CCGS)',
+            description: 'dev_loop: Save session state to file',
             properties: {
               path: { type: 'string', description: 'State file path relative to project (default: production/session-state/active.md)' },
               task: { type: 'string', description: 'Current task description' },
@@ -162,50 +170,33 @@ export function getToolDefinitions(): Tool[] {
               },
             },
           },
-        },
-        required: ['project_path', 'code'],
-      },
-    },
-    {
-      name: 'scene_snapshot',
-      description: 'Capture a structured snapshot of a scene tree for before/after comparison.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          scene_path: { type: 'string', description: 'Scene file path relative to project' },
-          max_depth: { type: 'number', description: 'Max tree depth (default: 5)', default: 5 },
-        },
-        required: ['project_path', 'scene_path'],
-      },
-    },
-    {
-      name: 'batch_validate',
-      description: 'Validate multiple GDScript files at once. Returns per-file results with error details.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
+          // scene_snapshot params
+          scene_path: { type: 'string', description: 'scene_snapshot: Scene file path relative to project' },
+          max_depth: { type: 'number', description: 'scene_snapshot: Max tree depth (default: 5)', default: 5 },
+          // batch_validate params
           scripts: {
             type: 'array',
-            description: 'Array of script paths relative to project',
+            description: 'batch_validate: Array of script paths relative to project',
             items: { type: 'string' },
           },
         },
-        required: ['project_path', 'scripts'],
+        required: ['project_path', 'action'],
       },
     },
   ];
 }
 
-// ─── Tool handler ───────────────────────────────────────────────────────────
 
-const TOOL_NAMES = ['dev_loop', 'scene_snapshot', 'batch_validate'] as const;
+// --- Tool handler ---------------------------------------------------------------
 
 export async function handleTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'workflow') return null;
 
-  switch (name) {
+  const action = args.action as string;
+  if (!action) return opsErrorResult('INVALID_PARAMS', '"action" is required (dev_loop, scene_snapshot, or batch_validate).');
+
+  switch (action) {
+
     case 'dev_loop': {
       const projectPath = requireProjectPath(args);
       const code = args.code as string;
@@ -214,7 +205,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const loadAutoloads = args.load_autoloads !== false;
 
       if (!code || typeof code !== 'string') {
-        return textResult('Error: "code" must be a non-empty string.');
+        return opsErrorResult('INVALID_PARAMS', '"code" must be a non-empty string.');
       }
 
       const godot = await ctx.findGodot();
@@ -436,7 +427,7 @@ func _snap(node: Node, max_depth: int, depth: int) -> Dictionary:
       const scripts = args.scripts as string[];
 
       if (!scripts || !Array.isArray(scripts) || scripts.length === 0) {
-        return textResult('Error: "scripts" must be a non-empty array of file paths.');
+        return opsErrorResult('INVALID_PARAMS', '"scripts" must be a non-empty array of file paths.');
       }
 
       const godot = await ctx.findGodot();
@@ -475,11 +466,12 @@ func _snap(node: Node, max_depth: int, depth: int) -> Dictionary:
     }
 
     default:
-      return null;
+      return textResult(`Unknown action: ${action}. Use "dev_loop", "scene_snapshot", or "batch_validate".`);
   }
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+
+// --- Helpers -------------------------------------------------------------------
 
 function runVerification(godot: string, projectPath: string): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
@@ -515,8 +507,7 @@ function runVerification(godot: string, projectPath: string): Promise<Record<str
   });
 }
 
+
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  dev_loop: { readonly: false, long_running: true },
-  scene_snapshot: { readonly: true, long_running: false },
-  batch_validate: { readonly: true, long_running: false },
+  workflow: { readonly: false, long_running: true },
 };

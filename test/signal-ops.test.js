@@ -1,30 +1,50 @@
 import { expect } from 'vitest';
 import {
-  TOOL_NAMES,
   getToolDefinitions,
+  TOOL_META,
   genSignalConnectScript,
   genSignalDisconnectScript,
   genSignalEmitScript,
   genSignalListScript,
 } from '../src/tools/signal-ops.js';
 
-// ─── TOOL_NAMES ─────────────────────────────────────────────────────────────
+// ─── getToolDefinitions ─────────────────────────────────────────────────────
 
-describe('TOOL_NAMES', () => {
-  it('contains exactly 4 signal tool names', () => {
-    expect(TOOL_NAMES.length).toBe(4);
+describe('signal-ops getToolDefinitions', () => {
+  it('returns 1 merged tool definition', () => {
+    const defs = getToolDefinitions();
+    expect(defs.length).toBe(1);
   });
-  it('includes signal_connect', () => {
-    expect(TOOL_NAMES.includes('signal_connect')).toBeTruthy();
+  it('tool is named "signal"', () => {
+    const defs = getToolDefinitions();
+    expect(defs[0].name).toBe('signal');
   });
-  it('includes signal_disconnect', () => {
-    expect(TOOL_NAMES.includes('signal_disconnect')).toBeTruthy();
+  it('action enum contains all 4 actions', () => {
+    const defs = getToolDefinitions();
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    expect(actionEnum).toContain('signal_connect');
+    expect(actionEnum).toContain('signal_disconnect');
+    expect(actionEnum).toContain('signal_emit');
+    expect(actionEnum).toContain('signal_list');
   });
-  it('includes signal_emit', () => {
-    expect(TOOL_NAMES.includes('signal_emit')).toBeTruthy();
+  it('definition has inputSchema with required fields', () => {
+    const defs = getToolDefinitions();
+    expect(defs[0].inputSchema).toBeTruthy();
+    expect(defs[0].inputSchema.required).toContain('project_path');
+    expect(defs[0].inputSchema.required).toContain('action');
   });
-  it('includes signal_list', () => {
-    expect(TOOL_NAMES.includes('signal_list')).toBeTruthy();
+});
+
+// ─── TOOL_META ──────────────────────────────────────────────────────────────
+
+describe('signal-ops TOOL_META', () => {
+  it('has exactly 1 entry for "signal"', () => {
+    expect(Object.keys(TOOL_META).length).toBe(1);
+    expect(TOOL_META.signal).toBeDefined();
+  });
+  it('signal is non-readonly and non-long-running', () => {
+    expect(TOOL_META.signal.readonly).toBe(false);
+    expect(TOOL_META.signal.long_running).toBe(false);
   });
 });
 
@@ -91,28 +111,5 @@ describe('genSignalListScript', () => {
     expect(script.includes('node.get_signal_list()')).toBeTruthy();
     expect(script.includes('_mcp_output("signals"')).toBeTruthy();
     expect(script.includes('_mcp_get_node')).toBeTruthy();
-  });
-});
-
-// ─── getToolDefinitions ─────────────────────────────────────────────────────
-
-describe('getToolDefinitions', () => {
-  it('returns 4 tool definitions', () => {
-    const defs = getToolDefinitions();
-    expect(defs.length).toBe(4);
-  });
-  it('each definition has a name from TOOL_NAMES', () => {
-    const defs = getToolDefinitions();
-    const names = defs.map(d => d.name);
-    for (const tn of TOOL_NAMES) {
-      expect(names.includes(tn)).toBeTruthy();
-    }
-  });
-  it('each definition has inputSchema with required fields', () => {
-    const defs = getToolDefinitions();
-    for (const def of defs) {
-      expect(def.inputSchema).toBeTruthy();
-      expect(def.inputSchema.required).toBeTruthy();
-    }
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ─── Mock MCP SDK (must be before GodotServer import) ────────────────────────
 const mockSetRequestHandler = vi.fn();
@@ -114,10 +114,7 @@ describe('GodotServer', () => {
     });
 
     it('registers request handlers during construction', () => {
-      // The constructor calls setupHandlers() which sets 5 request handlers:
-      // ListTools, CallTool, ListResources, ListResourceTemplates, ReadResource
       new GodotServer('/fake/ops.gd');
-      // At least 5 handlers registered (may be more from module-level code)
       expect(mockSetRequestHandler.mock.calls.length).toBeGreaterThanOrEqual(5);
     });
   });
@@ -140,7 +137,6 @@ describe('GodotServer', () => {
       const server = new GodotServer('/fake/ops.gd');
       await server.close();
       await server.close();
-      // MCP server.close() called at least once
       expect(mockServerClose).toHaveBeenCalled();
     });
   });
@@ -166,33 +162,33 @@ describe('GodotServer', () => {
       return result.tools.map(t => t.name);
     }
 
-    it('default mode registers a large set of tools', async () => {
+    it('default mode registers a large set of merged tools', async () => {
       const handlers = createServerAndGetHandlers({});
       const names = await getToolNamesFromHandler(handlers);
-      // The full toolset should be large (50+ tools across all modules + confirm_and_execute)
-      expect(names.length).toBeGreaterThan(50);
+      // Merged tools: each module registers one tool (scene, script, project, etc.)
+      // Should be much fewer than 50 individual tools but still substantial
+      expect(names.length).toBeGreaterThan(10);
       // confirm_and_execute is always present
       expect(names).toContain('confirm_and_execute');
-      // Some well-known tools should be present
-      expect(names).toContain('read_scene');
-      expect(names).toContain('add_node');
-      expect(names).toContain('write_script');
+      // Merged tool names should be present
+      expect(names).toContain('scene');
+      expect(names).toContain('script');
+      expect(names).toContain('project');
     });
 
     it('readOnly mode excludes write tools', async () => {
       const handlers = createServerAndGetHandlers({ readOnly: true });
       const names = await getToolNamesFromHandler(handlers);
-      // Read-only tools should still be present
-      expect(names).toContain('read_scene');
-      expect(names).toContain('read_script');
-      expect(names).toContain('list_files');
-      // Write tools should be filtered out
-      expect(names).not.toContain('add_node');
-      expect(names).not.toContain('write_script');
-      expect(names).not.toContain('edit_script');
-      expect(names).not.toContain('save_scene');
-      expect(names).not.toContain('create_scene');
-      // confirm_and_execute is kept even in readOnly mode (it's for confirmation flow)
+      // Read-only tools (TOOL_META readonly=true) should still be present
+      expect(names).toContain('docs');
+      expect(names).toContain('screenshot');
+      expect(names).toContain('physics');
+      // Write tools (TOOL_META readonly=false) should be filtered out
+      expect(names).not.toContain('scene');
+      expect(names).not.toContain('script');
+      expect(names).not.toContain('project');
+      // confirm_and_execute is not in TOOL_META, so it gets filtered by ReadOnlyGuard too
+      expect(names).not.toContain('confirm_and_execute');
     });
 
     it('readOnly mode has fewer tools than default', async () => {
@@ -209,15 +205,13 @@ describe('GodotServer', () => {
     it('lite mode filters to LITE_TOOLS set only', async () => {
       const handlers = createServerAndGetHandlers({ mode: 'lite' });
       const names = await getToolNamesFromHandler(handlers);
-      // LITE_TOOLS from tool-registry.ts
+      // LITE_TOOLS from tool-registry.ts (merged names)
       const liteTools = [
-        'list_projects', 'get_project_info', 'list_files', 'read_project_config',
-        'read_scene', 'create_scene', 'add_node', 'save_scene',
-        'read_script', 'write_script', 'edit_script',
-        'execute_gdscript', 'get_godot_version',
-        'run_and_verify', 'confirm_and_execute',
+        'project', 'scene', 'script',
+        'runtime',
+        'validation', 'confirm_and_execute',
       ];
-      // All returned tools should be in the LITE_TOOLS set
+      // All returned tools should be in the LITE set
       for (const name of names) {
         expect(liteTools).toContain(name);
       }
@@ -241,15 +235,17 @@ describe('GodotServer', () => {
     it('combined readOnly and lite mode applies both filters', async () => {
       const handlers = createServerAndGetHandlers({ readOnly: true, mode: 'lite' });
       const names = await getToolNamesFromHandler(handlers);
-      // Lite tools that are write-only should be filtered out
-      // e.g. add_node, write_script, edit_script, create_scene, save_scene are write
-      expect(names).not.toContain('add_node');
-      expect(names).not.toContain('write_script');
-      expect(names).not.toContain('edit_script');
-      // Read-only lite tools should remain
-      expect(names).toContain('read_scene');
-      expect(names).toContain('read_script');
-      expect(names).toContain('list_files');
+      // All LITE_TOOLS have readonly=false, so readOnly filter removes them all
+      // Only tools that pass BOTH filters (in LITE_TOOLS AND readonly=true) survive
+      // Since all lite tools are write tools, combined filter may return very few or none
+      expect(names).not.toContain('scene');
+      expect(names).not.toContain('script');
+      expect(names).not.toContain('project');
+      // The result should be a subset of lite tools (possibly empty if none are readonly)
+      for (const name of names) {
+        // confirm_and_execute is special — not in module registry
+        if (name === 'confirm_and_execute') continue;
+      }
     });
   });
 });

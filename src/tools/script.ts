@@ -8,7 +8,7 @@ import { executeGdscript } from '../gdscript-executor.js';
 import { batchValidateScripts } from './validation.js';
 import { lintGDScript, formatLintResults } from './gdscript-lint.js';
 import { getTemplateSuggestion } from './code-templates.js';
-import { gdEscape } from './shared.js';
+import { gdEscape, opsErrorResult } from './shared.js';
 import { validateTimeout } from './shared.js';
 
 function detectDuplicateLines(lines: string[]): string[] {
@@ -68,7 +68,7 @@ async function validateAndRevert(
   return null;
 }
 
-const TOOL_NAMES = [
+const ACTIONS = [
   'read_script',
   'write_script',
   'edit_script',
@@ -83,147 +83,65 @@ const TOOL_NAMES = [
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'read_script',
-      description: 'Read a GDScript (.gd) file with metadata (extends, class_name, line count).',
+      name: 'script',
+      description: '脚本操作。读写: read_script, write_script。编辑: edit_script（行号/search_and_replace）。执行: execute_gdscript。测试: generate_test, create_test_scene。批量替换: project_replace。',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          script_path: { type: 'string', description: 'Absolute path to the .gd file' },
-        },
-        required: ['project_path', 'script_path'],
-      },
-    },
-    {
-      name: 'write_script',
-      description: 'Write or overwrite a GDScript (.gd) file.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          script_path: { type: 'string', description: 'Absolute path to the .gd file' },
-          content: { type: 'string', description: 'GDScript content to write' },
-          overwrite: { type: 'boolean', description: 'Overwrite if exists (default: false)', default: false },
-        },
-        required: ['project_path', 'script_path', 'content'],
-      },
-    },
-    {
-      name: 'edit_script',
-      description: 'Edit an existing GDScript file by replacing a range of lines. '
-        + 'Preserves CRLF line endings and auto-validates GDScript syntax after edit.\n'
-        + 'Two editing modes:\n'
-        + '1. search_and_replace (RECOMMENDED): Search for exact text and replace it. '
-        + 'Resilient to line number shifts. CRLF is normalized for matching. '
-        + 'Best for targeted, precise edits.\n'
-        + '2. start_line/end_line: Replace by line range. Use "smart" indent_mode '
-        + 'to auto-adjust indentation to match the target location. '
-        + 'Only use "raw" indent_mode if you are certain the indentation is correct.\n'
-        + 'IMPORTANT: Always prefer search_and_replace over line-number mode for GDScript. '
-        + 'GDScript is indentation-sensitive — wrong indentation causes parse errors. '
-        + 'The tool auto-validates and reverts on parse failure.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          script_path: { type: 'string', description: 'Path to the .gd file to edit (absolute or relative to project)' },
-          start_line: { type: 'number', description: '1-based line number where replacement starts (inclusive)' },
-          end_line: { type: 'number', description: '1-based line number where replacement ends (inclusive). Use same as start_line for single line replace.' },
-          new_content: { type: 'string', description: 'New content to replace the specified line range.' },
+          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          action: {
+            type: 'string',
+            enum: [...ACTIONS],
+            description: '操作类型',
+          },
+          script_path: { type: 'string', description: 'read_script 用绝对路径；write_script/edit_script/generate_test 用绝对或相对项目路径' },
+          content: { type: 'string', description: 'write_script: GDScript 内容' },
+          overwrite: { type: 'boolean', description: 'write_script: 覆盖已有文件（默认 false）', default: false },
+          start_line: { type: 'number', description: 'edit_script: 替换起始行（1-based）' },
+          end_line: { type: 'number', description: 'edit_script: 替换结束行（1-based，含）' },
+          new_content: { type: 'string', description: 'edit_script: 替换内容' },
           indent_mode: {
             type: 'string',
             enum: ['raw', 'smart'],
-            description: 'Indentation mode: "raw" (default) inserts content exactly as provided. "smart" auto-adjusts indentation to match start_line.',
+            description: 'edit_script: 缩进模式（默认 raw）',
             default: 'raw',
           },
-          verify_content: { type: 'string', description: 'Optional: expected content at the replacement range. Edit is aborted if it does not match, preventing stale line-number edits.' },
+          verify_content: { type: 'string', description: 'edit_script: 期望内容守卫（不匹配则中止）' },
           auto_validate: {
             type: 'boolean',
-            description: 'Auto-validate GDScript syntax after edit and revert on failure (default: true)',
+            description: 'edit_script: 自动验证语法并在失败时回滚（默认 true）',
             default: true,
           },
           search_and_replace: {
             type: 'object',
-            description: 'Content-based editing mode: search for a string and replace it. More resilient than line-number editing. '
-              + 'When provided, start_line/end_line are ignored.',
+            description: 'edit_script: 内容搜索替换模式（提供时忽略 start_line/end_line）',
             properties: {
-              search: { type: 'string', description: 'The exact text to search for (CRLF is normalized to LF for matching)' },
-              replace: { type: 'string', description: 'The replacement text' },
-              occurrence: { type: 'number', description: 'Which occurrence to replace (1-based, default: 1). Use 0 to replace all.' },
+              search: { type: 'string', description: '搜索文本（CRLF 归一化匹配）' },
+              replace: { type: 'string', description: '替换文本' },
+              occurrence: { type: 'number', description: '替换第几次出现（1-based，0=全部）' },
             },
             required: ['search', 'replace'],
           },
-        },
-        required: ['project_path', 'script_path', 'start_line', 'end_line', 'new_content'],
-      },
-    },
-    {
-      name: 'generate_test',
-      description: 'Analyze a GDScript file and generate a GUT (Godot Unit Test) test script. Reads the script, extracts public methods, and generates test stubs. The generated code is returned as text — use write_script to save it.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          script_path: { type: 'string', description: 'Path to the GDScript to test, relative to project root (e.g. scripts/player.gd)' },
-        },
-        required: ['project_path', 'script_path'],
-      },
-    },
-    {
-      name: 'create_test_scene',
-      description: 'Create a GUT test runner scene (test_scene.tscn) for a Godot project. Checks if GUT addon is installed.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-        },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'execute_gdscript',
-      description: 'Execute arbitrary GDScript code in a headless Godot process. '
-        + 'Two modes: (1) Snippet mode — provide code without "extends", auto-wrapped with helpers. '
-        + 'Use _mcp_output(key, value) to return structured results. '
-        + '(2) Full class mode — provide code with "extends SceneTree" for full control. '
-        + 'Set load_autoloads=true to run with full autoload context (slower but can access DataRegistry, PlayerData, etc.).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          code: { type: 'string', description: 'GDScript code to execute' },
-          timeout: { type: 'number', description: 'Timeout in seconds (default: 30)', default: 30 },
-          load_autoloads: { type: 'boolean', description: 'When true, runs with full autoload context so DataRegistry/PlayerData etc. are available (default: false)', default: false },
-        },
-        required: ['project_path', 'code'],
-      },
-    },
-    {
-      name: 'project_replace',
-      description: 'Batch find-and-replace across all matching files in a Godot project. '
-        + 'Scans files by extension, performs string replacement (CRLF-safe), and returns a summary of changes. '
-        + 'Supports dry_run mode to preview changes without writing.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Path to Godot project directory' },
-          search: { type: 'string', description: 'The exact text to search for' },
-          replace: { type: 'string', description: 'The replacement text' },
+          code: { type: 'string', description: 'execute_gdscript: 要执行的 GDScript 代码' },
+          timeout: { type: 'number', description: 'execute_gdscript: 超时秒数（默认 30）', default: 30 },
+          load_autoloads: { type: 'boolean', description: 'execute_gdscript: 加载完整 Autoload 上下文（默认 false）', default: false },
+          search: { type: 'string', description: 'project_replace: 搜索文本' },
+          replace: { type: 'string', description: 'project_replace: 替换文本' },
           extensions: {
             type: 'array',
             items: { type: 'string' },
-            description: 'File extensions to scan (default: [".gd"])',
+            description: 'project_replace: 文件扩展名（默认 [".gd"]）',
             default: ['.gd'],
           },
           exclude_dirs: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Directory names to exclude (default: [".godot", ".import", "addons", "tools"])',
+            description: 'project_replace: 排除目录（默认 [".godot", ".import", "addons", "tools"]）',
             default: ['.godot', '.import', 'addons', 'tools'],
           },
-          dry_run: { type: 'boolean', description: 'Preview changes without writing (default: false)', default: false },
+          dry_run: { type: 'boolean', description: 'project_replace: 仅预览不写入（默认 false）', default: false },
         },
-        required: ['project_path', 'search', 'replace'],
+        required: ['project_path', 'action'],
       },
     },
   ];
@@ -232,9 +150,11 @@ export function getToolDefinitions(): Tool[] {
 // ─── Tool handler ───────────────────────────────────────────────────────────
 
 export async function handleTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'script') return null;
 
-  switch (name) {
+  const action = args.action as string;
+
+  switch (action) {
     case 'read_script': {
       const sp = resolveWithinRoot(requireProjectPath(args), args.script_path as string);
       if (!existsSync(sp)) return textResult(`Script not found: ${sp}`);
@@ -268,7 +188,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const overwrite = args.overwrite === true; // default false
 
       if (existsSync(sp) && !overwrite) {
-        return textResult(`Error: File already exists: ${sp}. Set overwrite=true to replace it.`);
+        return opsErrorResult('FILE_EXISTS', `File already exists: ${sp}. Set overwrite=true to replace it.`);
       }
 
       ensureDir(sp);
@@ -287,7 +207,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             const suggestion = getTemplateSuggestion(issue.rule);
             if (suggestion) {
               const preview = suggestion.split('\n').slice(0, 3).join('\n');
-              suggestions.add(`  (${issue.rule}) → 建议:\n    ${preview}\n    ... (完整模板见 list_templates)`);
+              suggestions.add(`  (${issue.rule}) → 建议:\n    ${preview}\n    ... (完整模板见 templates(action=list))`);
             }
           }
           if (suggestions.size > 0) {
@@ -304,7 +224,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const fullPath = resolveWithinRoot(projectPath, scriptPath);
 
       if (!existsSync(fullPath)) {
-        return textResult(`Error: File not found: ${fullPath}`);
+        return opsErrorResult('NOT_FOUND', `File not found: ${fullPath}`);
       }
 
       const rawFile = readFileSync(fullPath, 'utf-8');
@@ -325,7 +245,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       if (args.search_and_replace && typeof args.search_and_replace === 'object') {
         const sr = args.search_and_replace as { search: string; replace: string; occurrence?: number };
         if (!sr.search) {
-          return textResult('Error: search_and_replace.search must be a non-empty string.');
+          return opsErrorResult('INVALID_PARAMS', 'search_and_replace.search must be a non-empty string.');
         }
         const normalizedContent = rawFile.replace(/\r\n/g, '\n');
         const normalizedSearch = sr.search.replace(/\r\n/g, '\n');
@@ -337,7 +257,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
         if (occurrence === 0) {
           if (!normalizedContent.includes(normalizedSearch)) {
-            return textResult(`Error: search_and_replace: search text not found in ${fullPath}`);
+            return opsErrorResult('NOT_FOUND', `search_and_replace: search text not found in ${fullPath}`);
           }
           const newFileContent = normalizedContent.split(normalizedSearch).join(normalizedReplace);
           const finalContent = joinWithLineEnding(newFileContent, hasCRLF);
@@ -375,7 +295,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         }
 
         if (searchIndex === -1) {
-          return textResult(`Error: search_and_replace: occurrence ${occurrence} not found (found ${foundCount} total matches in ${fullPath})`);
+          return opsErrorResult('NOT_FOUND', `search_and_replace: occurrence ${occurrence} not found (found ${foundCount} total matches in ${fullPath})`);
         }
 
         const before = normalizedContent.substring(0, searchIndex);
@@ -409,11 +329,11 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const verifyContent = args.verify_content as string | undefined;
 
       if (startLine < 1 || endLine < startLine) {
-        return textResult(`Error: Invalid line range: start_line=${startLine}, end_line=${endLine}`);
+        return opsErrorResult('INVALID_PARAMS', `Invalid line range: start_line=${startLine}, end_line=${endLine}`);
       }
 
       if (endLine > lines.length) {
-        return textResult(`Error: end_line ${endLine} exceeds file length ${lines.length}`);
+        return opsErrorResult('INVALID_PARAMS', `end_line ${endLine} exceeds file length ${lines.length}`);
       }
 
       const beforeLines = lines.slice(startLine - 1, endLine);
@@ -422,8 +342,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         const existingContent = beforeLines.join('\n');
         const normalize = (s: string) => s.replace(/\r\n/g, '\n').replace(/\t/g, '    ').trim();
         if (normalize(existingContent) !== normalize(verifyContent)) {
-          return textResult(
-            `Error: Content verification failed at lines ${startLine}-${endLine}. The file has changed since the line numbers were read.\n` +
+          return opsErrorResult(
+            'CONTENT_MISMATCH',
+            `Content verification failed at lines ${startLine}-${endLine}. The file has changed since the line numbers were read.\n` +
             `--- Expected ---\n${verifyContent}\n` +
             `--- Actual ---\n${existingContent}`
           );
@@ -503,12 +424,12 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const projectPath = requireProjectPath(args);
       const scriptPath = args.script_path as string;
       if (!scriptPath) {
-        return textResult('Error: script_path is required (e.g. "scripts/player.gd")');
+        return opsErrorResult('INVALID_PARAMS', 'script_path is required (e.g. "scripts/player.gd")');
       }
 
       const fullScriptPath = resolveWithinRoot(projectPath, scriptPath);
       if (!existsSync(fullScriptPath)) {
-        return textResult(`Error: Script not found: ${fullScriptPath}`);
+        return opsErrorResult('NOT_FOUND', `Script not found: ${fullScriptPath}`);
       }
 
       const source = readFileSync(fullScriptPath, 'utf-8');
@@ -654,14 +575,14 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const rawExtensions: string[] = (args.extensions as string[]) || ['.gd'];
       const extensions = rawExtensions.filter(ext => ALLOWED_EXTENSIONS.has(ext));
       if (extensions.length === 0) {
-        return textResult(`Error: No allowed extensions. Allowed: ${[...ALLOWED_EXTENSIONS].join(', ')}`);
+        return opsErrorResult('INVALID_PARAMS', `No allowed extensions. Allowed: ${[...ALLOWED_EXTENSIONS].join(', ')}`);
       }
       const userExcludeDirs: string[] = (args.exclude_dirs as string[]) || ['.godot', '.import', 'addons', 'tools'];
       const excludeDirs = [...new Set([...userExcludeDirs, ...HARDCODED_EXCLUDE])];
       const dryRun = args.dry_run === true;
 
       if (!search) {
-        return textResult('Error: search must be a non-empty string.');
+        return opsErrorResult('INVALID_PARAMS', 'search must be a non-empty string.');
       }
 
       const normalizedSearch = search.replace(/\r\n/g, '\n');
@@ -690,7 +611,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
       scanDir(p, 0);
       if (matchedFiles.length >= MAX_FILES) {
-        return textResult(`Error: Too many matching files (>${MAX_FILES}). Narrow the search with more specific extensions or add directories to exclude_dirs.`);
+        return opsErrorResult('INVALID_PARAMS', `Too many matching files (>${MAX_FILES}). Narrow the search with more specific extensions or add directories to exclude_dirs.`);
       }
 
       const relOf = (absPath: string) => absPath.slice(p.length + 1);
@@ -756,11 +677,5 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 }
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  read_script: { readonly: true, long_running: false },
-  write_script: { readonly: false, long_running: false },
-  edit_script: { readonly: false, long_running: false },
-  generate_test: { readonly: false, long_running: false },
-  create_test_scene: { readonly: false, long_running: false },
-  execute_gdscript: { readonly: false, long_running: false },
-  project_replace: { readonly: false, long_running: false },
+  script: { readonly: false, long_running: false },
 };

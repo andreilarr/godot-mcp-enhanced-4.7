@@ -3,16 +3,10 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 
-const TOOL_NAMES = [
-  'editor_sync_start',
-  'editor_sync_stop',
-  'editor_get_scene_tree',
-] as const;
+const TOOL_NAMES = ['editor'] as const;
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  editor_sync_start: { readonly: false, long_running: false },
-  editor_sync_stop: { readonly: false, long_running: false },
-  editor_get_scene_tree: { readonly: true, long_running: false },
+  editor: { readonly: false, long_running: false },
 };
 
 const EDITOR_NOT_CONNECTED = JSON.stringify({
@@ -23,40 +17,25 @@ const EDITOR_NOT_CONNECTED = JSON.stringify({
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'editor_sync_start',
-      description: '启动场景树实时监听（仅编辑器模式）。插件连接 SceneTree 信号，推送 node_added/node_removed 事件。',
+      name: 'editor',
+      description: 'Editor real-time operations: sync_start (start scene tree listening), sync_stop (stop listening), get_scene_tree (get current snapshot). Requires editor mode with plugin connection.',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          project_path: { type: 'string', description: 'Godot project directory path' },
+          action: {
+            type: 'string',
+            enum: ['sync_start', 'sync_stop', 'get_scene_tree'],
+            description: 'Operation type',
+          },
         },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'editor_sync_stop',
-      description: '停止场景树监听，断开信号连接（仅编辑器模式）。',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-        },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'editor_get_scene_tree',
-      description: '获取编辑器当前场景树完整快照（仅编辑器模式）。',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-        },
-        required: ['project_path'],
+        required: ['project_path', 'action'],
       },
     },
   ];
 }
+
+
 
 export async function handleTool(
   name: string,

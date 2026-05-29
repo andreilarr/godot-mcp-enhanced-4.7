@@ -1,46 +1,52 @@
 import { expect } from 'vitest';
 import {
-  TOOL_NAMES,
   getToolDefinitions,
+  TOOL_META,
   genAudioPlayScript,
   genAudioStopScript,
   genAudioSetParamScript,
   genAudioQueryScript,
 } from '../src/tools/audio-ops.js';
 
-// ─── TOOL_NAMES ─────────────────────────────────────────────────────────────
-
-describe('audio-ops TOOL_NAMES', () => {
-  it('contains exactly 4 tool names', () => {
-    expect(TOOL_NAMES.length).toBe(4);
-  });
-  it('includes audio_play', () => {
-    expect(TOOL_NAMES.includes('audio_play')).toBeTruthy();
-  });
-  it('includes audio_stop', () => {
-    expect(TOOL_NAMES.includes('audio_stop')).toBeTruthy();
-  });
-  it('includes audio_set_param', () => {
-    expect(TOOL_NAMES.includes('audio_set_param')).toBeTruthy();
-  });
-  it('includes audio_query', () => {
-    expect(TOOL_NAMES.includes('audio_query')).toBeTruthy();
-  });
-});
-
 // ─── getToolDefinitions ─────────────────────────────────────────────────────
 
 describe('audio-ops getToolDefinitions', () => {
-  it('returns 4 tool definitions', () => {
+  it('returns 1 merged tool definition', () => {
     const defs = getToolDefinitions();
-    expect(defs.length).toBe(4);
+    expect(defs.length).toBe(1);
   });
-  it('each definition has a name from TOOL_NAMES', () => {
+  it('tool is named "audio"', () => {
     const defs = getToolDefinitions();
-    const names = defs.map(d => d.name);
-    for (const tn of TOOL_NAMES) {
-      expect(names.includes(tn)).toBeTruthy();
-    }
+    expect(defs[0].name).toBe('audio');
+  });
+  it('action enum contains all 4 actions', () => {
+    const defs = getToolDefinitions();
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    expect(actionEnum).toContain('audio_play');
+    expect(actionEnum).toContain('audio_stop');
+    expect(actionEnum).toContain('audio_set_param');
+    expect(actionEnum).toContain('audio_query');
+  });
+  it('definition has inputSchema with required fields', () => {
+    const defs = getToolDefinitions();
+    expect(defs[0].inputSchema).toBeTruthy();
+    expect(defs[0].inputSchema.required).toContain('project_path');
+    expect(defs[0].inputSchema.required).toContain('action');
+  });
+});
+
+// ─── TOOL_META ──────────────────────────────────────────────────────────────
+
+describe('audio-ops TOOL_META', () => {
+  it('has exactly 1 entry', () => {
+    expect(Object.keys(TOOL_META).length).toBe(1);
+  });
+  it('has entry for "audio"', () => {
+    expect(TOOL_META.audio).toBeDefined();
+  });
+  it('audio is non-readonly and non-long-running', () => {
+    expect(TOOL_META.audio.readonly).toBe(false);
+    expect(TOOL_META.audio.long_running).toBe(false);
   });
 });
 

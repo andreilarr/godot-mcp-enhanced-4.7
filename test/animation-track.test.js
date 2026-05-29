@@ -18,9 +18,9 @@ const fakeCtx = { findGodot: async () => '/fake/godot' };
 
 describe('animation-track TOOL_NAMES', () => {
   it('contains 3 tool names', () => {
-    expect(TOOL_NAMES.length).toBe(3);
+    expect(TOOL_NAMES.length).toBe(1);
   });
-  const expected = ['animation_track', 'animation_keyframe', 'animation_curve'];
+  const expected = ['animation_track'];
   for (const name of expected) {
     it(`includes ${name}`, () => {
       expect(TOOL_NAMES.includes(name)).toBeTruthy();
@@ -38,7 +38,7 @@ describe('animation-track getToolDefinitions', () => {
   });
   it('returns 3 definitions', () => {
     const defs = getToolDefinitions();
-    expect(defs.length).toBe(3);
+    expect(defs.length).toBe(1);
   });
   it('each definition has name and inputSchema', () => {
     for (const def of getToolDefinitions()) {
@@ -82,7 +82,7 @@ describe('animation-track handleTool', () => {
     const result = await handleTool('animation_track', {
       project_path: '/fake/project',
       animation_name: 'idle',
-      action: 'add',
+      action: 'add_track',
       track_type: 'value',
     }, fakeCtx);
     expect(result).toBeTruthy();
@@ -95,7 +95,7 @@ describe('animation-track handleTool', () => {
       project_path: '/fake/project',
       node_path: 'root/AP',
       animation_name: 'idle',
-      action: 'add',
+      action: 'add_track',
     }, fakeCtx);
     expect(result).toBeTruthy();
     const parsed = JSON.parse(result.content[0].text);
@@ -107,7 +107,7 @@ describe('animation-track handleTool', () => {
       project_path: '/fake/project',
       node_path: 'root/AP',
       animation_name: 'idle',
-      action: 'remove',
+      action: 'remove_track',
     }, fakeCtx);
     expect(result).toBeTruthy();
     const parsed = JSON.parse(result.content[0].text);
@@ -115,11 +115,11 @@ describe('animation-track handleTool', () => {
   });
 
   it('animation_keyframe rejects missing time for add', async () => {
-    const result = await handleTool('animation_keyframe', {
+    const result = await handleTool('animation_track', {
       project_path: '/fake/project',
       node_path: 'root/AP',
       animation_name: 'idle',
-      action: 'add',
+      action: 'add_keyframe',
       track_index: 0,
     }, fakeCtx);
     expect(result).toBeTruthy();
@@ -128,11 +128,11 @@ describe('animation-track handleTool', () => {
   });
 
   it('animation_keyframe rejects missing keyframe_index for remove', async () => {
-    const result = await handleTool('animation_keyframe', {
+    const result = await handleTool('animation_track', {
       project_path: '/fake/project',
       node_path: 'root/AP',
       animation_name: 'idle',
-      action: 'remove',
+      action: 'remove_keyframe',
       track_index: 0,
     }, fakeCtx);
     expect(result).toBeTruthy();
@@ -141,10 +141,11 @@ describe('animation-track handleTool', () => {
   });
 
   it('animation_curve rejects missing track_index', async () => {
-    const result = await handleTool('animation_curve', {
+    const result = await handleTool('animation_track', {
       project_path: '/fake/project',
       node_path: 'root/AP',
       animation_name: 'idle',
+      action: 'set_curve',
       keyframe_index: 0,
     }, fakeCtx);
     expect(result).toBeTruthy();

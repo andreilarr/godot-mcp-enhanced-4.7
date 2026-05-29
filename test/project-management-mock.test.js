@@ -31,6 +31,16 @@ import * as validation from '../src/tools/validation.js';
 import { createToolContext, createTempProject } from './helpers/tool-context.js';
 import { MINIMAL_PROJECT } from './helpers/fixtures.js';
 
+// Helper: call project.handleTool via merged tool name 'project' + action
+function callProject(action, extraArgs, ctx) {
+  return project.handleTool('project', { action, ...extraArgs }, ctx);
+}
+
+// Helper: call validation.handleTool via merged tool name 'validation' + action
+function callValidation(action, extraArgs, ctx) {
+  return validation.handleTool('validation', { action, ...extraArgs }, ctx);
+}
+
 describe('Level B: Project management', () => {
   const dirRef = { path: null };
   let ctx;
@@ -52,7 +62,7 @@ describe('Level B: Project management', () => {
   // 用例 1: create_project — 创建完整项目结构
   it('create project', async () => {
     const newDir = join(dirRef.path, 'new-project');
-    const result = await project.handleTool('create_project', {
+    const result = await callProject('create_project', {
       project_path: newDir,
     }, ctx);
     expect(!result.isError).toBeTruthy();
@@ -61,7 +71,7 @@ describe('Level B: Project management', () => {
 
   // 用例 2: read_project_config — 解析项目配置
   it('read project config', async () => {
-    const result = await project.handleTool('read_project_config', {
+    const result = await callProject('read_project_config', {
       project_path: dirRef.path,
     }, ctx);
     expect(!result.isError).toBeTruthy();
@@ -74,7 +84,7 @@ describe('Level B: Project management', () => {
 
   // 用例 3: validate_project — 最小项目应通过验证（纯文件系统操作，不调用 Godot）
   it('validate project', async () => {
-    const result = await validation.handleTool('validate_project', {
+    const result = await callValidation('validate_project', {
       project_path: dirRef.path,
     }, ctx);
     expect(!result.isError).toBeTruthy();
@@ -85,7 +95,7 @@ describe('Level B: Project management', () => {
 
   // 用例 4: list_files 带 .gd 扩展名过滤
   it('list files with filter', async () => {
-    const result = await project.handleTool('list_files', {
+    const result = await callProject('list_files', {
       project_path: dirRef.path,
       extensions: ['.gd'],
     }, ctx);
@@ -103,7 +113,7 @@ describe('Level B: Project management', () => {
   it('validate scripts with empty array', async () => {
     vi.mocked(validation.batchValidateScripts).mockResolvedValueOnce([]);
 
-    const result = await validation.handleTool('validate_scripts', {
+    const result = await callValidation('validate_scripts', {
       project_path: dirRef.path,
       scripts: [],
     }, ctx);

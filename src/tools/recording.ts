@@ -17,7 +17,7 @@ const ERROR_CODES = {
   SCRIPT_EXEC_FAILED: 'SCRIPT_EXEC_FAILED',
 } as const;
 
-export const TOOL_NAMES = [
+const ACTIONS = [
   'recording_start',
   'recording_stop',
   'recording_save',
@@ -190,67 +190,23 @@ func _initialize():
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'recording_start',
-      description: `Start recording input events (key, mouse). Requires Game Bridge connection. ${NON_PERSIST}`,
+      name: 'recording',
+      description: `录制、保存、加载、回放输入事件（键盘/鼠标）。需要 Game Bridge 连接。运行时操作，仅影响当前执行上下文。如需持久化，请编辑 .tscn 文件。${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'recording_stop',
-      description: `Stop recording and return captured events. Requires Game Bridge connection. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path'],
-      },
-    },
-    {
-      name: 'recording_save',
-      description: `Save recorded events to a JSON file in res://recordings/. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
+          action: {
+            type: 'string',
+            enum: ['recording_start', 'recording_stop', 'recording_save', 'recording_load', 'recording_play'],
+            description: '操作类型',
+          },
           project_path: { type: 'string', description: 'Godot 项目目录路径' },
           events_json: { type: 'string', description: 'JSON 格式的事件序列字符串' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'events_json'],
-      },
-    },
-    {
-      name: 'recording_load',
-      description: `Load a recording file from res://recordings/. Only accepts recording_*.json files. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
           file_name: { type: 'string', description: '录制文件名（仅接受 recording_*.json 格式）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'file_name'],
-      },
-    },
-    {
-      name: 'recording_play',
-      description: `Play back recorded events using Input.parse_input_event(). Requires Game Bridge connection. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          events_json: { type: 'string', description: 'JSON 格式的事件序列字符串' },
           speed: { type: 'number', description: '回放速度倍率（默认 1.0）' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'events_json'],
+        required: ['action', 'project_path'],
       },
     },
   ];
@@ -261,14 +217,16 @@ export function getToolDefinitions(): Tool[] {
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'recording') return null;
+  const action = args.action as string;
+  if (!(ACTIONS as readonly string[]).includes(action)) return null;
 
   try {
     const projectPath = requireProjectPath(args);
     const godot = await ctx.findGodot();
     const loadAutoloads = args.load_autoloads !== false;
 
-    switch (name) {
+    switch (action) {
       case 'recording_start': {
         if (!loadAutoloads) {
           return opsErrorResult(ERROR_CODES.BRIDGE_NOT_CONNECTED, '录制功能需要 Game Bridge 连接，headless 模式不支持。');
@@ -411,9 +369,5 @@ export async function handleTool(
 // ─── Tool Meta ──────────────────────────────────────────────────────────────
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  recording_start: { readonly: false, long_running: false },
-  recording_stop: { readonly: false, long_running: false },
-  recording_save: { readonly: false, long_running: false },
-  recording_load: { readonly: true, long_running: false },
-  recording_play: { readonly: false, long_running: false },
+  recording: { readonly: false, long_running: false },
 };

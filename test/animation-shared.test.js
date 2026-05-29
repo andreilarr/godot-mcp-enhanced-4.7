@@ -105,7 +105,7 @@ describe('valueToGd', () => {
     expect(valueToGd([1, 0, 0, 1])).toBe('Color(1, 0, 0, 1)');
   });
   it('converts longer array to JSON', () => {
-    expect(valueToGd([1, 2, 3, 4, 5])).toBe('[1,2,3,4,5]');
+    expect(valueToGd([1, 2, 3, 4, 5])).toBe('[1, 2, 3, 4, 5]');
   });
   it('throws for object types', () => {
     expect(() => valueToGd({})).toThrow();

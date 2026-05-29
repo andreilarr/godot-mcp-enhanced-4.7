@@ -8,7 +8,7 @@ import { LOOP_MODES, TRACK_TYPES, ensureNumber, valueToGd, argsToGd, animErrorMa
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
-const TOOL_NAMES = ['animation', 'animation_blend'] as const;
+const TOOL_NAMES = ['animation'] as const;
 
 export { TOOL_NAMES };
 
@@ -19,7 +19,7 @@ export function getToolDefinitions(): Tool[] {
     {
       name: 'animation',
       description:
-        '查询、控制和编辑动画。查询: list_players, get_info, get_details, get_keyframes。播放: play, stop, seek。编辑: create, delete, update_props, add_track, remove_track, add_keyframe, remove_keyframe, update_keyframe。' +
+        '查询、控制和编辑动画。查询: list_players, get_info, get_details, get_keyframes。播放: play, stop, seek, blend。编辑: create, delete, update_props, add_track, remove_track, add_keyframe, remove_keyframe, update_keyframe。' +
         NON_PERSIST,
       inputSchema: {
         type: 'object' as const,
@@ -29,7 +29,7 @@ export function getToolDefinitions(): Tool[] {
             type: 'string',
             enum: [
               'list_players', 'get_info', 'get_details', 'get_keyframes',
-              'play', 'stop', 'seek',
+              'play', 'stop', 'seek', 'blend',
               'create', 'delete', 'update_props',
               'add_track', 'remove_track',
               'add_keyframe', 'remove_keyframe', 'update_keyframe',
@@ -59,29 +59,13 @@ export function getToolDefinitions(): Tool[] {
           keep_state: { type: 'boolean', description: '停止时保持状态（stop）' },
           seconds: { type: 'number', description: '跳转位置（秒）（seek）' },
           update: { type: 'boolean', description: '跳转后立即更新节点（seek）' },
+          blend_time: { type: 'number', description: '混合过渡时间（秒）（blend）' },
+          speed: { type: 'number', description: '播放速度，默认 1.0（blend）' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
         required: ['project_path', 'action'],
       },
-    },
-    {
-      name: 'animation_blend',
-      description:
-        '使用 AnimationPlayer.play() 的自定义混合时间播放动画，实现动画间的线性插值混合。' +
-        NON_PERSIST,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'AnimationPlayer 节点路径' },
-          animation_name: { type: 'string', description: '动画名称' },
-          blend_time: { type: 'number', description: '混合过渡时间（秒）' },
-          speed: { type: 'number', description: '播放速度，默认 1.0' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'animation_name', 'blend_time'],
-      },
-    },
+    }
   ];
 }
 
@@ -646,20 +630,16 @@ export async function handleTool(
               args.value,
               args.transition !== undefined ? ensureNumber(args.transition, 'transition') : undefined);
             break;
+          case 'blend': {
+            if (!nodePath || !animName || args.blend_time === undefined) return opsErrorResult('INVALID_PARAMS', 'node_path, animation_name, blend_time required');
+            const blendTime = ensureNumber(args.blend_time, 'blend_time');
+            const blendSpeed = args.speed !== undefined ? ensureNumber(args.speed, 'speed') : 1.0;
+            code = genAnimationBlend(nodePath, animName, blendTime, blendSpeed);
+            break;
+          }
           default:
             return opsErrorResult('INVALID_ACTION', `Unknown action: ${action}`);
         }
-        break;
-      }
-
-      // ── animation_blend tool ──
-      case 'animation_blend': {
-        const nodePath = normalizeNodePath((args.node_path as string) ?? '');
-        const animName = (args.animation_name as string) ?? '';
-        if (!nodePath || !animName || args.blend_time === undefined) return opsErrorResult('INVALID_PARAMS', 'node_path, animation_name, blend_time required');
-        const blendTime = ensureNumber(args.blend_time, 'blend_time');
-        const speed = args.speed !== undefined ? ensureNumber(args.speed, 'speed') : 1.0;
-        code = genAnimationBlend(nodePath, animName, blendTime, speed);
         break;
       }
 
@@ -683,5 +663,4 @@ export async function handleTool(
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   animation: { readonly: false, long_running: false },
-  animation_blend: { readonly: false, long_running: false },
 };

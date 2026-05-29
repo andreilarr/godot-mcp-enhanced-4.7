@@ -8,7 +8,7 @@ import { TRACK_TYPES, ensureNumber, valueToGd, animErrorMapper } from './animati
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
-const TOOL_NAMES = ['animation_track', 'animation_keyframe', 'animation_curve'] as const;
+const TOOL_NAMES = ['animation_track'] as const;
 
 export { TOOL_NAMES };
 
@@ -19,88 +19,50 @@ export function getToolDefinitions(): Tool[] {
     {
       name: 'animation_track',
       description:
-        '添加或移除动画轨道。支持 9 种轨道类型：value, position_3d, rotation_3d, scale_3d, blend_shape, method, bezier, audio, animation。' +
+        '动画轨道与关键帧操作。轨道: add_track, remove_track。关键帧: add_keyframe, remove_keyframe, update_keyframe。曲线: set_curve。' +
         NON_PERSIST,
       inputSchema: {
         type: 'object' as const,
         properties: {
           project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'AnimationPlayer 节点路径' },
-          animation_name: { type: 'string', description: '动画名称' },
           action: {
             type: 'string',
-            enum: ['add', 'remove'],
-            description: '操作类型：add 添加轨道，remove 移除轨道',
+            enum: ['add_track', 'remove_track', 'add_keyframe', 'remove_keyframe', 'update_keyframe', 'set_curve'],
+            description: '操作类型',
           },
+          node_path: { type: 'string', description: 'AnimationPlayer 节点路径' },
+          animation_name: { type: 'string', description: '动画名称' },
           track_type: {
             type: 'string',
             enum: [...TRACK_TYPES],
-            description: '轨道类型（add 时必填）',
+            description: '轨道类型（add_track 时必填）',
           },
-          track_path: { type: 'string', description: '轨道路径，如 "Sprite2D:frame"（add 时可选）' },
-          track_index: { type: 'number', description: '轨道索引（remove 时必填）' },
-          insert_at: { type: 'number', description: '轨道插入位置，-1 为末尾（add 时可选）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'animation_name', 'action'],
-      },
-    },
-    {
-      name: 'animation_keyframe',
-      description:
-        '添加、移除或更新动画关键帧。' +
-        NON_PERSIST,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'AnimationPlayer 节点路径' },
-          animation_name: { type: 'string', description: '动画名称' },
-          action: {
-            type: 'string',
-            enum: ['add', 'remove', 'update'],
-            description: '操作类型',
-          },
+          track_path: { type: 'string', description: '轨道路径，如 "Sprite2D:frame"（add_track 时可选）' },
           track_index: { type: 'number', description: '轨道索引' },
-          time: { type: 'number', description: '关键帧时间（秒）' },
-          value: { description: '关键帧值（add/update 时使用）' },
+          insert_at: { type: 'number', description: '轨道插入位置，-1 为末尾（add_track 时可选）' },
+          keyframe_index: { type: 'number', description: '关键帧索引（remove_keyframe/update_keyframe/set_curve 时必填）' },
+          time: { type: 'number', description: '关键帧时间（秒）（add_keyframe 时必填）' },
+          value: { description: '关键帧值（add_keyframe/update_keyframe）' },
           transition: { type: 'number', description: '过渡曲线，1.0=线性' },
-          keyframe_index: { type: 'number', description: '关键帧索引（remove/update 时必填）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'animation_name', 'action', 'track_index'],
-      },
-    },
-    {
-      name: 'animation_curve',
-      description:
-        '设置动画关键帧的贝塞尔曲线控制柄（in_handle / out_handle）。' +
-        NON_PERSIST,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: 'AnimationPlayer 节点路径' },
-          animation_name: { type: 'string', description: '动画名称' },
-          track_index: { type: 'number', description: '轨道索引' },
-          keyframe_index: { type: 'number', description: '关键帧索引' },
           in_handle: {
             type: 'object',
             properties: { x: { type: 'number' }, y: { type: 'number' } },
-            description: '入控制柄坐标（可选）',
+            description: '入控制柄坐标（set_curve）',
           },
           out_handle: {
             type: 'object',
             properties: { x: { type: 'number' }, y: { type: 'number' } },
-            description: '出控制柄坐标（可选）',
+            description: '出控制柄坐标（set_curve）',
           },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'node_path', 'animation_name', 'track_index', 'keyframe_index'],
+        required: ['project_path', 'action'],
       },
     },
   ];
 }
+
+
 
 // ─── GDScript Generators ───────────────────────────────────────────────────
 
@@ -320,58 +282,51 @@ export async function handleTool(
     const godotPath = await ctx.findGodot();
 
     let code: string;
+    const action = args.action as string;
+    if (!action) return opsErrorResult('INVALID_PARAMS', 'action is required');
 
-    switch (name) {
-      // ── animation_track tool ──
-      case 'animation_track': {
-        const nodePath = normalizeNodePath((args.node_path as string) ?? '');
-        const animName = (args.animation_name as string) ?? '';
-        const action = args.action as string;
+    const nodePath = normalizeNodePath((args.node_path as string) ?? '');
+    const animName = (args.animation_name as string) ?? '';
+
+    switch (action) {
+      case 'add_track': {
         if (!nodePath || !animName) return opsErrorResult('INVALID_PARAMS', 'node_path and animation_name required');
-
-        if (action === 'add') {
-          if (!args.track_type) return opsErrorResult('INVALID_PARAMS', 'track_type required for add');
-          code = genAnimationTrackAdd(nodePath, animName, args.track_type as string, args.track_path as string | undefined,
-            args.insert_at !== undefined ? ensureNumber(args.insert_at, 'insert_at') : undefined);
-        } else if (action === 'remove') {
-          if (args.track_index === undefined) return opsErrorResult('INVALID_PARAMS', 'track_index required for remove');
-          code = genAnimationTrackRemove(nodePath, animName, ensureNumber(args.track_index, 'track_index'));
-        } else {
-          return opsErrorResult('INVALID_PARAMS', 'action must be "add" or "remove"');
-        }
+        if (!args.track_type) return opsErrorResult('INVALID_PARAMS', 'track_type required for add_track');
+        code = genAnimationTrackAdd(nodePath, animName, args.track_type as string, args.track_path as string | undefined,
+          args.insert_at !== undefined ? ensureNumber(args.insert_at, 'insert_at') : undefined);
         break;
       }
-
-      // ── animation_keyframe tool ──
-      case 'animation_keyframe': {
-        const nodePath = normalizeNodePath((args.node_path as string) ?? '');
-        const animName = (args.animation_name as string) ?? '';
-        const action = args.action as string;
+      case 'remove_track': {
+        if (!nodePath || !animName) return opsErrorResult('INVALID_PARAMS', 'node_path and animation_name required');
+        if (args.track_index === undefined) return opsErrorResult('INVALID_PARAMS', 'track_index required for remove_track');
+        code = genAnimationTrackRemove(nodePath, animName, ensureNumber(args.track_index, 'track_index'));
+        break;
+      }
+      case 'add_keyframe': {
         const trackIdx = args.track_index !== undefined ? ensureNumber(args.track_index, 'track_index') : -1;
         if (!nodePath || !animName || trackIdx < 0) return opsErrorResult('INVALID_PARAMS', 'node_path, animation_name, track_index required');
-
-        if (action === 'add') {
-          if (args.time === undefined) return opsErrorResult('INVALID_PARAMS', 'time required for add');
-          code = genAnimationKeyframeAdd(nodePath, animName, trackIdx, ensureNumber(args.time, 'time'), args.value,
-            args.transition !== undefined ? ensureNumber(args.transition, 'transition') : undefined);
-        } else if (action === 'remove') {
-          if (args.keyframe_index === undefined) return opsErrorResult('INVALID_PARAMS', 'keyframe_index required for remove');
-          code = genAnimationKeyframeRemove(nodePath, animName, trackIdx, ensureNumber(args.keyframe_index, 'keyframe_index'));
-        } else if (action === 'update') {
-          if (args.keyframe_index === undefined) return opsErrorResult('INVALID_PARAMS', 'keyframe_index required for update');
-          code = genAnimationKeyframeUpdate(nodePath, animName, trackIdx, ensureNumber(args.keyframe_index, 'keyframe_index'),
-            args.value,
-            args.transition !== undefined ? ensureNumber(args.transition, 'transition') : undefined);
-        } else {
-          return opsErrorResult('INVALID_PARAMS', 'action must be "add", "remove", or "update"');
-        }
+        if (args.time === undefined) return opsErrorResult('INVALID_PARAMS', 'time required for add_keyframe');
+        code = genAnimationKeyframeAdd(nodePath, animName, trackIdx, ensureNumber(args.time, 'time'), args.value,
+          args.transition !== undefined ? ensureNumber(args.transition, 'transition') : undefined);
         break;
       }
-
-      // ── animation_curve tool ──
-      case 'animation_curve': {
-        const nodePath = normalizeNodePath((args.node_path as string) ?? '');
-        const animName = (args.animation_name as string) ?? '';
+      case 'remove_keyframe': {
+        const trackIdx = args.track_index !== undefined ? ensureNumber(args.track_index, 'track_index') : -1;
+        if (!nodePath || !animName || trackIdx < 0) return opsErrorResult('INVALID_PARAMS', 'node_path, animation_name, track_index required');
+        if (args.keyframe_index === undefined) return opsErrorResult('INVALID_PARAMS', 'keyframe_index required for remove_keyframe');
+        code = genAnimationKeyframeRemove(nodePath, animName, trackIdx, ensureNumber(args.keyframe_index, 'keyframe_index'));
+        break;
+      }
+      case 'update_keyframe': {
+        const trackIdx = args.track_index !== undefined ? ensureNumber(args.track_index, 'track_index') : -1;
+        if (!nodePath || !animName || trackIdx < 0) return opsErrorResult('INVALID_PARAMS', 'node_path, animation_name, track_index required');
+        if (args.keyframe_index === undefined) return opsErrorResult('INVALID_PARAMS', 'keyframe_index required for update_keyframe');
+        code = genAnimationKeyframeUpdate(nodePath, animName, trackIdx, ensureNumber(args.keyframe_index, 'keyframe_index'),
+          args.value,
+          args.transition !== undefined ? ensureNumber(args.transition, 'transition') : undefined);
+        break;
+      }
+      case 'set_curve': {
         const trackIdx = args.track_index !== undefined ? ensureNumber(args.track_index, 'track_index') : -1;
         const kfIdx = args.keyframe_index !== undefined ? ensureNumber(args.keyframe_index, 'keyframe_index') : -1;
         if (!nodePath || !animName || trackIdx < 0 || kfIdx < 0) return opsErrorResult('INVALID_PARAMS', 'node_path, animation_name, track_index, keyframe_index required');
@@ -388,9 +343,8 @@ export async function handleTool(
         code = genAnimationCurve(nodePath, animName, trackIdx, kfIdx, inHandle, outHandle);
         break;
       }
-
       default:
-        return null;
+        return opsErrorResult('INVALID_ACTION', `Unknown action: ${action}`);
     }
 
     const result = await executeGdscript({
@@ -409,6 +363,4 @@ export async function handleTool(
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   animation_track: { readonly: false, long_running: false },
-  animation_keyframe: { readonly: false, long_running: false },
-  animation_curve: { readonly: false, long_running: false },
 };

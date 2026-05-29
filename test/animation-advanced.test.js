@@ -15,7 +15,7 @@ import {
   genAnimationCurve,
 } from '../src/tools/animation-track.js';
 import {
-  TOOL_NAMES as ANIMTREE_TOOL_NAMES,
+  ACTIONS as ANIMTREE_ACTIONS,
   getToolDefinitions as getAnimtreeDefs,
   genStateSetPosition,
   genStateSetBlend,
@@ -24,32 +24,26 @@ import {
 // ─── animation-ops TOOL_NAMES ────────────────────────────────────────────
 
 describe('animation-ops TOOL_NAMES', () => {
-  it('contains 2 tool names (animation + animation_blend)', () => {
-    expect(ANIM_TOOL_NAMES.length).toBe(2);
+  it('contains 1 tool name (animation)', () => {
+    expect(ANIM_TOOL_NAMES.length).toBe(1);
   });
   it('includes animation', () => {
     expect(ANIM_TOOL_NAMES.includes('animation')).toBeTruthy();
   });
-  it('includes animation_blend', () => {
-    expect(ANIM_TOOL_NAMES.includes('animation_blend')).toBeTruthy();
-  });
+
 });
 
 // ─── animation-track TOOL_NAMES ──────────────────────────────────────────
 
 describe('animation-track TOOL_NAMES', () => {
   it('contains 3 tool names', () => {
-    expect(TRACK_TOOL_NAMES.length).toBe(3);
+    expect(TRACK_TOOL_NAMES.length).toBe(1);
   });
   it('includes animation_track', () => {
     expect(TRACK_TOOL_NAMES.includes('animation_track')).toBeTruthy();
   });
-  it('includes animation_keyframe', () => {
-    expect(TRACK_TOOL_NAMES.includes('animation_keyframe')).toBeTruthy();
-  });
-  it('includes animation_curve', () => {
-    expect(TRACK_TOOL_NAMES.includes('animation_curve')).toBeTruthy();
-  });
+
+
 });
 
 // ─── getToolDefinitions (animation-ops) ───────────────────────────────────
@@ -57,7 +51,7 @@ describe('animation-track TOOL_NAMES', () => {
 describe('animation-ops getToolDefinitions', () => {
   it('returns 2 tool definitions', () => {
     const defs = getAnimDefs();
-    expect(defs.length).toBe(2);
+    expect(defs.length).toBe(1);
   });
   it('each definition has inputSchema with required fields', () => {
     const defs = getAnimDefs();
@@ -73,24 +67,24 @@ describe('animation-ops getToolDefinitions', () => {
 describe('animation-track getToolDefinitions', () => {
   it('returns 3 tool definitions', () => {
     const defs = getTrackDefs();
-    expect(defs.length).toBe(3);
+    expect(defs.length).toBe(1);
   });
-  it('animation_track has action enum with add and remove', () => {
+  it('animation_track has action enum with add_track and remove_track', () => {
     const defs = getTrackDefs();
     const track = defs.find(d => d.name === 'animation_track');
     expect(track).toBeTruthy();
     const actionEnum = track.inputSchema.properties.action.enum;
-    expect(actionEnum.includes('add')).toBeTruthy();
-    expect(actionEnum.includes('remove')).toBeTruthy();
+    expect(actionEnum.includes('add_track')).toBeTruthy();
+    expect(actionEnum.includes('remove_track')).toBeTruthy();
   });
-  it('animation_keyframe has action enum with add, remove, update', () => {
+  it('animation_track has keyframe actions', () => {
     const defs = getTrackDefs();
-    const kf = defs.find(d => d.name === 'animation_keyframe');
+    const kf = defs.find(d => d.name === 'animation_track');
     expect(kf).toBeTruthy();
     const actionEnum = kf.inputSchema.properties.action.enum;
-    expect(actionEnum.includes('add')).toBeTruthy();
-    expect(actionEnum.includes('remove')).toBeTruthy();
-    expect(actionEnum.includes('update')).toBeTruthy();
+    expect(actionEnum.includes('add_track')).toBeTruthy();
+    expect(actionEnum.includes('remove_track')).toBeTruthy();
+    expect(actionEnum.includes('update_keyframe')).toBeTruthy();
   });
 });
 
@@ -208,31 +202,29 @@ describe('genAnimationBlend', () => {
   });
 });
 
-// ─── animtree TOOL_NAMES ─────────────────────────────────────────────────
+// ─── animtree ACTIONS ─────────────────────────────────────────────────
 
-describe('animtree TOOL_NAMES (with P2 addition)', () => {
-  it('contains 6 tool names (5 original + animtree_state_edit)', () => {
-    expect(ANIMTREE_TOOL_NAMES.length).toBe(6);
+describe('animtree ACTIONS (with P2 addition)', () => {
+  it('contains 6 actions (5 original + animtree_state_edit)', () => {
+    expect(ANIMTREE_ACTIONS.length).toBe(6);
   });
   it('includes animtree_state_edit', () => {
-    expect(ANIMTREE_TOOL_NAMES.includes('animtree_state_edit')).toBeTruthy();
+    expect(ANIMTREE_ACTIONS.includes('animtree_state_edit')).toBeTruthy();
   });
 });
 
 // ─── animtree getToolDefinitions ──────────────────────────────────────────
 
 describe('animtree getToolDefinitions', () => {
-  it('returns 6 tool definitions', () => {
+  it('returns 1 definition named animtree', () => {
     const defs = getAnimtreeDefs();
-    expect(defs.length).toBe(6);
+    expect(defs.length).toBe(1);
+    expect(defs[0].name).toBe('animtree');
   });
-  it('animtree_state_edit definition exists with correct actions', () => {
+  it('action enum includes animtree_state_edit', () => {
     const defs = getAnimtreeDefs();
-    const edit = defs.find(d => d.name === 'animtree_state_edit');
-    expect(edit).toBeTruthy();
-    const actionEnum = edit.inputSchema.properties.action.enum;
-    expect(actionEnum.includes('set_position')).toBeTruthy();
-    expect(actionEnum.includes('set_blend')).toBeTruthy();
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    expect(actionEnum.includes('animtree_state_edit')).toBeTruthy();
   });
 });
 

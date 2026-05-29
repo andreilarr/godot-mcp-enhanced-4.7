@@ -354,9 +354,10 @@ describe('handleTool routing', () => {
   });
 
   it('material_write rejects missing action', async () => {
-    const result = await handleTool('material_write', {
+    const result = await handleTool('material', {
       project_path: '/tmp/fake',
       node_path: '/root/Node',
+      action: 'set_params',
     }, { findGodot: async () => '/fake' });
     expect(result).toBeTruthy();
     const parsed = JSON.parse(result.content[0].text);
@@ -365,7 +366,7 @@ describe('handleTool routing', () => {
   });
 
   it('material_write rejects invalid material_type', async () => {
-    const result = await handleTool('material_write', {
+    const result = await handleTool('material', {
       project_path: '/tmp/fake',
       node_path: '/root/Node',
       action: 'create',
@@ -378,8 +379,8 @@ describe('handleTool routing', () => {
   });
 
   it('shader_edit list_templates works without project_path', async () => {
-    const result = await handleTool('shader_edit', {
-      action: 'list_templates',
+    const result = await handleTool('material', {
+      action: 'shader_list_templates',
     }, { findGodot: async () => '/fake' });
     expect(result).toBeTruthy();
     const parsed = JSON.parse(result.content[0].text);
@@ -388,10 +389,10 @@ describe('handleTool routing', () => {
   });
 
   it('shader_edit rejects missing code for write', async () => {
-    const result = await handleTool('shader_edit', {
+    const result = await handleTool('material', {
       project_path: '/tmp/fake',
       node_path: '/root/Node',
-      action: 'write',
+      action: 'shader_write',
     }, { findGodot: async () => '/fake' });
     expect(result).toBeTruthy();
     const parsed = JSON.parse(result.content[0].text);
@@ -400,7 +401,7 @@ describe('handleTool routing', () => {
   });
 
   it('material_write rejects non-res:// resource_path', async () => {
-    const result = await handleTool('material_write', {
+    const result = await handleTool('material', {
       project_path: '/tmp/fake',
       node_path: '/root/Node',
       action: 'save',
@@ -412,8 +413,9 @@ describe('handleTool routing', () => {
   });
 
   it('material_read rejects empty node_path', async () => {
-    const result = await handleTool('material_read', {
+    const result = await handleTool('material', {
       project_path: '/tmp/fake',
+      action: 'read',
       node_path: '',
     }, { findGodot: async () => '/fake' });
     expect(result).toBeTruthy();

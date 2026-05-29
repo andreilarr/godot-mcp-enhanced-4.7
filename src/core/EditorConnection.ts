@@ -35,8 +35,56 @@ export class EditorConnection {
   private reconnectEnabled = true;
   private connectAttempt = false;
 
-  public onDisconnect: (() => void) | null = null;
-  public onReconnect: (() => void) | null = null;
+  private disconnectHandlers = new Set<() => void>();
+  private reconnectHandlers = new Set<() => void>();
+
+  /**
+   * Backward-compatible setter: converts a direct assignment like
+   * `conn.onDisconnect = fn` into the multicast Set pattern.
+   */
+  get onDisconnect(): (() => void) | null {
+    const first = this.disconnectHandlers.values().next().value;
+    return first ?? null;
+  }
+  set onDisconnect(fn: (() => void) | null) {
+    this.disconnectHandlers.clear();
+    if (fn) this.disconnectHandlers.add(fn);
+  }
+
+  get onReconnect(): (() => void) | null {
+    const first = this.reconnectHandlers.values().next().value;
+    return first ?? null;
+  }
+  set onReconnect(fn: (() => void) | null) {
+    this.reconnectHandlers.clear();
+    if (fn) this.reconnectHandlers.add(fn);
+  }
+
+  /** Add a handler invoked when the editor disconnects. */
+  addOnDisconnectHandler(handler: () => void): void {
+    this.disconnectHandlers.add(handler);
+  }
+  /** Remove a previously added disconnect handler. */
+  removeOnDisconnectHandler(handler: () => void): void {
+    this.disconnectHandlers.delete(handler);
+  }
+
+  /** Add a handler invoked when the editor reconnects. */
+  addOnReconnectHandler(handler: () => void): void {
+    this.reconnectHandlers.add(handler);
+  }
+  /** Remove a previously added reconnect handler. */
+  removeOnReconnectHandler(handler: () => void): void {
+    this.reconnectHandlers.delete(handler);
+  }
+
+  private fireDisconnect(): void {
+    for (const handler of this.disconnectHandlers) handler();
+  }
+
+  private fireReconnect(): void {
+    for (const handler of this.reconnectHandlers) handler();
+  }
 
   private readonly host: string;
   private readonly shouldReconnect: boolean;
@@ -135,7 +183,7 @@ export class EditorConnection {
         const isReconnect = this.reconnectAttempt > 0;
         this.reconnectAttempt = 0;
         if (isReconnect) {
-          this.onReconnect?.();
+          this.fireReconnect();
         }
         resolve();
       });
@@ -156,7 +204,7 @@ export class EditorConnection {
         this.pending.clear();
         // Don't clear notificationHandlers — they need to survive reconnect
         const wasConnected = !this.connectAttempt;
-        this.onDisconnect?.();
+        this.fireDisconnect();
         if (wasConnected && this.reconnectEnabled) this.scheduleReconnect();
         this.connectAttempt = false;
       });
@@ -318,7 +366,7 @@ export class EditorConnection {
     if (this.reconnectAttempt >= this.maxReconnectAttempts) {
       console.error(`[EditorConnection] Max reconnect attempts (${this.maxReconnectAttempts}) reached, giving up`);
       this.reconnectEnabled = false;
-      this.onDisconnect?.();
+      this.fireDisconnect();
       return;
     }
     const delay = Math.min(
@@ -357,6 +405,20 @@ export class EditorConnection {
     }
     this.pending.clear();
     this.notificationHandlers.clear();
+  }
+
+  /**
+   * Reset reconnect state so that a subsequent `connect()` can re-enable
+   * reconnection. This is useful after max-reconnect-attempts was reached
+   * and you want to retry later.
+   */
+  resetReconnectState(): void {
+    this.reconnectAttempt = 0;
+    this.reconnectEnabled = this.shouldReconnect;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
   }
 
   isConnected(): boolean {

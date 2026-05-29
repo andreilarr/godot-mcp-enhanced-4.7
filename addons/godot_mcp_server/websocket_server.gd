@@ -251,6 +251,14 @@ func _send_session_sync(peer: WebSocketPeer) -> void:
 func _on_heartbeat_timeout(peer_id: int) -> void:
 	push_warning("[MCP] Heartbeat timeout (peer_id: %d)" % peer_id)
 	_update_panel("MCP: Connection timeout!")
+	if peer_id == -1:
+		for peer in _peers:
+			peer.close()
+	else:
+		for peer in _peers:
+			if peer.get_instance_id() == peer_id:
+				peer.close()
+				break
 
 func cancel_current_operation() -> void:
 	_heartbeat.resume()
@@ -270,11 +278,11 @@ func _get_panel() -> Node:
 # DUPLICATE: Keep in sync with src/scripts/mcp_bridge.gd:_constant_time_compare
 # Cannot share because editor plugin and game autoload have separate script contexts.
 func _constant_time_compare(a: String, b: String) -> bool:
-	# When lengths differ, result=1 ensures false; loop only maintains constant-time execution.
 	var result := 0
 	if a.length() != b.length():
 		result = 1
-	for i in range(b.length()):
+	var max_len := maxi(a.length(), b.length())
+	for i in range(max_len):
 		var ca := ord(a[i]) if i < a.length() else 0
 		var cb := ord(b[i]) if i < b.length() else 0
 		result = result | (ca ^ cb)

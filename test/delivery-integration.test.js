@@ -4,7 +4,7 @@ import { expect } from 'vitest';
 describe('delivery integration tests', () => {
   it('VERIFY_ELIGIBLE_TOOLS contains expected tools', async () => {
     const reg = await import('../src/core/tool-registry.js');
-    const supportedTools = ['add_node', 'edit_node', 'write_script', 'edit_script', 'load_sprite', 'ui_build_layout'];
+    const supportedTools = ['scene', 'script', 'ui'];
     for (const name of supportedTools) {
       expect(reg.VERIFY_ELIGIBLE_TOOLS.has(name)).toBeTruthy();
     }
@@ -26,12 +26,12 @@ describe('delivery integration tests', () => {
     expect(code.includes('_mcp_done')).toBeTruthy();
   });
 
-  it('dev_loop tool definition includes acceptance', async () => {
+  it('workflow tool definition includes acceptance', async () => {
     const mod = await import('../src/tools/workflow.js');
     const tools = mod.getToolDefinitions();
-    const devLoop = tools.find(t => t.name === 'dev_loop');
-    expect(devLoop).toBeTruthy();
-    expect(devLoop.inputSchema.properties.acceptance).toBeTruthy();
+    const wf = tools.find(t => t.name === 'workflow');
+    expect(wf).toBeTruthy();
+    expect(wf.inputSchema.properties.acceptance).toBeTruthy();
   });
 
   it('all new test files have no syntax errors', () => {

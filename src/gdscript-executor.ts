@@ -30,10 +30,19 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /DirAccess\.(remove_absolute|remove)\b/, label: 'Directory removal' },
   { pattern: /FileAccess\.open\s*\([^)]*WRITE/, label: 'File write access' },
   { pattern: /Engine\.(set_singleton)\b/, label: 'Engine singleton modification' },
+  { pattern: /JavaScriptBridge\.eval\b/, label: 'JavaScript eval (web escape)' },
+  { pattern: /\bstr2var\b/, label: 'str2var (arbitrary deserialization)' },
+  { pattern: /\bbytes2var\b/, label: 'bytes2var (arbitrary deserialization)' },
+  { pattern: /\bvar2bytes\b/, label: 'var2bytes (serialization)' },
+  { pattern: /load\s*\(\s*"(?!res:\/\/)/, label: 'load() with non-resource path' },
+  { pattern: /Thread\.(new|start)\b/, label: 'Thread creation' },
+  { pattern: /Semaphore\.new\b/, label: 'Semaphore creation' },
+  { pattern: /Mutex\.new\b/, label: 'Mutex creation' },
 ];
 
 /** Best-effort scan for dangerous GDScript patterns. Returns warnings array.
- *  Enabled by default; set GODOT_MCP_SANDBOX=disabled to skip scanning. */
+ *  Enabled by default; set GODOT_MCP_SANDBOX=disabled to skip scanning.
+ *  When warnings are found, execution is BLOCKED unless GODOT_MCP_ALLOW_UNSAFE=true. */
 export function scanGdscriptSandbox(code: string): string[] {
   if (process.env.GODOT_MCP_SANDBOX === 'disabled') return [];
   const warnings: string[] = [];
@@ -454,13 +463,14 @@ export async function executeGdscript(
     return { success: false, compile_success: false, compile_error: 'GDScript execution is disabled (ALLOW_EXECUTE_GDSCRIPT=false)', errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0 };
   }
 
-  // C-SEC-02: Sandbox warning scan (does NOT block execution)
+  // C-SEC-02: Sandbox scan — BLOCKS execution on dangerous patterns by default
   const sandboxWarnings = scanGdscriptSandbox(code);
-  if (sandboxWarnings.length > 0) {
-    console.warn('[executor] Sandbox warnings for submitted code:');
-    for (const w of sandboxWarnings) {
-      console.warn('  ' + w);
-    }
+  if (sandboxWarnings.length > 0 && process.env.GODOT_MCP_ALLOW_UNSAFE !== 'true') {
+    return {
+      success: false, compile_success: false,
+      compile_error: `Sandbox violation: code contains dangerous patterns. Set GODOT_MCP_ALLOW_UNSAFE=true to override.\n${sandboxWarnings.join('\n')}`,
+      errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0,
+    };
   }
 
   // Validate godotPath exists and looks like a Godot binary

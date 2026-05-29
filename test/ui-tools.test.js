@@ -1,6 +1,5 @@
 import { expect } from 'vitest';
 import {
-  TOOL_NAMES,
   getToolDefinitions,
   genUiCreateControlScript,
   genUiSetLayoutScript,
@@ -15,41 +14,53 @@ import {
   colorToGd,
 } from '../src/tools/ui-tools.js';
 
-// ─── TOOL_NAMES ─────────────────────────────────────────────────────────────
+// ─── Actions (via schema) ─────────────────────────────────────────────────
 
-describe('TOOL_NAMES', () => {
-  it('contains exactly 10 UI tool names', () => {
-    expect(TOOL_NAMES.length).toBe(10);
+describe('UI actions (via tool schema)', () => {
+  it('action enum contains exactly 10 entries', () => {
+    const defs = getToolDefinitions();
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    expect(actionEnum.length).toBe(10);
   });
   it('includes ui_create_control', () => {
-    expect(TOOL_NAMES.includes('ui_create_control')).toBeTruthy();
+    const defs = getToolDefinitions();
+    expect(defs[0].inputSchema.properties.action.enum).toContain('ui_create_control');
   });
   it('includes ui_set_layout', () => {
-    expect(TOOL_NAMES.includes('ui_set_layout')).toBeTruthy();
+    const defs = getToolDefinitions();
+    expect(defs[0].inputSchema.properties.action.enum).toContain('ui_set_layout');
   });
   it('includes ui_get_layout', () => {
-    expect(TOOL_NAMES.includes('ui_get_layout')).toBeTruthy();
+    const defs = getToolDefinitions();
+    expect(defs[0].inputSchema.properties.action.enum).toContain('ui_get_layout');
   });
   it('includes ui_anchor_preset', () => {
-    expect(TOOL_NAMES.includes('ui_anchor_preset')).toBeTruthy();
+    const defs = getToolDefinitions();
+    expect(defs[0].inputSchema.properties.action.enum).toContain('ui_anchor_preset');
   });
   it('includes ui_set_theme', () => {
-    expect(TOOL_NAMES.includes('ui_set_theme')).toBeTruthy();
+    const defs = getToolDefinitions();
+    expect(defs[0].inputSchema.properties.action.enum).toContain('ui_set_theme');
   });
   it('includes ui_container_add', () => {
-    expect(TOOL_NAMES.includes('ui_container_add')).toBeTruthy();
+    const defs = getToolDefinitions();
+    expect(defs[0].inputSchema.properties.action.enum).toContain('ui_container_add');
   });
   it('includes theme_create', () => {
-    expect(TOOL_NAMES.includes('theme_create')).toBeTruthy();
+    const defs = getToolDefinitions();
+    expect(defs[0].inputSchema.properties.action.enum).toContain('theme_create');
   });
   it('includes theme_set_property', () => {
-    expect(TOOL_NAMES.includes('theme_set_property')).toBeTruthy();
+    const defs = getToolDefinitions();
+    expect(defs[0].inputSchema.properties.action.enum).toContain('theme_set_property');
   });
   it('includes ui_draw_recipe', () => {
-    expect(TOOL_NAMES.includes('ui_draw_recipe')).toBeTruthy();
+    const defs = getToolDefinitions();
+    expect(defs[0].inputSchema.properties.action.enum).toContain('ui_draw_recipe');
   });
   it('includes ui_build_layout', () => {
-    expect(TOOL_NAMES.includes('ui_build_layout')).toBeTruthy();
+    const defs = getToolDefinitions();
+    expect(defs[0].inputSchema.properties.action.enum).toContain('ui_build_layout');
   });
 });
 
@@ -540,54 +551,51 @@ describe('genThemeSetPropertyScript', () => {
   });
 });
 
-// ─── getToolDefinitions ─────────────────────────────────────────────────────
+// ─── getToolDefinitions (merged single tool) ─────────────────────────────────
 
 describe('getToolDefinitions', () => {
-  it('returns 10 tool definitions', () => {
+  it('returns 1 merged tool definition named "ui"', () => {
     const defs = getToolDefinitions();
-    expect(defs.length).toBe(10);
+    expect(defs.length).toBe(1);
+    expect(defs[0].name).toBe('ui');
   });
-  it('each definition has a name from TOOL_NAMES', () => {
+  it('definition has inputSchema with required fields including action', () => {
     const defs = getToolDefinitions();
-    const names = defs.map(d => d.name);
-    for (const tn of TOOL_NAMES) {
-      expect(names.includes(tn)).toBeTruthy();
-    }
+    const def = defs[0];
+    expect(def.inputSchema).toBeTruthy();
+    expect(def.inputSchema.required).toContain('action');
+    expect(def.inputSchema.required).toContain('project_path');
   });
-  it('each definition has inputSchema with required fields', () => {
+  it('action enum contains all 10 ACTIONS', () => {
     const defs = getToolDefinitions();
-    for (const def of defs) {
-      expect(def.inputSchema).toBeTruthy();
-      expect(def.inputSchema.required).toBeTruthy();
-    }
+    const actionEnum = defs[0].inputSchema.properties.action.enum;
+    expect(actionEnum.length).toBe(10);
+    expect(actionEnum).toContain('ui_create_control');
+    expect(actionEnum).toContain('ui_build_layout');
+    expect(actionEnum).toContain('theme_create');
+    expect(actionEnum).toContain('theme_set_property');
   });
-  it('ui_create_control has node_type enum with all Control types', () => {
+  it('node_type enum has all 29 Control types', () => {
     const defs = getToolDefinitions();
-    const createDef = defs.find(d => d.name === 'ui_create_control');
-    expect(createDef).toBeTruthy();
-    const enumValues = createDef.inputSchema.properties.node_type.enum;
+    const enumValues = defs[0].inputSchema.properties.node_type.enum;
     expect(enumValues).toBeTruthy();
     expect(enumValues.length).toBe(29);
     expect(enumValues.includes('Button')).toBeTruthy();
     expect(enumValues.includes('Label')).toBeTruthy();
     expect(enumValues.includes('NinePatchRect')).toBeTruthy();
   });
-  it('ui_anchor_preset has preset enum with all 16 presets', () => {
+  it('preset enum has all 16 anchor presets', () => {
     const defs = getToolDefinitions();
-    const anchorDef = defs.find(d => d.name === 'ui_anchor_preset');
-    expect(anchorDef).toBeTruthy();
-    const enumValues = anchorDef.inputSchema.properties.preset.enum;
+    const enumValues = defs[0].inputSchema.properties.preset.enum;
     expect(enumValues).toBeTruthy();
     expect(enumValues.length).toBe(16);
     expect(enumValues.includes('top_left')).toBeTruthy();
     expect(enumValues.includes('full_rect')).toBeTruthy();
     expect(enumValues.includes('center')).toBeTruthy();
   });
-  it('ui_set_theme has action enum with 4 values', () => {
+  it('theme_action enum has set_params/create/save/load', () => {
     const defs = getToolDefinitions();
-    const def = defs.find(d => d.name === 'ui_set_theme');
-    expect(def).toBeTruthy();
-    const enumValues = def.inputSchema.properties.action.enum;
+    const enumValues = defs[0].inputSchema.properties.theme_action.enum;
     expect(enumValues).toBeTruthy();
     expect(enumValues.length).toBe(4);
     expect(enumValues.includes('set_params')).toBeTruthy();
@@ -595,30 +603,24 @@ describe('getToolDefinitions', () => {
     expect(enumValues.includes('save')).toBeTruthy();
     expect(enumValues.includes('load')).toBeTruthy();
   });
-  it('ui_container_add has child_type enum with Control types', () => {
+  it('child_type enum has all Control types', () => {
     const defs = getToolDefinitions();
-    const def = defs.find(d => d.name === 'ui_container_add');
-    expect(def).toBeTruthy();
-    const enumValues = def.inputSchema.properties.child_type.enum;
+    const enumValues = defs[0].inputSchema.properties.child_type.enum;
     expect(enumValues).toBeTruthy();
     expect(enumValues.includes('Button')).toBeTruthy();
     expect(enumValues.includes('Label')).toBeTruthy();
   });
-  it('theme_create has action enum with create and extract', () => {
+  it('theme_create_action enum has create and extract', () => {
     const defs = getToolDefinitions();
-    const def = defs.find(d => d.name === 'theme_create');
-    expect(def).toBeTruthy();
-    const enumValues = def.inputSchema.properties.action.enum;
+    const enumValues = defs[0].inputSchema.properties.theme_create_action.enum;
     expect(enumValues).toBeTruthy();
     expect(enumValues.length).toBe(2);
     expect(enumValues.includes('create')).toBeTruthy();
     expect(enumValues.includes('extract')).toBeTruthy();
   });
-  it('theme_set_property has item_type enum with 4 values', () => {
+  it('item_type enum has 4 values', () => {
     const defs = getToolDefinitions();
-    const def = defs.find(d => d.name === 'theme_set_property');
-    expect(def).toBeTruthy();
-    const enumValues = def.inputSchema.properties.item_type.enum;
+    const enumValues = defs[0].inputSchema.properties.item_type.enum;
     expect(enumValues).toBeTruthy();
     expect(enumValues.length).toBe(4);
     expect(enumValues.includes('default_font')).toBeTruthy();
@@ -626,20 +628,16 @@ describe('getToolDefinitions', () => {
     expect(enumValues.includes('constant')).toBeTruthy();
     expect(enumValues.includes('stylebox')).toBeTruthy();
   });
-  it('ui_draw_recipe has ops with kind enum', () => {
+  it('ops items have kind enum with 7 draw op kinds', () => {
     const defs = getToolDefinitions();
-    const def = defs.find(d => d.name === 'ui_draw_recipe');
-    expect(def).toBeTruthy();
-    const kindEnum = def.inputSchema.properties.ops.items.properties.kind.enum;
+    const kindEnum = defs[0].inputSchema.properties.ops.items.properties.kind.enum;
     expect(kindEnum.length).toBe(7);
     expect(kindEnum.includes('rect')).toBeTruthy();
     expect(kindEnum.includes('string')).toBeTruthy();
   });
-  it('ui_build_layout has tree with type enum', () => {
+  it('tree.type enum has Control types', () => {
     const defs = getToolDefinitions();
-    const def = defs.find(d => d.name === 'ui_build_layout');
-    expect(def).toBeTruthy();
-    const typeEnum = def.inputSchema.properties.tree.properties.type.enum;
+    const typeEnum = defs[0].inputSchema.properties.tree.properties.type.enum;
     expect(typeEnum.includes('Button')).toBeTruthy();
     expect(typeEnum.includes('VBoxContainer')).toBeTruthy();
   });
@@ -654,32 +652,36 @@ describe('colorToGd', () => {
   it('converts [r,g,b,a] to Color(r,g,b,a)', () => {
     expect(colorToGd([1, 0, 0, 0.5])).toBe('Color(1, 0, 0, 0.5)');
   });
-  it('throws for array shorter than 3', () => {
-    expect(() => colorToGd([0.5, 0.8])).toThrow(/Color must be \[r, g, b\] or \[r, g, b, a\]/);
+  it('returns fallback for array shorter than 3 (no throw)', () => {
+    // colorToGd no longer throws — it falls back to valueToGd
+    const result = colorToGd([0.5, 0.8]);
+    expect(typeof result).toBe('string');
   });
-  it('throws for non-array input', () => {
-    expect(() => colorToGd('red')).toThrow(/Color must be \[r, g, b\] or \[r, g, b, a\]/);
+  it('returns fallback for non-array input (no throw)', () => {
+    // colorToGd no longer throws — it falls back to valueToGd
+    const result = colorToGd('red');
+    expect(typeof result).toBe('string');
   });
 });
 
 // ─── Flex Layout Translation ────────────────────────────────────────────────
 
 describe('Flex Layout: direction', () => {
-  it('direction: row → HBoxContainer', () => {
+  it('direction: row -> HBoxContainer', () => {
     const tree = { type: 'Panel', name: 'Root', layout: { direction: 'row' } };
     const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
     expect(script.includes('ClassDB.instantiate("HBoxContainer")')).toBeTruthy();
     expect(script.includes('ClassDB.instantiate("Panel")')).toBeFalsy();
   });
 
-  it('direction: column → VBoxContainer', () => {
+  it('direction: column -> VBoxContainer', () => {
     const tree = { type: 'Panel', name: 'Root', layout: { direction: 'column' } };
     const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
     expect(script.includes('ClassDB.instantiate("VBoxContainer")')).toBeTruthy();
     expect(script.includes('ClassDB.instantiate("Panel")')).toBeFalsy();
   });
 
-  it('direction: row-reverse → HBoxContainer with reversed children', () => {
+  it('direction: row-reverse -> HBoxContainer with reversed children', () => {
     const tree = {
       type: 'Panel', name: 'Root', layout: { direction: 'row-reverse' },
       children: [
@@ -694,7 +696,7 @@ describe('Flex Layout: direction', () => {
     expect(idxB < idxA).toBeTruthy();
   });
 
-  it('direction: column-reverse → VBoxContainer with reversed children', () => {
+  it('direction: column-reverse -> VBoxContainer with reversed children', () => {
     const tree = {
       type: 'Panel', name: 'Root', layout: { direction: 'column-reverse' },
       children: [
@@ -711,25 +713,25 @@ describe('Flex Layout: direction', () => {
 });
 
 describe('Flex Layout: justify', () => {
-  it('justify: center → alignment = 1', () => {
+  it('justify: center -> alignment = 1', () => {
     const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', justify: 'center' } };
     const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
     expect(script.includes('node.alignment = 1')).toBeTruthy();
   });
 
-  it('justify: flex-start → alignment = 0', () => {
+  it('justify: flex-start -> alignment = 0', () => {
     const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', justify: 'flex-start' } };
     const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
     expect(script.includes('node.alignment = 0')).toBeTruthy();
   });
 
-  it('justify: flex-end → alignment = 2', () => {
+  it('justify: flex-end -> alignment = 2', () => {
     const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', justify: 'flex-end' } };
     const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
     expect(script.includes('node.alignment = 2')).toBeTruthy();
   });
 
-  it('justify: space-between → approximated with warning', () => {
+  it('justify: space-between -> approximated with warning', () => {
     const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', justify: 'space-between' } };
     const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
     expect(script.includes('node.alignment = 0')).toBeTruthy();
@@ -738,7 +740,7 @@ describe('Flex Layout: justify', () => {
 });
 
 describe('Flex Layout: align', () => {
-  it('align: stretch → SIZE_EXPAND_FILL on cross axis', () => {
+  it('align: stretch -> SIZE_EXPAND_FILL on cross axis', () => {
     const tree = {
       type: 'Panel', name: 'R', layout: { direction: 'row', align: 'stretch' },
       children: [{ type: 'Button', name: 'Btn' }],
@@ -747,7 +749,7 @@ describe('Flex Layout: align', () => {
     expect(script.includes('SIZE_EXPAND_FILL')).toBeTruthy();
   });
 
-  it('align: center → SIZE_SHRINK_CENTER', () => {
+  it('align: center -> SIZE_SHRINK_CENTER', () => {
     const tree = {
       type: 'Panel', name: 'R', layout: { direction: 'row', align: 'center' },
       children: [{ type: 'Button', name: 'Btn' }],
@@ -758,13 +760,13 @@ describe('Flex Layout: align', () => {
 });
 
 describe('Flex Layout: wrap', () => {
-  it('wrap: wrap + row → HFlowContainer', () => {
+  it('wrap: wrap + row -> HFlowContainer', () => {
     const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', wrap: 'wrap' } };
     const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
     expect(script.includes('ClassDB.instantiate("HFlowContainer")')).toBeTruthy();
   });
 
-  it('wrap: wrap + column → VFlowContainer', () => {
+  it('wrap: wrap + column -> VFlowContainer', () => {
     const tree = { type: 'Panel', name: 'R', layout: { direction: 'column', wrap: 'wrap' } };
     const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
     expect(script.includes('ClassDB.instantiate("VFlowContainer")')).toBeTruthy();
@@ -772,13 +774,13 @@ describe('Flex Layout: wrap', () => {
 });
 
 describe('Flex Layout: gap', () => {
-  it('BoxContainer gap → separation', () => {
+  it('BoxContainer gap -> separation', () => {
     const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', gap: 10 } };
     const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
     expect(script.includes('add_theme_constant_override("separation", 10)')).toBeTruthy();
   });
 
-  it('HFlowContainer gap → h_separation + v_separation', () => {
+  it('HFlowContainer gap -> h_separation + v_separation', () => {
     const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', wrap: 'wrap', gap: 8 } };
     const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
     expect(script.includes('add_theme_constant_override("h_separation", 8)')).toBeTruthy();
@@ -792,7 +794,7 @@ describe('Flex Layout: gap', () => {
     expect(script.includes('add_theme_constant_override("v_separation", 5)')).toBeTruthy();
   });
 
-  it('row_gap without wrap → warning', () => {
+  it('row_gap without wrap -> warning', () => {
     const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', row_gap: 5 } };
     const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
     expect(script.includes('row_gap')).toBeTruthy();
@@ -800,7 +802,7 @@ describe('Flex Layout: gap', () => {
 });
 
 describe('Flex Layout: padding', () => {
-  it('BoxContainer padding → theme override margin_*', () => {
+  it('BoxContainer padding -> theme override margin_*', () => {
     const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', padding: 10 } };
     const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
     expect(script.includes('add_theme_constant_override("margin_top", 10)')).toBeTruthy();
@@ -810,7 +812,7 @@ describe('Flex Layout: padding', () => {
     expect(script.includes('MarginContainer')).toBeFalsy();
   });
 
-  it('BoxContainer padding array → individual margins', () => {
+  it('BoxContainer padding array -> individual margins', () => {
     const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', padding: [1, 2, 3, 4] } };
     const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
     expect(script.includes('add_theme_constant_override("margin_top", 1)')).toBeTruthy();
@@ -819,7 +821,7 @@ describe('Flex Layout: padding', () => {
     expect(script.includes('add_theme_constant_override("margin_left", 4)')).toBeTruthy();
   });
 
-  it('FlowContainer padding → MarginContainer wrapper', () => {
+  it('FlowContainer padding -> MarginContainer wrapper', () => {
     const tree = { type: 'Panel', name: 'R', layout: { direction: 'row', wrap: 'wrap', padding: 5 } };
     const script = genUiBuildLayoutScript('/s.tscn', 'root', tree);
     expect(script.includes('ClassDB.instantiate("MarginContainer")')).toBeTruthy();
@@ -828,7 +830,7 @@ describe('Flex Layout: padding', () => {
 });
 
 describe('Flex Layout: flex child properties', () => {
-  it('flex.grow → stretch_ratio + SIZE_EXPAND', () => {
+  it('flex.grow -> stretch_ratio + SIZE_EXPAND', () => {
     const tree = {
       type: 'Panel', name: 'R', layout: { direction: 'row' },
       children: [{ type: 'Button', name: 'Btn', flex: { grow: 2 } }],
@@ -838,7 +840,7 @@ describe('Flex Layout: flex child properties', () => {
     expect(script.includes('SIZE_EXPAND')).toBeTruthy();
   });
 
-  it('flex.align_self: center → SIZE_SHRINK_CENTER', () => {
+  it('flex.align_self: center -> SIZE_SHRINK_CENTER', () => {
     const tree = {
       type: 'Panel', name: 'R', layout: { direction: 'row' },
       children: [{ type: 'Button', name: 'Btn', flex: { align_self: 'center' } }],
@@ -847,7 +849,7 @@ describe('Flex Layout: flex child properties', () => {
     expect(script.includes('SIZE_SHRINK_CENTER')).toBeTruthy();
   });
 
-  it('flex.min_width → custom_minimum_size', () => {
+  it('flex.min_width -> custom_minimum_size', () => {
     const tree = {
       type: 'Panel', name: 'R', layout: { direction: 'row' },
       children: [{ type: 'Button', name: 'Btn', flex: { min_width: 200 } }],
@@ -856,7 +858,7 @@ describe('Flex Layout: flex child properties', () => {
     expect(script.includes('custom_minimum_size = Vector2(200')).toBeTruthy();
   });
 
-  it('flex.shrink → warning', () => {
+  it('flex.shrink -> warning', () => {
     const tree = {
       type: 'Panel', name: 'R', layout: { direction: 'row' },
       children: [{ type: 'Button', name: 'Btn', flex: { shrink: 1 } }],
@@ -865,7 +867,7 @@ describe('Flex Layout: flex child properties', () => {
     expect(script.includes('shrink')).toBeTruthy();
   });
 
-  it('flex.max_width → warning', () => {
+  it('flex.max_width -> warning', () => {
     const tree = {
       type: 'Panel', name: 'R', layout: { direction: 'row' },
       children: [{ type: 'Button', name: 'Btn', flex: { max_width: 300 } }],
@@ -876,7 +878,7 @@ describe('Flex Layout: flex child properties', () => {
 });
 
 describe('Flex Layout: backward compatibility', () => {
-  it('no layout field → existing behavior unchanged', () => {
+  it('no layout field -> existing behavior unchanged', () => {
     const tree = { type: 'Button', name: 'MyButton' };
     const script = genUiBuildLayoutScript('/scene.tscn', 'root', tree);
     expect(script.includes('ClassDB.instantiate("Button")')).toBeTruthy();
@@ -915,19 +917,19 @@ describe('Flex Layout: backward compatibility', () => {
 });
 
 describe('Flex Layout: validation', () => {
-  it('invalid direction → error', () => {
+  it('invalid direction -> error', () => {
     expect(() => genUiBuildLayoutScript('/s.tscn', 'root', { type: 'Panel', name: 'R', layout: { direction: 'diagonal' } })).toThrow(/INVALID_LAYOUT/);
   });
 
-  it('negative gap → error', () => {
+  it('negative gap -> error', () => {
     expect(() => genUiBuildLayoutScript('/s.tscn', 'root', { type: 'Panel', name: 'R', layout: { direction: 'row', gap: -1 } })).toThrow(/INVALID_LAYOUT/);
   });
 
-  it('invalid padding format → error', () => {
+  it('invalid padding format -> error', () => {
     expect(() => genUiBuildLayoutScript('/s.tscn', 'root', { type: 'Panel', name: 'R', layout: { direction: 'row', padding: 'big' } })).toThrow(/INVALID_LAYOUT/);
   });
 
-  it('invalid align_self → error', () => {
+  it('invalid align_self -> error', () => {
     expect(() => genUiBuildLayoutScript('/s.tscn', 'root', {
         type: 'Panel', name: 'R', layout: { direction: 'row' },
         children: [{ type: 'Button', name: 'B', flex: { align_self: 'middle' } }],

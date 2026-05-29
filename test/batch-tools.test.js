@@ -16,20 +16,23 @@ describe('batch-tools getToolDefinitions', () => {
     expect(Array.isArray(defs)).toBeTruthy();
     expect(defs.length).toBeGreaterThan(0);
   });
-  it('includes batch_create_files', () => {
+  it('includes batch tool', () => {
     const defs = getToolDefinitions();
     const names = defs.map(d => d.name);
-    expect(names.includes('batch_create_files')).toBeTruthy();
+    expect(names.includes('batch')).toBeTruthy();
   });
-  it('includes batch_run_verify', () => {
+  it('batch tool has action enum with create_files, run_verify, diff_scenes', () => {
     const defs = getToolDefinitions();
-    const names = defs.map(d => d.name);
-    expect(names.includes('batch_run_verify')).toBeTruthy();
+    const batch = defs.find(d => d.name === 'batch');
+    const actionEnum = batch.inputSchema.properties.action.enum;
+    expect(actionEnum).toContain('create_files');
+    expect(actionEnum).toContain('run_verify');
+    expect(actionEnum).toContain('diff_scenes');
   });
-  it('includes diff_scenes', () => {
+  it('returns exactly 1 merged tool', () => {
     const defs = getToolDefinitions();
-    const names = defs.map(d => d.name);
-    expect(names.includes('diff_scenes')).toBeTruthy();
+    expect(defs.length).toBe(1);
+    expect(defs[0].name).toBe('batch');
   });
   it('each definition has name and inputSchema', () => {
     for (const def of getToolDefinitions()) {
@@ -43,22 +46,12 @@ describe('batch-tools getToolDefinitions', () => {
 // ─── TOOL_META ───────────────────────────────────────────────────────────────
 
 describe('batch-tools TOOL_META', () => {
-  it('has entries for batch_create_files, batch_run_verify, diff_scenes', () => {
-    expect('batch_create_files' in TOOL_META).toBeTruthy();
-    expect('batch_run_verify' in TOOL_META).toBeTruthy();
-    expect('diff_scenes' in TOOL_META).toBeTruthy();
+  it('has entry for merged batch tool', () => {
+    expect('batch' in TOOL_META).toBeTruthy();
   });
-  it('batch_create_files is non-readonly and long_running', () => {
-    expect(TOOL_META.batch_create_files.readonly).toBe(false);
-    expect(TOOL_META.batch_create_files.long_running).toBe(true);
-  });
-  it('batch_run_verify is readonly and long_running', () => {
-    expect(TOOL_META.batch_run_verify.readonly).toBe(true);
-    expect(TOOL_META.batch_run_verify.long_running).toBe(true);
-  });
-  it('diff_scenes is readonly and not long_running', () => {
-    expect(TOOL_META.diff_scenes.readonly).toBe(true);
-    expect(TOOL_META.diff_scenes.long_running).toBe(false);
+  it('batch is non-readonly and not long_running', () => {
+    expect(TOOL_META.batch.readonly).toBe(false);
+    expect(TOOL_META.batch.long_running).toBe(false);
   });
 });
 
@@ -75,38 +68,42 @@ describe('batch-tools handleTool', () => {
     expect(result).toBe(null);
   });
 
-  it('batch_create_files rejects empty files array', async () => {
-    const result = await handleTool('batch_create_files', {
+  it('batch create_files rejects empty files array', async () => {
+    const result = await handleTool('batch', {
       project_path: '/fake/project',
+      action: 'create_files',
       files: [],
     }, {});
     expect(result).toBeTruthy();
-    expect(result.content[0].text).toContain('Error');
+    expect(result.content[0].text).toContain('error');
   });
 
-  it('batch_create_files rejects missing files', async () => {
-    const result = await handleTool('batch_create_files', {
+  it('batch create_files rejects missing files', async () => {
+    const result = await handleTool('batch', {
       project_path: '/fake/project',
+      action: 'create_files',
     }, {});
     expect(result).toBeTruthy();
-    expect(result.content[0].text).toContain('Error');
+    expect(result.content[0].text).toContain('error');
   });
 
-  it('batch_run_verify rejects empty scenes array', async () => {
-    const result = await handleTool('batch_run_verify', {
+  it('batch run_verify rejects empty scenes array', async () => {
+    const result = await handleTool('batch', {
       project_path: '/fake/project',
+      action: 'run_verify',
       scenes: [],
     }, { findGodot: async () => '/fake/godot' });
     expect(result).toBeTruthy();
-    expect(result.content[0].text).toContain('Error');
+    expect(result.content[0].text).toContain('error');
   });
 
-  it('diff_scenes rejects non-existent scene files', async () => {
+  it('batch diff_scenes rejects non-existent scene files', async () => {
     const tmpDir = join(tmpdir(), `batch-test-diff-${Date.now()}`);
     mkdirSync(tmpDir, { recursive: true });
     try {
-      const result = await handleTool('diff_scenes', {
+      const result = await handleTool('batch', {
         project_path: tmpDir,
+        action: 'diff_scenes',
         scene_a: 'nonexistent_a.tscn',
         scene_b: 'nonexistent_b.tscn',
       }, {});
@@ -134,8 +131,9 @@ describe('batch_create_files real file creation', () => {
 
   it('creates files on disk', async () => {
     const ctx = { findGodot: vi.fn(async () => '/fake/godot') };
-    const result = await handleTool('batch_create_files', {
+    const result = await handleTool('batch', {
       project_path: tmpDir,
+      action: 'create_files',
       files: [
         { path: 'res://test.txt', content: 'hello world' },
       ],
@@ -152,8 +150,9 @@ describe('batch_create_files real file creation', () => {
 
   it('creates multiple files', async () => {
     const ctx = { findGodot: vi.fn(async () => '/fake/godot') };
-    const result = await handleTool('batch_create_files', {
+    const result = await handleTool('batch', {
       project_path: tmpDir,
+      action: 'create_files',
       files: [
         { path: 'res://a.txt', content: 'aaa' },
         { path: 'res://sub/b.txt', content: 'bbb' },
@@ -171,8 +170,9 @@ describe('batch_create_files real file creation', () => {
     // Pre-create a file
     writeFileSync(join(tmpDir, 'existing.txt'), 'old', 'utf-8');
     const ctx = { findGodot: vi.fn(async () => '/fake/godot') };
-    const result = await handleTool('batch_create_files', {
+    const result = await handleTool('batch', {
       project_path: tmpDir,
+      action: 'create_files',
       files: [
         { path: 'res://existing.txt', content: 'new' },
       ],
@@ -187,8 +187,9 @@ describe('batch_create_files real file creation', () => {
   it('overwrites existing files with overwrite=true', async () => {
     writeFileSync(join(tmpDir, 'overwrite.txt'), 'old', 'utf-8');
     const ctx = { findGodot: vi.fn(async () => '/fake/godot') };
-    const result = await handleTool('batch_create_files', {
+    const result = await handleTool('batch', {
       project_path: tmpDir,
+      action: 'create_files',
       files: [
         { path: 'res://overwrite.txt', content: 'new', overwrite: true },
       ],

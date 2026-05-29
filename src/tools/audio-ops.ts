@@ -14,7 +14,7 @@ const ERROR_CODES = {
   INVALID_PATH: 'INVALID_PATH',
 } as const;
 
-export const TOOL_NAMES = [
+const ACTIONS = [
   'audio_play',
   'audio_stop',
   'audio_set_param',
@@ -128,62 +128,28 @@ func _initialize():
 export function getToolDefinitions(): Tool[] {
   return [
     {
-      name: 'audio_play',
-      description: `Play audio. Supports AudioStreamPlayer/AudioStreamPlayer2D/AudioStreamPlayer3D nodes. ${NON_PERSIST}`,
+      name: 'audio',
+      description: `音频操作。play: 播放（支持 AudioStreamPlayer/2D/3D）。stop: 停止。set_param: 设置参数（volume_db/pitch_scale/bus）。query: 查询播放状态。${NON_PERSIST}`,
       inputSchema: {
         type: 'object' as const,
         properties: {
           project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          action: {
+            type: 'string',
+            enum: [...ACTIONS],
+            description: '操作类型',
+          },
           node_path: { type: 'string', description: '音频节点路径' },
-          stream_path: { type: 'string', description: '音频资源路径（res://...），不传则播放已配置的' },
-          volume_db: { type: 'number', description: '音量（dB，-80 到 24）' },
-          pitch_scale: { type: 'number', description: '音调缩放（0.01 到 100）' },
-          bus: { type: 'string', description: '音频总线名称' },
-          from_position: { type: 'number', description: '从指定位置开始播放（秒）' },
+          stream_path: { type: 'string', description: 'play: 音频资源路径（res://...），不传则播放已配置的' },
+          volume_db: { type: 'number', description: 'play: 音量（dB，-80 到 24）' },
+          pitch_scale: { type: 'number', description: 'play: 音调缩放（0.01 到 100）' },
+          bus: { type: 'string', description: 'play/set_param: 音频总线名称' },
+          from_position: { type: 'number', description: 'play: 从指定位置开始播放（秒）' },
+          param: { type: 'string', enum: ['volume_db', 'pitch_scale', 'bus'], description: 'set_param: 参数名' },
+          value: { description: 'set_param: 参数值（number for volume_db/pitch_scale, string for bus）' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'node_path'],
-      },
-    },
-    {
-      name: 'audio_stop',
-      description: `Stop audio playback. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: '音频节点路径' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path'],
-      },
-    },
-    {
-      name: 'audio_set_param',
-      description: `Set audio parameters (volume/pitch/bus). ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: '音频节点路径' },
-          param: { type: 'string', enum: ['volume_db', 'pitch_scale', 'bus'], description: '参数名' },
-          value: { description: '参数值（number for volume_db/pitch_scale, string for bus）' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path', 'param', 'value'],
-      },
-    },
-    {
-      name: 'audio_query',
-      description: `Query audio playback status. ${NON_PERSIST}`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
-          node_path: { type: 'string', description: '音频节点路径' },
-          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
-        },
-        required: ['project_path', 'node_path'],
+        required: ['project_path', 'action'],
       },
     },
   ];
@@ -194,7 +160,10 @@ export function getToolDefinitions(): Tool[] {
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  if (name !== 'audio') return null;
+
+  const action = args.action as string;
+  if (!action) return opsErrorResult('INVALID_PARAMS', 'action is required');
 
   try {
     const projectPath = requireProjectPath(args);
@@ -203,7 +172,7 @@ export async function handleTool(
     let script: string;
     const paramWarnings: string[] = [];
 
-    switch (name) {
+    switch (action) {
       case 'audio_play': {
         const nodePath = normalizeNodePath(args.node_path as string);
         const streamPath = args.stream_path as string | undefined;
@@ -271,8 +240,5 @@ export async function handleTool(
 // ─── Tool Meta ──────────────────────────────────────────────────────────────
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
-  audio_play: { readonly: false, long_running: false },
-  audio_stop: { readonly: false, long_running: false },
-  audio_set_param: { readonly: false, long_running: false },
-  audio_query: { readonly: true, long_running: false },
+  audio: { readonly: false, long_running: false },
 };
