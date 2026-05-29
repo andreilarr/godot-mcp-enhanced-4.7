@@ -475,3 +475,18 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   game: { readonly: false, long_running: false },
 };
+
+/** Reset all module state — for test isolation and service restart. */
+export function resetBridgeState(): void {
+  _nextRequestId = 1;
+  _permWarned = false;
+  _cachedSecret = null;
+  _projectDir = null;
+  _cachedSecretPath = null;
+  _cachedSecretAt = 0;
+  // Note: active socket connections are NOT closed here — use _invalidateSocket() for that
+  _socketAuthenticated = false;
+  _socketBuffer = '';
+  _connectionLock = null;
+  _sendLock = Promise.resolve();
+}
