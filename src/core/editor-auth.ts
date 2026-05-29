@@ -24,7 +24,8 @@ function restrictFileWindows(filePath: string): boolean {
     execFileSync('icacls', [filePath, '/inheritance:r', '/grant:r', `${effectiveUser}:R`], { stdio: 'ignore' });
     // Verify the ACL was applied by reading it back
     const output = execFileSync('icacls', [filePath], { encoding: 'utf-8' });
-    if (!output.includes(effectiveUser)) {
+    // Case-insensitive match — Windows usernames are case-insensitive
+    if (!output.toLowerCase().includes(effectiveUser.toLowerCase())) {
       if (!_permWarned) {
         _permWarned = true;
         console.error(`[SECURITY] ACL verification failed for ${filePath}: ${output.trim()}`);

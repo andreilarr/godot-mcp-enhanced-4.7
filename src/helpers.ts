@@ -1,4 +1,4 @@
-import { isAbsolute, resolve, dirname, relative, sep } from 'path';
+import { isAbsolute, resolve, dirname, relative, sep, basename } from 'path';
 import { existsSync, mkdirSync, readFileSync, realpathSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { execFile } from 'child_process';
@@ -32,10 +32,23 @@ export function validateProjectRoot(p: string): string {
   return resolved;
 }
 
-/** Safely resolve real path — falls back to resolve() when path doesn't exist, with traversal check. */
-function safeRealPath(p: string, base?: string): string {
+/** Safely resolve real path — walks up to find existing ancestor for symlink resolution.
+ *  When the full path doesn't exist, resolves the nearest existing ancestor via realpathSync,
+ *  then appends the remaining non-existent segments. This prevents symlink bypass in intermediate
+ *  directories (e.g. /allowed/symlink_to_external/newfile). */
+export function safeRealPath(p: string, base?: string): string {
   try { return realpathSync(p); } catch {
-    const resolved = resolvePath(p);
+    let current = resolvePath(p);
+    const trailing: string[] = [];
+    while (!existsSync(current)) {
+      trailing.unshift(basename(current));
+      const parent = dirname(current);
+      if (parent === current) break; // filesystem root
+      current = parent;
+    }
+    let resolvedAncestor: string;
+    try { resolvedAncestor = realpathSync(current); } catch { return resolvePath(p); }
+    const resolved = trailing.length > 0 ? join(resolvedAncestor, ...trailing) : resolvedAncestor;
     // If a base is provided, verify the resolved path doesn't escape it
     if (base) {
       const rel = relative(base, resolved);

@@ -3,10 +3,10 @@
 // Exposes Godot project context via MCP Resources protocol so AI clients
 // can discover and read project information without explicit tool calls.
 
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { resolve, join, extname, sep } from 'path';
 import { parseTscnSummary } from './tscn-parser.js';
-import { parseConfigValue } from './helpers.js';
+import { parseConfigValue, safeRealPath } from './helpers.js';
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB — reject files larger than this
 
@@ -53,11 +53,6 @@ const BINARY_EXTENSIONS = new Set([
 ]);
 
 const MAX_RESOURCES = 200;
-
-/** Safely resolve real path — falls back to resolve() when path doesn't exist. */
-function safeRealPath(p: string): string {
-  try { return realpathSync(p); } catch { return resolve(p); }
-}
 
 function isSafePath(projectPath: string, filePath: string): boolean {
   // Resolve real paths to defeat symlinks and junction points
@@ -504,7 +499,7 @@ export function readResource(uri: string, projectPath: string | undefined): McpR
     let decoded = rawPath;
     let prev = '';
     let iterations = 0;
-    while (decoded !== prev && iterations < 5) {
+    while (decoded !== prev && iterations < 20) {
       prev = decoded;
       decoded = decodeURIComponent(decoded);
       iterations++;

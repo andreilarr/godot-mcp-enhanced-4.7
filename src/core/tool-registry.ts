@@ -38,6 +38,11 @@ export function registerModule(mod: ToolModule): void {
       metaRegistry.set(name, entry);
       moduleRegistry.set(name, mod);
     }
+  } else {
+    const toolNames = mod.getToolDefinitions().map(t => t.name);
+    if (toolNames.length > 0) {
+      console.warn(`[tool-registry] Module defines ${toolNames.length} tool(s) but has no TOOL_META — dispatch will fail: ${toolNames.join(', ')}`);
+    }
   }
 }
 

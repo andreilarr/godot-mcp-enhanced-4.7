@@ -214,8 +214,8 @@ export class EditorConnection {
   private setupMessageHandler(): void {
     if (!this.ws) return;
     this.ws.on('message', (data: WebSocket.Data) => {
+      const raw = typeof data === 'string' ? data : data.toString();
       try {
-        const raw = typeof data === 'string' ? data : data.toString();
         if (Buffer.byteLength(raw, 'utf8') > MAX_INBOUND_MESSAGE_SIZE) {
           console.warn('[MCP Editor] Inbound message exceeds size limit, discarding');
           return;
@@ -238,7 +238,10 @@ export class EditorConnection {
             }
           }
         }
-      } catch (err) { console.debug('[editor-conn] parse WebSocket message:', err); }
+      } catch (err) {
+        const snippet = typeof raw === 'string' ? raw.substring(0, 200) : '(unavailable)';
+        console.warn('[editor-conn] parse WebSocket message:', (err as Error).message, 'raw:', snippet);
+      }
     });
   }
 

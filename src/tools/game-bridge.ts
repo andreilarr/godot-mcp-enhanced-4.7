@@ -204,8 +204,13 @@ export function setBridgeProjectDir(projectDir: string): void {
 export function sendToBridge(method: string, params: Record<string, unknown> = {}, timeout = DEFAULT_TIMEOUT): Promise<BridgeResponse> {
   // Serialize requests so only one uses the shared socket at a time.
   // Each call chains onto _sendLock, preventing concurrent data handlers.
-  const run = () => _ensureConnection(timeout).then(sock => {
-    return new Promise<BridgeResponse>((resolve, reject) => {
+  const run = () => {
+    // Fast-fail if socket is known dead — skip reconnection queue
+    if (_socket && _socket.destroyed) {
+      _invalidateSocket();
+    }
+    return _ensureConnection(timeout).then(sock => {
+      return new Promise<BridgeResponse>((resolve, reject) => {
       const id = _nextRequestId++;
       let settled = false;
       let buffer = '';
@@ -265,6 +270,7 @@ export function sendToBridge(method: string, params: Record<string, unknown> = {
     }
     return Promise.reject(err);
   });
+  };
 
   // Chain onto the send lock — next request waits for this one to settle
   const prev = _sendLock;
