@@ -175,7 +175,10 @@ function ensureSep(p: string): string {
  *  Configured: restrict to whitelist entries only.
  *  Explicit override: GODOT_MCP_UNRESTRICTED=true allows all paths. */
 export function isPathInAllowedRoots(requestedPath: string): boolean {
-  if (process.env.GODOT_MCP_UNRESTRICTED === 'true') return true;
+  if (process.env.GODOT_MCP_UNRESTRICTED === 'true') {
+    console.warn('[SECURITY] GODOT_MCP_UNRESTRICTED=true — all path restrictions bypassed');
+    return true;
+  }
   if (allowOutsideProjectPaths()) return true;
   const allowed = getAllowedProjectPaths();
   if (allowed.length === 0) {

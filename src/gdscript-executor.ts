@@ -43,7 +43,10 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
  *  Enabled by default; set GODOT_MCP_SANDBOX=disabled to skip scanning.
  *  When warnings are found, execution is BLOCKED unless GODOT_MCP_ALLOW_UNSAFE=true. */
 export function scanGdscriptSandbox(code: string): string[] {
-  if (process.env.GODOT_MCP_SANDBOX === 'disabled') return [];
+  if (process.env.GODOT_MCP_SANDBOX === 'disabled') {
+    console.warn('[SECURITY] GODOT_MCP_SANDBOX=disabled — sandbox scanning skipped');
+    return [];
+  }
   const warnings: string[] = [];
   for (const { pattern, label } of DANGEROUS_PATTERNS) {
     if (pattern.test(code)) {
@@ -472,6 +475,9 @@ export async function executeGdscript(
       compile_error: `Sandbox violation: code contains dangerous patterns. Set GODOT_MCP_ALLOW_UNSAFE=true to override.\n${sandboxWarnings.join('\n')}`,
       errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0,
     };
+  }
+  if (sandboxWarnings.length > 0 && process.env.GODOT_MCP_ALLOW_UNSAFE === 'true') {
+    console.warn('[SECURITY] GODOT_MCP_ALLOW_UNSAFE=true — executing despite sandbox warnings:', sandboxWarnings);
   }
 
   // Validate godotPath exists and looks like a Godot binary
