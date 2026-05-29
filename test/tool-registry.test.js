@@ -4,6 +4,7 @@ import {
   clearRegistry,
   isReadOnly,
   isLongRunning,
+  isKnownTool,
   getReadOnlyTools,
   getWriteTools,
   getAllToolNames,
@@ -19,12 +20,15 @@ describe('tool-registry', () => {
       { name: 'nav_bake_mesh', readonly: false, long_running: true },
     ]);
     expect(isReadOnly('read_scene')).toBe(true);
+    expect(isKnownTool('read_scene')).toBe(true);
     expect(isReadOnly('add_node')).toBe(false);
+    expect(isKnownTool('add_node')).toBe(true);
     expect(isLongRunning('nav_bake_mesh')).toBe(true);
     expect(isLongRunning('add_node')).toBe(false);
   });
 
-  it('returns false for unknown tools', () => {
+  it('unknown tools: isKnownTool=false, isReadOnly=false, isLongRunning=false', () => {
+    expect(isKnownTool('nonexistent_tool')).toBe(false);
     expect(isReadOnly('nonexistent_tool')).toBe(false);
     expect(isLongRunning('nonexistent_tool')).toBe(false);
   });

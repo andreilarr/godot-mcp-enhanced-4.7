@@ -48,6 +48,11 @@ export function registerModule(mod: ToolModule): void {
 
 // ─── Query functions ─────────────────────────────────────────────────────────
 
+/** Check whether a tool name is registered in the meta registry. */
+export function isKnownTool(name: string): boolean {
+  return metaRegistry.has(name);
+}
+
 export function isReadOnly(name: string): boolean {
   return metaRegistry.get(name)?.readonly ?? false;
 }

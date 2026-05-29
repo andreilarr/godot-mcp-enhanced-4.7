@@ -1,5 +1,5 @@
 // src/core/ReadOnlyGuard.ts
-import { isReadOnly } from './tool-registry.js';
+import { isReadOnly, isKnownTool } from './tool-registry.js';
 
 export interface GuardResult {
   blocked: boolean;
@@ -12,6 +12,14 @@ export class ReadOnlyGuard {
 
   check(toolName: string): GuardResult {
     if (!this.enabled) return { blocked: false };
+    // I-08: deny-by-default — unknown tools are blocked in readOnly mode
+    if (!isKnownTool(toolName)) {
+      return {
+        blocked: true,
+        errorCode: -32001,
+        message: `Operation blocked: unknown tool "${toolName}" denied in read-only mode`,
+      };
+    }
     if (isReadOnly(toolName)) return { blocked: false };
 
     return {
