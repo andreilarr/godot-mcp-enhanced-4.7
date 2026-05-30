@@ -17,6 +17,7 @@ const ACTIONS = [
   'quick_scene', 'batch_add_nodes', 'query_scene_tree', 'inspect_node',
   'edit_node', 'remove_node', 'instance_scene', 'set_instance_property', 'detach_instance',
   'health_check',
+  'merge_scene',
 ] as const;
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
@@ -45,7 +46,7 @@ export function getToolDefinitions(): Tool[] {
           node_name: { type: 'string', description: 'add_node: 节点名称' },
           parent_node_path: { type: 'string', description: 'add_node/instance_scene: 父节点路径（默认 root）' },
           properties: { type: 'object', description: 'add_node/edit_node/instance_scene: 属性对象' },
-          new_path: { type: 'string', description: 'save_scene: 新保存路径（可选）' },
+          new_path: { type: 'string', description: 'save_scene: 新保存路径（可选）/ merge_scene: theirs 场景路径（必需）' },
           texture_path: { type: 'string', description: 'load_sprite: 纹理路径（如 res://assets/player.png）' },
           node_path: { type: 'string', description: 'inspect_node/edit_node/remove_node/load_sprite/detach_instance/set_instance_property: 节点路径' },
           max_depth: { type: 'number', description: 'query_scene_tree/inspect_node: 最大遍历深度' },
@@ -595,6 +596,34 @@ func _initialize():
       }, null, 2));
     }
 
+    case 'merge_scene': {
+      const p = requireProjectPath(args);
+      const sceneA = args.scene_path as string;
+      const sceneB = args.new_path as string;
+      if (!sceneA || !sceneB) {
+        return opsErrorResult('INVALID_PARAMS', 'Both scene_path (ours) and new_path (theirs) are required', {
+          suggestion: 'Provide two scene file paths: scene_path=ours.tscn new_path=theirs.tscn',
+        });
+      }
+      const fullPathA = resolveWithinRoot(p, sceneA);
+      const fullPathB = resolveWithinRoot(p, sceneB);
+      if (!existsSync(fullPathA)) {
+        return opsErrorResult('FILE_NOT_FOUND', `Scene A not found: ${sceneA}`);
+      }
+      if (!existsSync(fullPathB)) {
+        return opsErrorResult('FILE_NOT_FOUND', `Scene B not found: ${sceneB}`);
+      }
+      const ours = readFileSync(fullPathA, 'utf-8');
+      const theirs = readFileSync(fullPathB, 'utf-8');
+      const merged = mergeTscn(ours, theirs);
+      writeFileSync(fullPathA, merged, 'utf-8');
+      return textResult(JSON.stringify({
+        merged_into: sceneA,
+        source: sceneB,
+        status: 'ok',
+      }, null, 2));
+    }
+
     default:
       return null;
   }
@@ -907,6 +936,99 @@ function handleDetachInstance(args: Record<string, unknown>): ToolResult {
   }
 
   return textResult(`Detached instance "${nodeName}" — inlined from ${info.sourcePath} (${info.propertyOverrides.length} property override(s) preserved)`);
+}
+
+// ─── .tscn merge conflict resolver ────────────────────────────────────────────
+
+export function mergeTscn(ours: string, theirs: string): string {
+  // Parse ext_resources from both sides
+  const extRegex = /\[ext_resource\s+([^[\]]+)\]/g;
+
+  interface ExtRes { type: string; path: string; originalId: string; line: string }
+  const parseExt = (content: string): ExtRes[] => {
+    const result: ExtRes[] = [];
+    let m: RegExpExecArray | null;
+    const regex = /\[ext_resource\s+([^[\]]+)\]/g;
+    while ((m = regex.exec(content)) !== null) {
+      const line = m[1];
+      const typeMatch = line.match(/type="([^"]+)"/);
+      const pathMatch = line.match(/path="([^"]+)"/);
+      const idMatch = line.match(/id="([^"]+)"/);
+      if (pathMatch) {
+        result.push({ type: typeMatch?.[1] || '', path: pathMatch[1], originalId: idMatch?.[1] || '', line: m[0] });
+      }
+    }
+    return result;
+  };
+
+  // Parse nodes from both sides
+  interface NodeDef { name: string; line: string; body: string }
+  const parseNodes = (content: string): NodeDef[] => {
+    const result: NodeDef[] = [];
+    const sections = content.split(/\n(?=\[node\s)/);
+    for (const section of sections) {
+      const headerMatch = section.match(/^\[node\s+name="([^"]+)"/);
+      if (headerMatch) {
+        result.push({ name: headerMatch[1], line: headerMatch[0], body: section.trim() });
+      }
+    }
+    return result;
+  };
+
+  // Get header (before first ext_resource or node)
+  const headerMatch = ours.match(/^([\s\S]*?)(?=\n\[ext_resource|\n\[sub_resource|\n\[node)/);
+  const header = headerMatch ? headerMatch[1].trim() : '[gd_scene format=3]';
+
+  // Merge ext_resources: ours first, then new from theirs (by path dedup)
+  const oursExt = parseExt(ours);
+  const theirsExt = parseExt(theirs);
+  const seenPaths = new Set(oursExt.map(e => e.path));
+  const mergedExt = [...oursExt];
+  for (const ext of theirsExt) {
+    if (!seenPaths.has(ext.path)) {
+      mergedExt.push(ext);
+      seenPaths.add(ext.path);
+    }
+  }
+
+  // Re-index: build old→new id map
+  const idMap: Record<string, string> = {};
+  const reindexedExt: string[] = [];
+  mergedExt.forEach((ext, i) => {
+    const newId = String(i + 1);
+    if (ext.originalId) idMap[ext.originalId] = newId;
+    // Rebuild the ext_resource line with new id
+    const newLine = `[ext_resource type="${ext.type}" path="${ext.path}" id="${newId}"]`;
+    reindexedExt.push(newLine);
+  });
+
+  // Merge nodes: ours nodes + theirs nodes not in ours (by name)
+  const oursNodes = parseNodes(ours);
+  const theirsNodes = parseNodes(theirs);
+  const oursNames = new Set(oursNodes.map(n => n.name));
+  const mergedNodes = [...oursNodes];
+  for (const node of theirsNodes) {
+    if (!oursNames.has(node.name)) {
+      mergedNodes.push(node);
+    }
+  }
+
+  // Rebuild the scene file
+  const parts: string[] = [header, ''];
+  parts.push(...reindexedExt);
+  parts.push('');
+  for (const node of mergedNodes) {
+    let body = node.body;
+    // Remap ExtResource("oldId") → ExtResource("newId")
+    body = body.replace(/ExtResource\("([^"]+)"\)/g, (_match, id: string) => {
+      const newId = idMap[id];
+      return newId ? `ExtResource("${newId}")` : `ExtResource("${id}")`;
+    });
+    parts.push(body);
+    parts.push('');
+  }
+
+  return parts.join('\n');
 }
 
 // ─── Scene health check ────────────────────────────────────────────────────────
