@@ -10,6 +10,7 @@ import {
   buildTypeGuide, mergeSections, SECTION_ORDER, GODOT_MCP_RULES,
 } from './claudemd-builder.js';
 import { validatePath, requireString, requireProjectPath, resolveWithinRoot, type GodotConfig } from '../helpers.js';
+import { getScaffoldFiles, PROJECT_TEMPLATES } from './code-templates.js';
 
 const ACTIONS = [
   'list_projects',
@@ -42,6 +43,7 @@ export function getToolDefinitions(): Tool[] {
           subdirectory: { type: 'string', description: '限定子目录' },
           project_name: { type: 'string', description: '项目名称（默认取文件夹名）', default: '' },
           renderer: { type: 'string', description: '渲染器："forward_plus"（默认）、"mobile"、"gl_compatibility"', default: 'forward_plus', enum: ['forward_plus', 'mobile', 'gl_compatibility'] },
+          template: { type: 'string', description: '项目脚手架模板：2d-platformer / 3d-fps / visual-novel（默认空）', default: '' },
           hooks: { type: 'boolean', description: '创建 .claude/settings.json 的 PostToolUse hook（默认 true）', default: true },
           claude_md: { type: 'boolean', description: '创建/追加 CLAUDE.md 验证规则（默认 true）', default: true },
           ci: { type: 'boolean', description: '生成 GitHub Actions CI workflow（默认 false）', default: false },
@@ -216,14 +218,42 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       ].join('\n');
       writeFileSync(join(p, 'scripts', 'main.gd'), mainGd, 'utf-8');
 
+      // ── Template scaffold ──
+      const templateName = (args.template as string) || '';
+      let scaffoldInfo = '';
+      if (templateName) {
+        if (!PROJECT_TEMPLATES[templateName]) {
+          return textResult(`Error: Unknown template "${templateName}". Available: ${Object.keys(PROJECT_TEMPLATES).join(', ')}`);
+        }
+        const scaffoldFiles = getScaffoldFiles(templateName, projectName);
+        const tmpl = PROJECT_TEMPLATES[templateName];
+        for (const sf of scaffoldFiles) {
+          const fullPath = join(p, sf.path.replace(/\//g, process.platform === 'win32' ? '\\' : '/'));
+          mkdirSync(fullPath.substring(0, fullPath.lastIndexOf(process.platform === 'win32' ? '\\' : '/')), { recursive: true });
+          writeFileSync(fullPath, sf.content, 'utf-8');
+        }
+        // Update project.godot main_scene
+        if (tmpl.mainScene) {
+          const pgPath = join(p, 'project.godot');
+          const pgContent = readFileSync(pgPath, 'utf-8');
+          writeFileSync(pgPath, pgContent.replace(
+            /run\/main_scene="[^"]*"/,
+            `run/main_scene="${tmpl.mainScene}"`,
+          ), 'utf-8');
+        }
+        scaffoldInfo = `\n  Template: ${templateName} (${scaffoldFiles.length} files generated)\n` +
+          scaffoldFiles.map(f => `  ├── ${f.path}`).join('\n');
+      }
+
       return textResult(
         `Project created successfully at ${p}\n\n` +
         `Structure:\n` +
         `  ├── project.godot      (name: ${projectName}, renderer: ${renderer})\n` +
         `  ├── scenes/main.tscn   (Node2D root + main.gd script)\n` +
         `  ├── scripts/main.gd    (_ready template)\n` +
-        `  └── assets/            (empty)\n\n` +
-        `Run with: launch_editor(project_path="${p}")`
+        `  └── assets/            (empty)\n` +
+        scaffoldInfo +
+        `\n\nRun with: launch_editor(project_path="${p}")`
       );
     }
 

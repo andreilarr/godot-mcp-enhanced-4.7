@@ -297,6 +297,83 @@ export const TEMPLATES: CodeTemplate[] = [
   stateMachineSimple,
 ];
 
+// ─── Project scaffold templates ───────────────────────────────────────────────
+
+interface ScaffoldTemplate {
+  scenes: string[];
+  scripts: string[];
+  mainScene: string;
+}
+
+export const PROJECT_TEMPLATES: Record<string, ScaffoldTemplate> = {
+  '2d-platformer': {
+    scenes: ['Player.tscn', 'Level.tscn', 'HUD.tscn'],
+    scripts: ['player.gd', 'hud.gd'],
+    mainScene: 'res://scenes/Level.tscn',
+  },
+  '3d-fps': {
+    scenes: ['Player.tscn', 'Level.tscn', 'HUD.tscn'],
+    scripts: ['player.gd', 'weapon.gd', 'hud.gd'],
+    mainScene: 'res://scenes/Level.tscn',
+  },
+  'visual-novel': {
+    scenes: ['MainMenu.tscn', 'GameScene.tscn', 'DialogBox.tscn'],
+    scripts: ['dialog_manager.gd', 'game_manager.gd'],
+    mainScene: 'res://scenes/MainMenu.tscn',
+  },
+};
+
+interface ScaffoldFile {
+  path: string;
+  content: string;
+}
+
+export function getScaffoldFiles(templateName: string, projectName: string): ScaffoldFile[] {
+  const tmpl = PROJECT_TEMPLATES[templateName];
+  if (!tmpl) return [];
+
+  const files: ScaffoldFile[] = [];
+
+  for (const scene of tmpl.scenes) {
+    const baseName = scene.replace('.tscn', '');
+    const scriptRel = tmpl.scripts.find(s => s.replace('.gd', '').toLowerCase() === baseName.toLowerCase());
+    const hasScript = !!scriptRel;
+
+    const lines = [
+      `[gd_scene load_steps=2 format=3]`,
+      '',
+    ];
+    if (hasScript) {
+      lines.push(`[ext_resource type="Script" path="res://scripts/${scriptRel}" id="1"]`, '');
+    }
+    lines.push(`[node name="${baseName}" type="Node2D"]`);
+    if (hasScript) {
+      lines.push('script = ExtResource("1")');
+    }
+    lines.push('');
+
+    files.push({ path: `scenes/${scene}`, content: lines.join('\n') });
+  }
+
+  for (const script of tmpl.scripts) {
+    const className = script.replace('.gd', '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+    files.push({
+      path: `scripts/${script}`,
+      content: [
+        `extends Node2D`,
+        '',
+        `# ${className} — ${projectName}`,
+        '',
+        `func _ready() -> void:`,
+        `\tpass`,
+        '',
+      ].join('\n'),
+    });
+  }
+
+  return files;
+}
+
 const RULE_TO_TEMPLATE: Record<string, string> = {
   "L001": "T001",
   "L002": "T002",
