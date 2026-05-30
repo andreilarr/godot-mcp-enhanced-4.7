@@ -4,6 +4,7 @@ import type { ToolResult } from '../types.js';
 import { isVerifyEligible } from '../core/tool-registry.js';
 
 export const MARKER_RESULT = '___MCP_RESULT___';
+export const MARKER_ERROR = '___MCP_ERROR___';
 
 export const TYPE_WHITELIST = [
   'Node3D', 'MeshInstance3D', 'StaticBody3D', 'RigidBody3D',

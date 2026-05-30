@@ -21,7 +21,7 @@ import { randomUUID } from 'crypto';
 import { analyzeOutput, type ParsedError } from './error-analyzer.js';
 import { forceKillTree, getProjectDir, getRunningProcess, acquireShortRunningSlot, releaseShortRunningSlot } from './core/process-state.js';
 import { buildSafeEnv } from './helpers.js';
-import { MARKER_RESULT as MARKER_RESULT_SHARED, GD_MCP_GET_ROOT, GD_MCP_GET_NODE, GD_MCP_LOAD_MAIN_SCENE, GD_MCP_OUTPUT } from './tools/shared.js';
+import { MARKER_RESULT as MARKER_RESULT_SHARED, MARKER_ERROR as MARKER_ERROR_SHARED, GD_MCP_GET_ROOT, GD_MCP_GET_NODE, GD_MCP_LOAD_MAIN_SCENE, GD_MCP_OUTPUT } from './tools/shared.js';
 
 
 // ─── Sandbox scanner (C-SEC-02) ──────────────────────────────────────────────
@@ -91,9 +91,8 @@ export interface ExecuteGdscriptOptions {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const TMP_PREFIX = 'godot-mcp-exec-';
-/** Re-export MARKER_RESULT from shared.ts for consumers that import from this module */
-export { MARKER_RESULT_SHARED as MARKER_RESULT };
-const MARKER_ERROR = '___MCP_ERROR___';
+/** Re-export markers from shared.ts for consumers that import from this module */
+export { MARKER_RESULT_SHARED as MARKER_RESULT, MARKER_ERROR_SHARED as MARKER_ERROR };
 
 /** Generate a random per-execution marker prefix to prevent forgery. */
 function generateMarker(): string {
@@ -369,7 +368,7 @@ export function injectHelpers(code: string): string {
 
 // ─── Output parsing ─────────────────────────────────────────────────────────
 
-export function parseMcpMarkers(raw: string, resultMarker = MARKER_RESULT_SHARED, errorMarker = MARKER_ERROR): {
+export function parseMcpMarkers(raw: string, resultMarker = MARKER_RESULT_SHARED, errorMarker = MARKER_ERROR_SHARED): {
   parsed: { success: boolean; outputs?: OutputEntry[]; error?: string } | null;
   logLines: string[];
 } {
@@ -480,7 +479,7 @@ export async function executeGdscript(
   // C-09: For injectHelpers path, replace fixed markers with random ones
   // (wrapSnippet paths already use random markers via template parameter)
   scriptContent = scriptContent.replaceAll(MARKER_RESULT_SHARED, rndResult);
-  scriptContent = scriptContent.replaceAll(MARKER_ERROR, rndError);
+  scriptContent = scriptContent.replaceAll(MARKER_ERROR_SHARED, rndError);
 
   // Create isolated session directory
   cleanupOldSessions();

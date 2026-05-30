@@ -319,10 +319,9 @@ export function parseGodotConfig(content: string): GodotConfig {
 
 // ─── MCP output parser ───────────────────────────────────────────────────────
 
-const MCP_MARKER_RESULT = '___MCP_RESULT___';
-const MCP_MARKER_ERROR = '___MCP_ERROR___';
+import { MARKER_RESULT, MARKER_ERROR } from './tools/shared.js';
 
-export function parseMcpScriptOutput(rawOutput: string, exitCode: number | null, resultMarker = MCP_MARKER_RESULT, errorMarker = MCP_MARKER_ERROR): unknown {
+export function parseMcpScriptOutput(rawOutput: string, exitCode: number | null, resultMarker = MARKER_RESULT, errorMarker = MARKER_ERROR): unknown {
   const lines = rawOutput.split('\n');
   const logLines: string[] = [];
   let parsed: unknown = null;
