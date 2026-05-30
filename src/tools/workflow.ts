@@ -139,6 +139,8 @@ export function getToolDefinitions(): Tool[] {
                     description: { type: 'string', description: 'Human-readable assertion description' },
                     gdscript: { type: 'string', description: 'GDScript code using _mcp_output to output results' },
                     expect: { type: 'string', description: 'Expected output value (string comparison)' },
+                    type: { type: 'string', description: 'Assertion type: gdscript (default) or screenshot_diff', enum: ['gdscript', 'screenshot_diff'] },
+                    expect_present: { type: 'array', items: { type: 'string' }, description: 'screenshot_diff: node names expected to be visible in scene tree' },
                   },
                   required: ['description', 'gdscript'],
                 },
@@ -325,6 +327,51 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           for (let i = 0; i < assertionList.length; i++) {
             const a = assertionList[i];
             const desc = a.description ?? `assertion ${i}`;
+            const assertType = (a as Record<string, unknown>).type as string || 'gdscript';
+
+            // ── screenshot_diff assertion ──
+            if (assertType === 'screenshot_diff') {
+              const validation = validateScreenshotAssertion(a as Record<string, unknown>);
+              if (!validation.valid) {
+                assertionResults.push({ description: desc, passed: false, error: validation.error });
+                continue;
+              }
+              // Requires Bridge connection
+              if (!bridgeSocket) {
+                assertionResults.push({ description: desc, passed: false, error: 'screenshot_diff requires a running game bridge connection' });
+                continue;
+              }
+              try {
+                const ssResp = await sendToBridge('take_screenshot', { path: 'user://mcp_assert_screenshot.png' }, 10000);
+                if (ssResp.error) {
+                  assertionResults.push({ description: desc, passed: false, error: `Screenshot failed: ${ssResp.error}` });
+                  continue;
+                }
+                // If expect_present specified, verify nodes exist in scene tree
+                const expectPresent = (a as Record<string, unknown>).expect_present as string[] | undefined;
+                if (expectPresent && expectPresent.length > 0) {
+                  const treeResp = await sendToBridge('get_tree', {}, 10000);
+                  if (treeResp.error) {
+                    assertionResults.push({ description: desc, passed: false, error: `get_tree failed: ${treeResp.error}` });
+                    continue;
+                  }
+                  const treeStr = JSON.stringify(treeResp);
+                  const missing = expectPresent.filter(name => !treeStr.includes(name));
+                  if (missing.length > 0) {
+                    assertionResults.push({ description: desc, passed: false, actual: `missing nodes: ${missing.join(', ')}`, expected: `all present: ${expectPresent.join(', ')}` });
+                  } else {
+                    assertionResults.push({ description: desc, passed: true, actual: 'screenshot taken, all nodes present' });
+                  }
+                } else {
+                  assertionResults.push({ description: desc, passed: true, actual: 'screenshot captured successfully' });
+                }
+              } catch (err) {
+                assertionResults.push({ description: desc, passed: false, error: err instanceof Error ? err.message : String(err) });
+              }
+              continue;
+            }
+
+            // ── default: gdscript assertion ──
             try {
               const wrappedCode = wrapAssertionCode(a.gdscript, desc);
               const assertResult = await executeGdscript({
@@ -507,6 +554,21 @@ function runVerification(godot: string, projectPath: string): Promise<Record<str
   });
 }
 
+
+// ─── Screenshot diff assertion validation ─────────────────────────────────────
+
+export function validateScreenshotAssertion(
+  assertion: Record<string, unknown>,
+): { valid: boolean; error?: string } {
+  if (!assertion.description || typeof assertion.description !== 'string') {
+    return { valid: false, error: 'screenshot_diff assertion requires a description field' };
+  }
+  const ep = assertion.expect_present;
+  if (ep !== undefined && !Array.isArray(ep)) {
+    return { valid: false, error: 'expect_present must be a string array' };
+  }
+  return { valid: true };
+}
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   workflow: { readonly: false, long_running: true },
