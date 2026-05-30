@@ -592,6 +592,7 @@ interface DslCommand {
 }
 
 const DSL_ERROR = (msg: string): DslCommand => ({ method: '_error', params: { message: msg } });
+// eslint-disable-next-line no-control-regex
 const CTRL_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F]/; // exclude \t \n \r
 
 export function parseE2eDsl(line: string): DslCommand | null {
@@ -604,7 +605,7 @@ export function parseE2eDsl(line: string): DslCommand | null {
     const path = waitMatch[1];
     if (path.length > 1024) return DSL_ERROR(`waitFor: path exceeds 1024 chars (${path.length})`);
     if (CTRL_RE.test(path)) return DSL_ERROR(`waitFor: path contains control characters`);
-    if (!/^root(\/[\w.\-]+)+$/.test(path)) return DSL_ERROR(`waitFor: invalid path "${path}" — must be root/X/Y format with alphanumeric, dot, or hyphen segments`);
+    if (!/^root(\/[\w.-]+)+$/.test(path)) return DSL_ERROR(`waitFor: invalid path "${path}" — must be root/X/Y format with alphanumeric, dot, or hyphen segments`);
     return { method: 'wait_for_node', params: { path } };
   }
 
