@@ -21,6 +21,7 @@ import { randomUUID } from 'crypto';
 import { analyzeOutput, type ParsedError } from './error-analyzer.js';
 import { forceKillTree, getProjectDir, getRunningProcess, acquireShortRunningSlot, releaseShortRunningSlot } from './core/process-state.js';
 import { buildSafeEnv } from './helpers.js';
+import { MARKER_RESULT as MARKER_RESULT_SHARED } from './tools/shared.js';
 
 
 // ─── Sandbox scanner (C-SEC-02) ──────────────────────────────────────────────
@@ -90,7 +91,8 @@ export interface ExecuteGdscriptOptions {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const TMP_PREFIX = 'godot-mcp-exec-';
-const MARKER_RESULT = '___MCP_RESULT___';
+/** Re-export MARKER_RESULT from shared.ts for consumers that import from this module */
+export { MARKER_RESULT_SHARED as MARKER_RESULT };
 const MARKER_ERROR = '___MCP_ERROR___';
 
 /** Generate a random per-execution marker prefix to prevent forgery. */
@@ -163,7 +165,7 @@ export function isFullClass(code: string): boolean {
  * Splits user code into declarations (class-level) and statements (inside _initialize).
  * This allows func/var/const definitions to work correctly at class scope.
  */
-export function wrapSnippet(code: string, resultMarker = MARKER_RESULT): string {
+export function wrapSnippet(code: string, resultMarker = MARKER_RESULT_SHARED): string {
   const lines = code.split('\n');
   const declarationLines: string[] = [];
   const statementLines: string[] = [];
@@ -304,7 +306,7 @@ export function wrapSnippet(code: string, resultMarker = MARKER_RESULT): string 
  * Wrap a snippet as `extends Node` for autoload mode.
  * The loader scene instantiates this via .new(), so it must be a Node subclass.
  */
-export function wrapSnippetAsNode(code: string, resultMarker = MARKER_RESULT): string {
+export function wrapSnippetAsNode(code: string, resultMarker = MARKER_RESULT_SHARED): string {
   const lines = code.split('\n');
   const declarationLines: string[] = [];
   const statementLines: string[] = [];
@@ -412,7 +414,7 @@ export function injectHelpers(code: string): string {
 
 // ─── Output parsing ─────────────────────────────────────────────────────────
 
-export function parseMcpMarkers(raw: string, resultMarker = MARKER_RESULT, errorMarker = MARKER_ERROR): {
+export function parseMcpMarkers(raw: string, resultMarker = MARKER_RESULT_SHARED, errorMarker = MARKER_ERROR): {
   parsed: { success: boolean; outputs?: OutputEntry[]; error?: string } | null;
   logLines: string[];
 } {
@@ -522,7 +524,7 @@ export async function executeGdscript(
 
   // C-09: For injectHelpers path, replace fixed markers with random ones
   // (wrapSnippet paths already use random markers via template parameter)
-  scriptContent = scriptContent.replaceAll(MARKER_RESULT, rndResult);
+  scriptContent = scriptContent.replaceAll(MARKER_RESULT_SHARED, rndResult);
   scriptContent = scriptContent.replaceAll(MARKER_ERROR, rndError);
 
   // Create isolated session directory
