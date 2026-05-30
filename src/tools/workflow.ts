@@ -555,6 +555,50 @@ function runVerification(godot: string, projectPath: string): Promise<Record<str
 }
 
 
+// ─── E2E DSL parser ────────────────────────────────────────────────────────────
+
+interface DslCommand {
+  method: string;
+  params: Record<string, unknown>;
+}
+
+export function parseE2eDsl(line: string): DslCommand | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+
+  // waitFor("path")
+  const waitMatch = trimmed.match(/^waitFor\(\s*"([^"]+)"\s*\)$/);
+  if (waitMatch) {
+    return { method: 'wait_for_node', params: { path: waitMatch[1] } };
+  }
+
+  // click(x, y[, "button"])
+  const clickMatch = trimmed.match(/^click\(\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*"(\w+)")?\s*\)$/);
+  if (clickMatch) {
+    return { method: 'send_mouse_click', params: { x: Number(clickMatch[1]), y: Number(clickMatch[2]), button: clickMatch[3] || 'left', pressed: true } };
+  }
+
+  // press("Key")
+  const pressMatch = trimmed.match(/^press\(\s*"([^"]+)"\s*\)$/);
+  if (pressMatch) {
+    return { method: 'send_key', params: { key: pressMatch[1], pressed: true } };
+  }
+
+  // typeText("text")
+  const typeMatch = trimmed.match(/^typeText\(\s*"([^"]*)"\s*\)$/);
+  if (typeMatch) {
+    return { method: 'send_text', params: { text: typeMatch[1] } };
+  }
+
+  // waitMs(ms)
+  const sleepMatch = trimmed.match(/^waitMs\(\s*(\d+)\s*\)$/);
+  if (sleepMatch) {
+    return { method: '_sleep', params: { ms: Number(sleepMatch[1]) } };
+  }
+
+  return null;
+}
+
 // ─── Screenshot diff assertion validation ─────────────────────────────────────
 
 export function validateScreenshotAssertion(
