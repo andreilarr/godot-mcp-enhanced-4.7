@@ -1,4 +1,4 @@
-import { join, basename } from 'path';
+import { join, basename, extname } from 'path';
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, statSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
@@ -161,7 +161,33 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       const content = readFileSync(sp, 'utf-8');
       const lines = content.split('\n');
+      const ext = extname(sp).toLowerCase();
 
+      // C# 文件：直接读取，返回 csharp 语言标记
+      if (ext === '.cs') {
+        let csClassName = '';
+        let csNamespace = '';
+        let csBaseClass = '';
+        for (const line of lines) {
+          const nsMatch = line.match(/^\s*namespace\s+(\S+)/);
+          if (nsMatch) csNamespace = nsMatch[1];
+          const clsMatch = line.match(/^\s*(?:public\s+)?(?:partial\s+)?class\s+(\S+)/);
+          if (clsMatch && !csClassName) csClassName = clsMatch[1];
+          const baseMatch = line.match(/^\s*(?:public\s+)?(?:partial\s+)?class\s+\S+\s*:\s*(\S+)/);
+          if (baseMatch) csBaseClass = baseMatch[1];
+        }
+        return textResult(JSON.stringify({
+          path: sp,
+          language: 'csharp',
+          namespace: csNamespace,
+          class_name: csClassName,
+          extends: csBaseClass,
+          lines: lines.length,
+          content,
+        }, null, 2));
+      }
+
+      // GDScript 文件：解析 extends / class_name
       let extendsClass = '';
       let className = '';
 

@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { join, dirname } from 'path';
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
@@ -768,6 +768,29 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       if (shaderResults.length > 0) {
         scriptsSummary.shaders = shaderResults;
         scriptsSummary.shaders_validated = shaderFiles.length;
+      }
+
+      // C# 文件检测：尝试 dotnet build
+      const csFiles = collectFilesByExt(p, ['.cs']);
+      if (csFiles.length > 0) {
+        const csResults: Array<{ file: string; status: string; engine: string; error?: string; warning?: string }> = [];
+        try {
+          execSync('dotnet build --no-restore 2>&1', {
+            cwd: p,
+            timeout: 30000,
+            encoding: 'utf-8',
+          });
+          csResults.push({ file: `${csFiles.length} .cs files`, status: 'valid', engine: 'dotnet' });
+        } catch (e: any) {
+          if (e.code === 'ENOENT') {
+            csResults.push({ file: `${csFiles.length} .cs files`, status: 'skipped', engine: 'dotnet', warning: 'dotnet CLI not found in PATH' });
+          } else {
+            const output = e.stdout || e.message || 'dotnet build failed';
+            csResults.push({ file: `${csFiles.length} .cs files`, status: 'error', engine: 'dotnet', error: output.substring(0, 2000) });
+          }
+        }
+        scriptsSummary.csharp = csResults;
+        scriptsSummary.csharp_files_scanned = csFiles.length;
       }
 
       const vWarn = await checkVersionMismatch(p, godot);
