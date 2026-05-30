@@ -78,8 +78,6 @@ export function buildStateBlock(epic: string, feature: string, task: string): st
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
-// ─── Tool definitions ──────────────────────────────────────────────────────
-
 export function getToolDefinitions(): Tool[] {
   return [
     {
@@ -214,7 +212,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const codeLines = code.split('\n');
       const nonEmptyLines = codeLines.filter(l => l.trim().length > 0);
       const dslCommands = nonEmptyLines.map(l => parseE2eDsl(l));
-      const allDsl = nonEmptyLines.length > 0 && dslCommands.every(c => c !== null);
+      const allDsl = nonEmptyLines.length > 0 && dslCommands.every(c => c !== null && c.method !== '_error');
 
       if (allDsl) {
         if (projectPath) setBridgeProjectDir(projectPath);
@@ -370,11 +368,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
                 assertionResults.push({ description: desc, passed: false, error: validation.error });
                 continue;
               }
-              // Requires Bridge connection
-              if (!bridgeSocket) {
-                assertionResults.push({ description: desc, passed: false, error: 'screenshot_diff requires a running game bridge connection' });
-                continue;
-              }
+              // Requires Bridge connection — if bridge step failed, sendToBridge will error
+              // (no pre-check needed; the sendToBridge calls below have their own error handling)
               try {
                 const ssResp = await sendToBridge('take_screenshot', { path: 'user://mcp_assert_screenshot.png' }, 10000);
                 if (ssResp.error) {
@@ -596,6 +591,9 @@ interface DslCommand {
   params: Record<string, unknown>;
 }
 
+const DSL_ERROR = (msg: string): DslCommand => ({ method: '_error', params: { message: msg } });
+const CTRL_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F]/; // exclude \t \n \r
+
 export function parseE2eDsl(line: string): DslCommand | null {
   const trimmed = line.trim();
   if (!trimmed) return null;
@@ -603,31 +601,50 @@ export function parseE2eDsl(line: string): DslCommand | null {
   // waitFor("path")
   const waitMatch = trimmed.match(/^waitFor\(\s*"([^"]+)"\s*\)$/);
   if (waitMatch) {
-    return { method: 'wait_for_node', params: { path: waitMatch[1] } };
+    const path = waitMatch[1];
+    if (path.length > 1024) return DSL_ERROR(`waitFor: path exceeds 1024 chars (${path.length})`);
+    if (CTRL_RE.test(path)) return DSL_ERROR(`waitFor: path contains control characters`);
+    if (!/^root(\/[\w.\-]+)+$/.test(path)) return DSL_ERROR(`waitFor: invalid path "${path}" — must be root/X/Y format with alphanumeric, dot, or hyphen segments`);
+    return { method: 'wait_for_node', params: { path } };
   }
 
   // click(x, y[, "button"])
-  const clickMatch = trimmed.match(/^click\(\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*"(\w+)")?\s*\)$/);
+  const clickMatch = trimmed.match(/^click\(\s*(-?\d+)\s*,\s*(-?\d+)\s*(?:,\s*"(\w+)")?\s*\)$/);
   if (clickMatch) {
-    return { method: 'send_mouse_click', params: { x: Number(clickMatch[1]), y: Number(clickMatch[2]), button: clickMatch[3] || 'left', pressed: true } };
+    const x = Number(clickMatch[1]);
+    const y = Number(clickMatch[2]);
+    const button = clickMatch[3] || 'left';
+    if (x < 0 || x > 10000) return DSL_ERROR(`click: x=${x} out of range [0, 10000]`);
+    if (y < 0 || y > 10000) return DSL_ERROR(`click: y=${y} out of range [0, 10000]`);
+    if (!['left', 'right', 'middle'].includes(button)) return DSL_ERROR(`click: invalid button "${button}" — must be left, right, or middle`);
+    return { method: 'send_mouse_click', params: { x, y, button, pressed: true } };
   }
 
-  // press("Key")
-  const pressMatch = trimmed.match(/^press\(\s*"([^"]+)"\s*\)$/);
+  // press("key")
+  const pressMatch = trimmed.match(/^press\(\s*"([^"]*)"\s*\)$/);
   if (pressMatch) {
-    return { method: 'send_key', params: { key: pressMatch[1], pressed: true } };
+    const key = pressMatch[1];
+    if (!key) return DSL_ERROR(`press: empty key name`);
+    if (key.length > 64) return DSL_ERROR(`press: key name exceeds 64 chars`);
+    if (!/^[\w ]+$/.test(key)) return DSL_ERROR(`press: invalid key name "${key}" — only alphanumeric, underscore, space allowed`);
+    return { method: 'send_key', params: { key, pressed: true } };
   }
 
   // typeText("text")
   const typeMatch = trimmed.match(/^typeText\(\s*"([^"]*)"\s*\)$/);
   if (typeMatch) {
-    return { method: 'send_text', params: { text: typeMatch[1] } };
+    const text = typeMatch[1];
+    if (text.length > 512) return DSL_ERROR(`typeText: text exceeds 512 chars (${text.length})`);
+    if (CTRL_RE.test(text)) return DSL_ERROR(`typeText: text contains control characters`);
+    return { method: 'send_text', params: { text } };
   }
 
   // waitMs(ms)
   const sleepMatch = trimmed.match(/^waitMs\(\s*(\d+)\s*\)$/);
   if (sleepMatch) {
-    return { method: '_sleep', params: { ms: Number(sleepMatch[1]) } };
+    const ms = Number(sleepMatch[1]);
+    if (ms < 0 || ms > 60000) return DSL_ERROR(`waitMs: ${ms}ms out of range [0, 60000]`);
+    return { method: '_sleep', params: { ms } };
   }
 
   return null;
