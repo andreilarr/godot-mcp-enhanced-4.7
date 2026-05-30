@@ -398,6 +398,53 @@ function validateShaderFile(filePath: string, relPath: string): { errors: string
   return { errors, warnings };
 }
 
+// ─── .tscn/.tres structural validation ──────────────────────────────────────
+
+export function validateSceneFile(
+  content: string,
+  relPath: string,
+  _projectPath: string,
+): { errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!content.trim()) {
+    return { errors: ['Empty scene/resource file'], warnings: [] };
+  }
+
+  // 1. Check for valid header
+  if (!/^\[gd_(scene|resource)\b/m.test(content)) {
+    errors.push(`Missing [gd_scene] or [gd_resource] header in ${relPath}`);
+  }
+
+  // 2. Check for duplicate ext_resource ids
+  const extIds = new Set<string>();
+  const extRegex = /\[ext_resource[^[]*id="([^"]+)"/g;
+  let match: RegExpExecArray | null;
+  while ((match = extRegex.exec(content)) !== null) {
+    const id = match[1];
+    if (extIds.has(id)) {
+      errors.push(`Duplicate ext_resource id: ${id} in ${relPath}`);
+    } else {
+      extIds.add(id);
+    }
+  }
+
+  // 3. Check for duplicate sub_resource ids
+  const subIds = new Set<string>();
+  const subRegex = /\[sub_resource[^[]*id="([^"]+)"/g;
+  while ((match = subRegex.exec(content)) !== null) {
+    const id = match[1];
+    if (subIds.has(id)) {
+      errors.push(`Duplicate sub_resource id: ${id} in ${relPath}`);
+    } else {
+      subIds.add(id);
+    }
+  }
+
+  return { errors, warnings };
+}
+
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
 export function getToolDefinitions(): Tool[] {
@@ -791,6 +838,31 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         }
         scriptsSummary.csharp = csResults;
         scriptsSummary.csharp_files_scanned = csFiles.length;
+      }
+
+      // Scene/resource file structural validation (.tscn/.tres)
+      const sceneFiles = [...collectFilesByExt(p, ['.tscn']), ...collectFilesByExt(p, ['.tres'])];
+      const sceneResults: Array<{ file: string; has_errors: boolean; errors: string[]; warnings?: string[] }> = [];
+      let sceneTotalErrors = 0;
+      for (const sf of sceneFiles) {
+        const rel = relOf(sf);
+        try {
+          const content = readFileSync(sf, 'utf-8');
+          const { errors: sErrors, warnings: sWarnings } = validateSceneFile(content, rel, p);
+          sceneTotalErrors += sErrors.length;
+          if (sErrors.length > 0 || sWarnings.length > 0) {
+            sceneResults.push({ file: rel, has_errors: sErrors.length > 0, errors: sErrors, warnings: sWarnings.length > 0 ? sWarnings : undefined });
+          }
+        } catch {
+          sceneResults.push({ file: rel, has_errors: true, errors: [`Cannot read file: ${rel}`] });
+          sceneTotalErrors++;
+        }
+      }
+      if (sceneResults.length > 0) {
+        scriptsSummary.scenes = sceneResults;
+        scriptsSummary.scenes_validated = sceneFiles.length;
+        scriptsSummary.scene_errors = sceneTotalErrors;
+        summaryMsg += ` Validated ${sceneFiles.length} scene/resource file(s), ${sceneResults.filter(r => r.has_errors).length} with errors.`;
       }
 
       const vWarn = await checkVersionMismatch(p, godot);
