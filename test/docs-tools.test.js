@@ -1,27 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock godot-docs before importing the module under test
+const makeClassInfo = (name, inherits = 'CanvasItem') => ({
+  name,
+  inherits,
+  brief_description: `A ${name} object`,
+  description: `Description for ${name}`,
+  methods: [{
+    name: 'set_position',
+    return_type: 'void',
+    arguments: [{ name: 'position', type: 'Vector2' }],
+    description: 'Sets the position.',
+  }],
+  properties: [{
+    name: 'position',
+    type: 'Vector2',
+    description: 'Position of the node.',
+  }],
+  signals: [{ name: 'position_changed', description: 'Emitted when position changes.' }],
+  constants: [],
+  enums: [],
+});
+
 vi.mock('../src/godot-docs.js', () => ({
-  getClassInfo: vi.fn(() => ({
-    name: 'Node2D',
-    inherits: 'CanvasItem',
-    brief_description: 'A 2D game object',
-    description: 'Base node for 2D',
-    methods: [{
-      name: 'set_position',
-      return_type: 'void',
-      arguments: [{ name: 'position', type: 'Vector2' }],
-      description: 'Sets the position.',
-    }],
-    properties: [{
-      name: 'position',
-      type: 'Vector2',
-      description: 'Position of the node.',
-    }],
-    signals: [{ name: 'position_changed', description: 'Emitted when position changes.' }],
-    constants: [],
-    enums: [],
-  })),
+  getClassInfo: vi.fn((className) => makeClassInfo(className)),
   searchClasses: vi.fn(() => [
     { name: 'Node2D', inherits: 'CanvasItem', description: 'A 2D game object' },
     { name: 'Node3D', inherits: 'Node', description: 'A 3D game object' },
@@ -87,6 +89,8 @@ describe('docs tools', () => {
     const parsed = JSON.parse(text);
     expect(parsed.name).toBe('Node2D');
     expect(parsed.inherits).toBe('CanvasItem');
+    expect(parsed.version_note).toBeDefined();
+    expect(typeof parsed.version_note).toBe('string');
     expect(parsed.methods.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -100,6 +104,8 @@ describe('docs tools', () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.name).toBe('set_position');
     expect(parsed.return_type).toBe('void');
+    expect(parsed.version_note).toBeDefined();
+    expect(typeof parsed.version_note).toBe('string');
   });
 
   it('handleTool for get_inheritance returns chain', async () => {
@@ -108,5 +114,53 @@ describe('docs tools', () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.class).toBe('Node2D');
     expect(parsed.inheritance_chain.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('docs version_note', () => {
+  const ctx = {};
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns default version note for standard classes', async () => {
+    const result = await handleTool('docs', { action: 'get_class_info', class_name: 'Node2D' }, ctx);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.version_note).toContain('Godot 4.0');
+  });
+
+  it('returns Godot 4.4 note for OpenXRHand', async () => {
+    const result = await handleTool('docs', { action: 'get_class_info', class_name: 'OpenXRHand' }, ctx);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.version_note).toContain('4.4');
+  });
+
+  it('returns Godot 4.4 note for XRController3D', async () => {
+    const result = await handleTool('docs', { action: 'get_class_info', class_name: 'XRController3D' }, ctx);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.version_note).toContain('4.4');
+  });
+
+  it('returns Godot 4.5 note for JavaClass', async () => {
+    const result = await handleTool('docs', { action: 'get_class_info', class_name: 'JavaClass' }, ctx);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.version_note).toContain('4.5');
+  });
+
+  it('returns Godot 4.6 note for TileMapLayer', async () => {
+    const result = await handleTool('docs', { action: 'get_class_info', class_name: 'TileMapLayer' }, ctx);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.version_note).toContain('4.6');
+  });
+
+  it('find_method also includes version_note', async () => {
+    const result = await handleTool('docs', {
+      action: 'find_method',
+      class_name: 'TileMapLayer',
+      method_name: 'set_position',
+    }, ctx);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.version_note).toContain('4.6');
   });
 });

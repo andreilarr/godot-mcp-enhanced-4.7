@@ -11,6 +11,44 @@ import { DEPRECATED_PROPERTIES } from './deprecated-properties.js';
 
 const TOOL_NAMES = ['docs'] as const;
 
+// ─── API Version hints (static, lightweight) ──────────────────────────────────
+
+const NEW_IN_46 = new Set([
+  'AnimatedSprite2D',  // 已有但 API 有变化
+  'TileMapLayer',       // 替代 TileMap (4.6 正式)
+]);
+
+const NEW_IN_45 = new Set([
+  'JavaClass',
+  'JavaObject',
+  'JNISingleton',
+  'JNIMethodBind',
+]);
+
+const NEW_IN_44 = new Set([
+  'OpenXRHand',
+  'OpenXRIPBinding',
+  'OpenXRInteractionProfile',
+  'OpenXRInteractionProfileMetadata',
+  'OpenXRAction',
+  'OpenXRActionSet',
+  'OpenXRActionMap',
+  'XRController3D',
+  'XRNode3D',
+  'XRPose',
+  'XRTracker',
+  'XRBodyTracker',
+  'XRFaceTracker',
+  'XRHandTracker',
+]);
+
+function getVersionNote(className: string): string {
+  if (NEW_IN_46.has(className)) return 'New or significantly changed in Godot 4.6';
+  if (NEW_IN_45.has(className)) return 'New in Godot 4.5';
+  if (NEW_IN_44.has(className)) return 'New in Godot 4.4';
+  return 'Available since Godot 4.0+. Check documentation for version-specific changes.';
+}
+
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
 export function getToolDefinitions(): Tool[] {
@@ -68,6 +106,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, _c
           const result = {
             name: info.name,
             inherits: info.inherits,
+            version_note: getVersionNote(info.name),
             brief_description: info.brief_description,
             description: info.description,
             methods_count: info.methods.length,
@@ -120,6 +159,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, _c
           }
           const result = {
             class: className,
+            version_note: getVersionNote(className),
             name: method.name,
             return_type: method.return_type,
             arguments: method.arguments.map(a => ({
