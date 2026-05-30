@@ -224,7 +224,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const fullPath = resolveWithinRoot(projectPath, scriptPath);
 
       if (!existsSync(fullPath)) {
-        return opsErrorResult('NOT_FOUND', `File not found: ${fullPath}`);
+        return opsErrorResult('NOT_FOUND', `File not found: ${fullPath}`, {
+          suggestion: 'Check the script_path for typos. Use validate_scripts to scan all scripts in the project.',
+        });
       }
 
       const rawFile = readFileSync(fullPath, 'utf-8');
@@ -429,7 +431,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       const fullScriptPath = resolveWithinRoot(projectPath, scriptPath);
       if (!existsSync(fullScriptPath)) {
-        return opsErrorResult('NOT_FOUND', `Script not found: ${fullScriptPath}`);
+        return opsErrorResult('NOT_FOUND', `Script not found: ${fullScriptPath}`, {
+          suggestion: 'Check the script_path for typos. Use validate_scripts to scan all scripts in the project.',
+        });
       }
 
       const source = readFileSync(fullScriptPath, 'utf-8');

@@ -168,7 +168,9 @@ export async function handleTool(
     const errorMapper = (msg: string) =>
       msg.includes('not found') ? ERROR_CODES.NODE_NOT_FOUND : ERROR_CODES.SCRIPT_EXEC_FAILED;
 
-    return parseGdscriptResult(result, [], errorMapper);
+    return parseGdscriptResult(result, [], errorMapper, {
+      suggestion: 'Use query_scene_tree to list available nodes, or check the node path spelling.',
+    });
   } catch (err) {
     const msg = (err as Error).message;
     if (msg.includes('NodePath')) return opsErrorResult('INVALID_PATH', msg);

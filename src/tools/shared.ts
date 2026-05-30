@@ -353,24 +353,39 @@ export function opsSuccess(data: unknown, warnings: string[] = []) {
   return { success: true, data, warnings };
 }
 
-export function opsError(errorCode: string, message: string) {
-  return { success: false, error: message, error_code: errorCode, warnings: [] };
+export function opsError(
+  errorCode: string,
+  message: string,
+  opts?: { suggestion?: string },
+) {
+  return {
+    success: false,
+    error: message,
+    error_code: errorCode,
+    warnings: [] as string[],
+    ...(opts?.suggestion ? { suggestion: opts.suggestion } : {}),
+  };
 }
 
-export function opsErrorResult(errorCode: string, message: string): ToolResult {
-  return errorResult(JSON.stringify(opsError(errorCode, message)));
+export function opsErrorResult(
+  errorCode: string,
+  message: string,
+  opts?: { suggestion?: string },
+): ToolResult {
+  return errorResult(JSON.stringify(opsError(errorCode, message, opts)));
 }
 
 export function parseGdscriptResult(
   result: ExecuteGdscriptResult,
   paramWarnings: string[] = [],
   errorMapper: (errorMsg: string) => string = () => 'SCRIPT_EXEC_FAILED',
+  errorOpts?: { suggestion?: string },
 ): ToolResult {
   if (!result.compile_success) {
-    return opsErrorResult('SCRIPT_EXEC_FAILED', result.compile_error);
+    return opsErrorResult('SCRIPT_EXEC_FAILED', result.compile_error, errorOpts);
   }
   if (!result.run_success) {
-    return opsErrorResult('SCRIPT_EXEC_FAILED', result.run_error);
+    return opsErrorResult('SCRIPT_EXEC_FAILED', result.run_error, errorOpts);
   }
 
   const data: Record<string, unknown> = {};
@@ -379,7 +394,8 @@ export function parseGdscriptResult(
     if (entry.key === 'warning') {
       warnings.push(String(entry.value));
     } else if (entry.key === 'error') {
-      return opsErrorResult(errorMapper(String(entry.value)), String(entry.value));
+      const errCode = errorMapper(String(entry.value));
+      return opsErrorResult(errCode, String(entry.value), errCode === 'NODE_NOT_FOUND' ? errorOpts : undefined);
     } else {
       try {
         data[entry.key] = JSON.parse(entry.value);

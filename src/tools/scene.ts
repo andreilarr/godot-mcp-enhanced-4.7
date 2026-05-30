@@ -518,7 +518,9 @@ func _initialize():
       const result = await executeGdscript({
         godotPath: godot, projectPath: p, code: script, timeout: 30, loadAutoloads,
       });
-      return parseGdscriptResult(result, [], (msg) => msg.includes('not found') ? 'NODE_NOT_FOUND' : 'SCRIPT_EXEC_FAILED');
+      return parseGdscriptResult(result, [], (msg) => msg.includes('not found') ? 'NODE_NOT_FOUND' : 'SCRIPT_EXEC_FAILED', {
+        suggestion: 'Use query_scene_tree to list available nodes, or inspect_node to check a specific path.',
+      });
     }
 
     case 'remove_node': {
@@ -552,7 +554,9 @@ func _initialize():
       const result = await executeGdscript({
         godotPath: godot, projectPath: p, code: script, timeout: 30, loadAutoloads,
       });
-      return parseGdscriptResult(result, [], (msg) => msg.includes('not found') ? 'NODE_NOT_FOUND' : 'SCRIPT_EXEC_FAILED');
+      return parseGdscriptResult(result, [], (msg) => msg.includes('not found') ? 'NODE_NOT_FOUND' : 'SCRIPT_EXEC_FAILED', {
+        suggestion: 'Use query_scene_tree to list available nodes, or inspect_node to check a specific path.',
+      });
     }
 
     case 'instance_scene': {
@@ -730,6 +734,8 @@ func _initialize():
     if (msg.includes('not a PackedScene')) return 'INVALID_RESOURCE';
     if (msg.includes('Failed to load')) return 'LOAD_FAILED';
     return 'SCRIPT_EXEC_FAILED';
+  }, {
+    suggestion: 'Use query_scene_tree to list available nodes, or inspect_node to check a specific path.',
   });
 }
 
@@ -800,6 +806,8 @@ func _initialize():
     if (msg.includes('not found')) return 'NODE_NOT_FOUND';
     if (msg.includes('NODE_NOT_INSTANCE')) return 'NODE_NOT_INSTANCE';
     return 'SCRIPT_EXEC_FAILED';
+  }, {
+    suggestion: 'Use query_scene_tree to list available nodes, or inspect_node to check a specific path.',
   });
 }
 

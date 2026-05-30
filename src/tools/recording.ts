@@ -229,7 +229,9 @@ export async function handleTool(
     switch (action) {
       case 'recording_start': {
         if (!loadAutoloads) {
-          return opsErrorResult(ERROR_CODES.BRIDGE_NOT_CONNECTED, '录制功能需要 Game Bridge 连接，headless 模式不支持。');
+          return opsErrorResult(ERROR_CODES.BRIDGE_NOT_CONNECTED, '录制功能需要 Game Bridge 连接，headless 模式不支持。', {
+            suggestion: 'Recording requires an active game bridge. Run game_bridge_install first, then start the game with run_project or F5.',
+          });
         }
         if (ctx.projectDir) {
           setBridgeProjectDir(ctx.projectDir);
@@ -246,7 +248,9 @@ export async function handleTool(
       }
       case 'recording_stop': {
         if (!loadAutoloads) {
-          return opsErrorResult(ERROR_CODES.BRIDGE_NOT_CONNECTED, '录制功能需要 Game Bridge 连接，headless 模式不支持。');
+          return opsErrorResult(ERROR_CODES.BRIDGE_NOT_CONNECTED, '录制功能需要 Game Bridge 连接，headless 模式不支持。', {
+            suggestion: 'Recording requires an active game bridge. Run game_bridge_install first, then start the game with run_project or F5.',
+          });
         }
         if (ctx.projectDir) {
           setBridgeProjectDir(ctx.projectDir);
@@ -331,7 +335,9 @@ export async function handleTool(
           return opsErrorResult('INVALID_RECORDING_FORMAT', (e as Error).message);
         }
         if (!loadAutoloads) {
-          return opsErrorResult(ERROR_CODES.BRIDGE_NOT_CONNECTED, 'recording_play requires Game Bridge (load_autoloads=true). Input injection is not available in headless mode.');
+          return opsErrorResult(ERROR_CODES.BRIDGE_NOT_CONNECTED, 'recording_play requires Game Bridge (load_autoloads=true). Input injection is not available in headless mode.', {
+            suggestion: 'Recording playback requires an active game bridge. Run game_bridge_install first, then start the game with run_project or F5.',
+          });
         }
         const speed = typeof args.speed === 'number' && args.speed > 0 ? args.speed : 1.0;
         const escapedJson = gdEscape(eventsJson);
@@ -358,10 +364,14 @@ export async function handleTool(
     if (msg.includes('INVALID_FILE_NAME')) return opsErrorResult('INVALID_FILE_NAME', msg);
     if (msg.includes('traversal')) return opsErrorResult('INVALID_FILE_NAME', msg);
     if (msg.includes('ECONNREFUSED')) {
-      return opsErrorResult(ERROR_CODES.BRIDGE_NOT_CONNECTED, 'Cannot connect to MCP Bridge. Is the game running with the bridge autoload installed?');
+      return opsErrorResult(ERROR_CODES.BRIDGE_NOT_CONNECTED, 'Cannot connect to MCP Bridge. Is the game running with the bridge autoload installed?', {
+        suggestion: 'Ensure: 1) game_bridge_install has been called, 2) the game is running (F5 or run_project), 3) check project .godot/ for mcp_bridge_9081.secret.',
+      });
     }
     if (msg.includes('Bridge secret not found')) {
-      return opsErrorResult(ERROR_CODES.BRIDGE_NOT_CONNECTED, 'Cannot connect to MCP Bridge. Is the game running with the bridge autoload installed?');
+      return opsErrorResult(ERROR_CODES.BRIDGE_NOT_CONNECTED, 'Cannot connect to MCP Bridge. Is the game running with the bridge autoload installed?', {
+        suggestion: 'Ensure: 1) game_bridge_install has been called, 2) the game is running (F5 or run_project), 3) check project .godot/ for mcp_bridge_9081.secret.',
+      });
     }
     return opsErrorResult('SCRIPT_EXEC_FAILED', msg);
   }
