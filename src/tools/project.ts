@@ -7,7 +7,7 @@ import { textResult } from '../types.js';
 import {
   buildEngineVersion, buildRenderer, buildKeyPaths, buildMainScene,
   buildAutoloads, buildInputMap, buildPhysics, buildLayerNames, buildMcpMapping,
-  mergeSections, SECTION_ORDER, GODOT_MCP_RULES,
+  buildTypeGuide, mergeSections, SECTION_ORDER, GODOT_MCP_RULES,
 } from './claudemd-builder.js';
 import { validatePath, requireString, requireProjectPath, resolveWithinRoot, type GodotConfig } from '../helpers.js';
 
@@ -354,6 +354,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           ['## 物理设置', () => buildPhysics(config)],
           ['## 层级名称', () => buildLayerNames(config)],
           ['## MCP 规则映射', () => buildMcpMapping()],
+          ['## GDScript 类型规范', () => buildTypeGuide()],
         ];
 
         for (const [header, builder] of builders) {

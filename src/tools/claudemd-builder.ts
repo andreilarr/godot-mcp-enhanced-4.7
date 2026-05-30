@@ -7,14 +7,14 @@ import type { GodotConfig } from '../helpers.js';
 export const SECTION_IDS = new Set([
   '## 引擎版本', '## 渲染器', '## 项目关键路径', '## 主场景',
   '## Autoload', '## Input Map', '## 物理设置', '## 层级名称',
-  '## MCP 规则映射', '## Godot MCP Rules',
+  '## MCP 规则映射', '## Godot MCP Rules', '## GDScript 类型规范',
 ]);
 
 // MCP 章节的固定顺序（仅新格式，用于幂等性检测和输出顺序）
 export const SECTION_ORDER: string[] = [
   '## 引擎版本', '## 渲染器', '## 项目关键路径', '## 主场景',
   '## Autoload', '## Input Map', '## 物理设置', '## 层级名称',
-  '## MCP 规则映射',
+  '## MCP 规则映射', '## GDScript 类型规范',
 ];
 
 // godot-mcp.md 固定模板内容
@@ -272,6 +272,21 @@ export function buildLayerNames(config: GodotConfig | null): string | null {
 
 export function buildMcpMapping(): string {
   return '| 领域 | rules 文件 |\n|------|-----------|\n| 全部工具规则 | .claude/rules/godot-mcp.md |';
+}
+
+export function buildTypeGuide(): string {
+  return [
+    '- **严格类型标注**: `var speed: float = 100.0` (不要 `var speed = 100`)',
+    '- **函数参数和返回值**: `func move(dir: Vector2) -> void:`',
+    '- **@export 带类型**: `@export var health: int = 100`',
+    '- **@onready 带类型**: `@onready var sprite: Sprite2D = $Sprite2D`',
+    '- **信号用过去式**: `signal health_changed(new_value: int)`',
+    '- **常量 UPPER_SNAKE**: `const MAX_SPEED: float = 300.0`',
+    '- **PascalCase 节点名, snake_case 变量**',
+    '- **class_name 注册可复用类**: `class_name Player extends CharacterBody3D`',
+    '',
+    '> 为什么重要：动态类型是 MCP 工具调用失败的首要原因（DEV.to 2026-05-20 横评确认）。',
+  ].join('\n');
 }
 
 // ─── Merge Engine ─────────────────────────────────────────────────────────
