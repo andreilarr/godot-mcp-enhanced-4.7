@@ -622,7 +622,7 @@ func _initialize():
       const ours = readFileSync(fullPathA, 'utf-8');
       const theirs = readFileSync(fullPathB, 'utf-8');
       const merged = mergeTscn(ours, theirs);
-      writeFileSync(fullPathA, merged, 'utf-8');
+      writeAtomic(fullPathA, merged);
       return textResult(JSON.stringify({
         merged_into: sceneA,
         source: sceneB,
@@ -944,6 +944,24 @@ function handleDetachInstance(args: Record<string, unknown>): ToolResult {
   return textResult(`Detached instance "${nodeName}" — inlined from ${info.sourcePath} (${info.propertyOverrides.length} property override(s) preserved)`);
 }
 
+// ─── 原子写入辅助 ────────────────────────────────────────────────────────────
+
+/** Atomic file write: write to temp then rename. Falls back to direct write on Windows. */
+function writeAtomic(filePath: string, content: string): void {
+  if (process.platform === 'win32') {
+    writeFileSync(filePath, content, 'utf-8');
+    return;
+  }
+  const tmp = filePath + '.mcp-tmp';
+  writeFileSync(tmp, content, 'utf-8');
+  try {
+    renameSync(tmp, filePath);
+  } catch (e) {
+    try { unlinkSync(tmp); } catch { /* best effort cleanup */ }
+    throw e;
+  }
+}
+
 // ─── .tscn merge conflict resolver ────────────────────────────────────────────
 
 export function mergeTscn(ours: string, theirs: string): string {
@@ -1063,7 +1081,7 @@ export function mergeTscn(ours: string, theirs: string): string {
   mergedSub.forEach((sub) => {
     const isOurs = oursSub.some(o => o.type === sub.type && o.body === sub.body);
     const newId = allocateId(sub.originalId, isOurs);
-    if (sub.originalId !== newId) subIdMap[sub.originalId] = newId;
+    if (sub.originalId && sub.originalId !== newId) subIdMap[sub.originalId] = newId;
     reindexedSub.push(`[sub_resource type="${sub.type}" id="${newId}"]\n${sub.body}`);
   });
 
@@ -1075,6 +1093,28 @@ export function mergeTscn(ours: string, theirs: string): string {
   for (const node of theirsNodes) {
     if (!oursNames.has(node.name)) {
       mergedNodes.push(node);
+    }
+  }
+
+  // Merge [connection] sections: ours first, then new from theirs (by full line dedup)
+  const parseConnections = (content: string): string[] => {
+    const result: string[] = [];
+    const regex = /^\[connection\s+[^\]]+\]/gm;
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(content)) !== null) {
+      result.push(m[0]);
+    }
+    return result;
+  };
+
+  const oursConns = parseConnections(ours);
+  const theirsConns = parseConnections(theirs);
+  const seenConns = new Set(oursConns);
+  const mergedConns = [...oursConns];
+  for (const conn of theirsConns) {
+    if (!seenConns.has(conn)) {
+      mergedConns.push(conn);
+      seenConns.add(conn);
     }
   }
 
@@ -1103,6 +1143,8 @@ export function mergeTscn(ours: string, theirs: string): string {
   parts.push('');
   for (const node of mergedNodes) {
     let body = node.body;
+    // Strip [connection] lines from node bodies — connections are handled in a dedicated merge step below
+    body = body.replace(/^\[connection\s+[^\]]+\]\s*$/gm, '').replace(/\n{3,}/g, '\n\n').trimEnd();
     if (Object.keys(extIdMap).length > 0) {
       body = body.replace(/ExtResource\("([^"]+)"\)/g, (_match, id: string) => {
         const newId = extIdMap[id];
@@ -1116,6 +1158,12 @@ export function mergeTscn(ours: string, theirs: string): string {
       });
     }
     parts.push(body);
+    parts.push('');
+  }
+
+  // Append merged [connection] sections
+  for (const conn of mergedConns) {
+    parts.push(conn);
     parts.push('');
   }
 

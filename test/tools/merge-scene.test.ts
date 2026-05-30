@@ -199,4 +199,67 @@ size = Vector3(3, 3, 3)
     const result = mergeTscn(a, b);
     expect(result).toContain('WARNING: format mismatch');
   });
+
+  it('应合并 [connection] 段（ours + theirs 新增连接）', () => {
+    const ours = `[gd_scene load_steps=2 format=3]
+[ext_resource type="Script" path="res://a.gd" id="1"]
+
+[node name="Root" type="Node3D"]
+
+[node name="Button" type="Button" parent="."]
+
+[connection signal="pressed" from="Button" to="." method="_on_button_pressed"]
+`;
+    const theirs = `[gd_scene load_steps=2 format=3]
+[ext_resource type="Script" path="res://a.gd" id="1"]
+
+[node name="Root" type="Node3D"]
+
+[node name="Slider" type="HSlider" parent="."]
+
+[connection signal="pressed" from="Button" to="." method="_on_button_pressed"]
+
+[connection signal="value_changed" from="Slider" to="." method="_on_slider_changed"]
+`;
+    const result = mergeTscn(ours, theirs);
+    // ours 的 connection 保留
+    expect(result).toContain('[connection signal="pressed"');
+    // theirs 新增的 connection 合入
+    expect(result).toContain('[connection signal="value_changed"');
+  });
+
+  it('应去重重复的 [connection] 段', () => {
+    const ours = `[gd_scene load_steps=2 format=3]
+[ext_resource type="Script" path="res://a.gd" id="1"]
+
+[node name="Root" type="Node3D"]
+
+[connection signal="pressed" from="Button" to="." method="_on_button_pressed"]
+`;
+    const theirs = `[gd_scene load_steps=2 format=3]
+[ext_resource type="Script" path="res://a.gd" id="1"]
+
+[node name="Root" type="Node3D"]
+
+[connection signal="pressed" from="Button" to="." method="_on_button_pressed"]
+`;
+    const result = mergeTscn(ours, theirs);
+    // 相同的 connection 不应出现两次
+    const count = (result.match(/\[connection signal="pressed"/g) || []).length;
+    expect(count).toBe(1);
+  });
+
+  it('无 [connection] 段时应正常工作（不崩溃）', () => {
+    const a = `[gd_scene load_steps=2 format=3]
+[ext_resource type="Script" path="res://a.gd" id="1"]
+[node name="Root" type="Node3D"]
+`;
+    const b = `[gd_scene load_steps=2 format=3]
+[ext_resource type="Script" path="res://b.gd" id="2"]
+[node name="Root" type="Node3D"]
+`;
+    const result = mergeTscn(a, b);
+    expect(result).not.toContain('[connection');
+    expect(result).toContain('name="Root"');
+  });
 });

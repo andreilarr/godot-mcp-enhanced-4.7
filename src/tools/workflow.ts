@@ -373,7 +373,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
               try {
                 const ssResp = await sendToBridge('take_screenshot', { path: 'user://mcp_assert_screenshot.png' }, 10000);
                 if (ssResp.error) {
-                  assertionResults.push({ description: desc, passed: false, error: `Screenshot failed: ${ssResp.error}` });
+                  assertionResults.push({ description: desc, passed: false, error: `Screenshot failed: ${ssResp.error.message ?? JSON.stringify(ssResp.error)}` });
                   continue;
                 }
                 // If expect_present specified, verify nodes exist in scene tree
@@ -381,7 +381,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
                 if (expectPresent && expectPresent.length > 0) {
                   const treeResp = await sendToBridge('get_tree', {}, 10000);
                   if (treeResp.error) {
-                    assertionResults.push({ description: desc, passed: false, error: `get_tree failed: ${treeResp.error}` });
+                    assertionResults.push({ description: desc, passed: false, error: `get_tree failed: ${treeResp.error.message ?? JSON.stringify(treeResp.error)}` });
                     continue;
                   }
                   const treeStr = JSON.stringify(treeResp);

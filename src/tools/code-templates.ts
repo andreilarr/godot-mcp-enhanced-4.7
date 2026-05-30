@@ -558,11 +558,10 @@ function validateUserTemplate(raw: unknown, _filePath: string): UserTemplateFile
   if (typeof t.id !== 'string' || !t.id) return null;
   if (typeof t.name !== 'string' || !t.name) return null;
   if (typeof t.code !== 'string' || !t.code.trim()) return null;
-  if (typeof t.description !== 'string') t.description = '';
   if (t.variables !== undefined && !Array.isArray(t.variables)) return null;
   if (t.tags !== undefined && !Array.isArray(t.tags)) return null;
   if (t.appliesTo !== undefined && !Array.isArray(t.appliesTo)) return null;
-  return t as unknown as UserTemplateFile;
+  return { ...t, description: typeof t.description === 'string' ? t.description : '' } as unknown as UserTemplateFile;
 }
 
 /** 加载项目 .mcp-templates/ 目录下的用户模板 */
@@ -734,7 +733,8 @@ export async function handleTool(
     const variables: Record<string, string> = {};
     const userVars = (args.variables ?? {}) as Record<string, unknown>;
     for (const param of template.params) {
-      variables[param.name] = String(userVars[param.name] ?? param.default);
+      const raw = String(userVars[param.name] ?? param.default);
+      variables[param.name] = sanitizeTemplateValue(raw);
     }
 
     const code = template.generate(variables);
