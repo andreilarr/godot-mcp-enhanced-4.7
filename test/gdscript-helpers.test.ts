@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { wrapSnippet, wrapSnippetAsNode } from '../src/gdscript-executor.js';
 import {
+  SCENE_TREE_HEADER,
   GD_MCP_GET_ROOT,
   GD_MCP_GET_NODE,
   GD_MCP_LOAD_MAIN_SCENE,
@@ -62,5 +63,25 @@ describe('GD_MCP shared constants', () => {
   it('GD_MCP_OUTPUT contains append call', () => {
     expect(GD_MCP_OUTPUT).toBeInstanceOf(Array);
     expect(GD_MCP_OUTPUT.join('\n')).toContain('_mcp_outputs.append');
+  });
+});
+
+describe('SCENE_TREE_HEADER bugfix', () => {
+  it('contains var _mcp_outputs declaration', () => {
+    expect(SCENE_TREE_HEADER).toContain('var _mcp_outputs: Array = []');
+  });
+
+  it('contains func _mcp_output definition', () => {
+    expect(SCENE_TREE_HEADER).toContain('func _mcp_output(key: String, value: Variant) -> void:');
+    expect(SCENE_TREE_HEADER).toContain('_mcp_outputs.append');
+  });
+
+  it('_mcp_output exists and is unique', () => {
+    const outputIdx = SCENE_TREE_HEADER.indexOf('func _mcp_output');
+    const loadSceneIdx = SCENE_TREE_HEADER.indexOf('func _mcp_load_scene');
+    expect(outputIdx).toBeGreaterThan(-1);
+    expect(loadSceneIdx).toBeGreaterThan(-1);
+    // _mcp_output 定义必须存在且唯一
+    expect(SCENE_TREE_HEADER.match(/func _mcp_output/g)).toHaveLength(1);
   });
 });

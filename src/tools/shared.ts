@@ -280,109 +280,71 @@ export const GD_MCP_OUTPUT: readonly string[] = [
   '\t_mcp_outputs.append({"key": key, "value": str(value)})',
 ];
 
-export const SCENE_TREE_HEADER = `extends SceneTree
-
-var _mcp_root: Node = null
-var _mcp_scene_instance: Node = null
-
-func _mcp_get_root() -> Node:
-\tif _mcp_root != null:
-\t\treturn _mcp_root
-\tif root != null:
-\t\t_mcp_root = root
-\t\treturn _mcp_root
-\tvar ml: Variant = Engine.get_main_loop()
-\tif ml != null and ml is SceneTree and ml.root != null:
-\t\t_mcp_root = ml.root
-\t\treturn _mcp_root
-\treturn null
-
-func _mcp_get_node(path: NodePath) -> Node:
-\tvar _p: String = str(path)
-\tif _p.begins_with("/"):
-\t\t_p = _p.substr(1)
-\tvar _r: Node = _mcp_get_root()
-\tif _r == null:
-\t\treturn null
-\t# Fallback: root.get_node() may fail in headless _initialize()
-\tvar _node: Node = _r.get_node_or_null(_p)
-\tif _node != null:
-\t\treturn _node
-\t# Manual traversal for headless compatibility
-\tvar _parts: PackedStringArray = _p.split("/")
-\t_node = _r
-\tfor _part in _parts:
-\t\tif _part == "":
-\t\t\tcontinue
-\t\tvar _found: bool = false
-\t\tfor _ch in _node.get_children():
-\t\t\tif _ch.name == _part:
-\t\t\t\t_node = _ch
-\t\t\t\t_found = true
-\t\t\t\tbreak
-\t\tif not _found:
-\t\t\tif _part == "root" and _node == _r:
-\t\t\t\tcontinue
-\t\t\treturn null
-\treturn _node
-func _mcp_load_main_scene() -> void:
-\tvar _r: Node = _mcp_get_root()
-\tif _r == null:
-\t\treturn
-\tvar _sp: Variant = ProjectSettings.get_setting("application/run/main_scene")
-\tif _sp != null and _sp != "":
-\t\tvar _sr = load(_sp)
-\t\tif _sr:
-\t\t\t_r.add_child(_sr.instantiate())
-func _mcp_load_scene(sp: String) -> bool:
-\tvar _r: Node = _mcp_get_root()
-\tif _r == null:
-\t\t_mcp_output("error", "Scene root not available")
-\t\treturn false
-\tif _mcp_scene_instance != null:
-\t\tif _mcp_scene_instance.get_parent() != null:
-\t\t\t_mcp_scene_instance.get_parent().remove_child(_mcp_scene_instance)
-\t\t_mcp_scene_instance.queue_free()
-\t\t_mcp_scene_instance = null
-\tvar _sr = load(sp)
-\tif _sr == null:
-\t\t_mcp_output("error", "Failed to load scene: " + sp)
-\t\treturn false
-\t_mcp_scene_instance = _sr.instantiate()
-\t_r.add_child(_mcp_scene_instance)
-\treturn true
-
-func _mcp_get_scene_node(path: String) -> Node:
-\t# Search within loaded scene instance (avoids root/SceneName prefix issue)
-\tif _mcp_scene_instance != null:
-\t\tvar _p: String = path
-\t\twhile _p.begins_with("/"):
-\t\t\t_p = _p.substr(1)
-\t\t# Strip leading "root/" or "root" prefix
-\t\tif _p.begins_with("root/"):
-\t\t\t_p = _p.substr(5)
-\t\telif _p == "root":
-\t\t\t_p = ""
-\t\t# Strip scene root name if present (e.g. "Main/UILayer/..." -> "UILayer/...")
-\t\tif _p != "" and _mcp_scene_instance.name.length() > 0:
-\t\t\tvar _scene_name: String = _mcp_scene_instance.name + "/"
-\t\t\tif _p.begins_with(_scene_name):
-\t\t\t\t_p = _p.substr(_scene_name.length())
-\t\t\telif _p == _mcp_scene_instance.name:
-\t\t\t\t_p = ""
-\t\tif _p == "":
-\t\t\treturn _mcp_scene_instance
-\t\tvar _node: Node = _mcp_scene_instance.get_node_or_null(_p)
-\t\tif _node != null:
-\t\t\treturn _node
-\t# Fallback to global search
-\treturn _mcp_get_node(path)
-
-func _mcp_done() -> void:
-\tprint("${MARKER_RESULT}" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
-\tif Engine.get_main_loop() == self:
-\t\tquit(0)
-`;
+export const SCENE_TREE_HEADER = [
+  'extends SceneTree',
+  '',
+  'var _mcp_outputs: Array = []',
+  'var _mcp_root: Node = null',
+  'var _mcp_scene_instance: Node = null',
+  '',
+  ...GD_MCP_GET_ROOT,
+  '',
+  ...GD_MCP_GET_NODE,
+  '',
+  ...GD_MCP_LOAD_MAIN_SCENE,
+  '',
+  // SCENE_TREE_HEADER 独有：场景加载和导航辅助
+  'func _mcp_load_scene(sp: String) -> bool:',
+  '	var _r: Node = _mcp_get_root()',
+  '	if _r == null:',
+  '		_mcp_output("error", "Scene root not available")',
+  '		return false',
+  '	if _mcp_scene_instance != null:',
+  '		if _mcp_scene_instance.get_parent() != null:',
+  '			_mcp_scene_instance.get_parent().remove_child(_mcp_scene_instance)',
+  '		_mcp_scene_instance.queue_free()',
+  '		_mcp_scene_instance = null',
+  '	var _sr = load(sp)',
+  '	if _sr == null:',
+  '		_mcp_output("error", "Failed to load scene: " + sp)',
+  '		return false',
+  '	_mcp_scene_instance = _sr.instantiate()',
+  '	_r.add_child(_mcp_scene_instance)',
+  '	return true',
+  '',
+  'func _mcp_get_scene_node(path: String) -> Node:',
+  '	# Search within loaded scene instance (avoids root/SceneName prefix issue)',
+  '	if _mcp_scene_instance != null:',
+  '		var _p: String = path',
+  '		while _p.begins_with("/"):',
+  '			_p = _p.substr(1)',
+  '		# Strip leading "root/" or "root" prefix',
+  '		if _p.begins_with("root/"):',
+  '			_p = _p.substr(5)',
+  '		elif _p == "root":',
+  '			_p = ""',
+  '		# Strip scene root name if present (e.g. "Main/UILayer/..." -> "UILayer/...")',
+  '		if _p != "" and _mcp_scene_instance.name.length() > 0:',
+  '			var _scene_name: String = _mcp_scene_instance.name + "/"',
+  '			if _p.begins_with(_scene_name):',
+  '				_p = _p.substr(_scene_name.length())',
+  '			elif _p == _mcp_scene_instance.name:',
+  '				_p = ""',
+  '		if _p == "":',
+  '		return _mcp_scene_instance',
+  '		var _node: Node = _mcp_scene_instance.get_node_or_null(_p)',
+  '		if _node != null:',
+  '			return _node',
+  '	# Fallback to global search',
+  '	return _mcp_get_node(path)',
+  '',
+  ...GD_MCP_OUTPUT,
+  '',
+  'func _mcp_done() -> void:',
+  '	print("' + MARKER_RESULT + '" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))',
+  '	if Engine.get_main_loop() == self:',
+  '		quit(0)',
+].join('\n');
 
 export const NON_PERSIST = '运行时操作，仅影响当前执行上下文。如需持久化，请编辑 .tscn 文件。';
 
