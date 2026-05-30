@@ -1,0 +1,158 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`GDScript helpers - baseline snapshots > wrapSnippet with func declaration baseline > wrapSnippet-func-decl 1`] = `
+"extends SceneTree
+## MCP snippet mode — autoloads are NOT available unless load_autoloads=true
+## Use Variant type for variables to avoid "Cannot infer type" errors
+
+var _mcp_outputs: Array = []
+var _mcp_root: Node = null
+
+func _mcp_get_root() -> Node:
+	if _mcp_root != null:
+		return _mcp_root
+	if root != null:
+		_mcp_root = root
+		return _mcp_root
+	var ml: Variant = Engine.get_main_loop()
+	if ml != null and ml is SceneTree and ml.root != null:
+		_mcp_root = ml.root
+		return _mcp_root
+	return null
+
+func _mcp_get_node(path: NodePath) -> Node:
+	var _p: String = str(path)
+	if _p.begins_with("/"):
+		_p = _p.substr(1)
+	var _r: Node = _mcp_get_root()
+	if _r == null:
+		return null
+	# Fallback: root.get_node() may fail in headless _initialize()
+	var _node: Node = _r.get_node_or_null(_p)
+	if _node != null:
+		return _node
+	# Manual traversal for headless compatibility
+	var _parts: PackedStringArray = _p.split("/")
+	_node = _r
+	for _part in _parts:
+		if _part == "" or _part == "root":
+			continue
+		var _found: bool = false
+		for _ch in _node.get_children():
+			if _ch.name == _part:
+				_node = _ch
+				_found = true
+				break
+		if not _found:
+			return null
+	return _node
+func _mcp_load_main_scene() -> void:
+	var _r: Node = _mcp_get_root()
+	if _r == null:
+		return
+	var _sp: Variant = ProjectSettings.get_setting("application/run/main_scene")
+	if _sp != null and _sp != "":
+		var _sr = load(_sp)
+		if _sr:
+			_r.add_child(_sr.instantiate())
+
+func _mcp_output(key: String, value: Variant) -> void:
+	_mcp_outputs.append({"key": key, "value": str(value)})
+
+func my_func():
+	return 42
+var result = my_func()
+
+func _initialize():
+	_mcp_load_main_scene()
+		print("___MCP_RESULT___" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
+		if Engine.get_main_loop() == self:
+			quit(0)
+"
+`;
+
+exports[`GDScript helpers - baseline snapshots > wrapSnippet("var x = 1") baseline > wrapSnippet-var-x 1`] = `
+"extends SceneTree
+## MCP snippet mode — autoloads are NOT available unless load_autoloads=true
+## Use Variant type for variables to avoid "Cannot infer type" errors
+
+var _mcp_outputs: Array = []
+var _mcp_root: Node = null
+
+func _mcp_get_root() -> Node:
+	if _mcp_root != null:
+		return _mcp_root
+	if root != null:
+		_mcp_root = root
+		return _mcp_root
+	var ml: Variant = Engine.get_main_loop()
+	if ml != null and ml is SceneTree and ml.root != null:
+		_mcp_root = ml.root
+		return _mcp_root
+	return null
+
+func _mcp_get_node(path: NodePath) -> Node:
+	var _p: String = str(path)
+	if _p.begins_with("/"):
+		_p = _p.substr(1)
+	var _r: Node = _mcp_get_root()
+	if _r == null:
+		return null
+	# Fallback: root.get_node() may fail in headless _initialize()
+	var _node: Node = _r.get_node_or_null(_p)
+	if _node != null:
+		return _node
+	# Manual traversal for headless compatibility
+	var _parts: PackedStringArray = _p.split("/")
+	_node = _r
+	for _part in _parts:
+		if _part == "" or _part == "root":
+			continue
+		var _found: bool = false
+		for _ch in _node.get_children():
+			if _ch.name == _part:
+				_node = _ch
+				_found = true
+				break
+		if not _found:
+			return null
+	return _node
+func _mcp_load_main_scene() -> void:
+	var _r: Node = _mcp_get_root()
+	if _r == null:
+		return
+	var _sp: Variant = ProjectSettings.get_setting("application/run/main_scene")
+	if _sp != null and _sp != "":
+		var _sr = load(_sp)
+		if _sr:
+			_r.add_child(_sr.instantiate())
+
+func _mcp_output(key: String, value: Variant) -> void:
+	_mcp_outputs.append({"key": key, "value": str(value)})
+
+var x = 1
+
+func _initialize():
+	_mcp_load_main_scene()
+		print("___MCP_RESULT___" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
+		if Engine.get_main_loop() == self:
+			quit(0)
+"
+`;
+
+exports[`GDScript helpers - baseline snapshots > wrapSnippetAsNode("var x = 1") baseline > wrapSnippetAsNode-var-x 1`] = `
+"extends Node
+## MCP autoload snippet mode — runs as Node child in loader scene
+
+var _mcp_outputs: Array = []
+
+func _mcp_output(key: String, value: Variant) -> void:
+	_mcp_outputs.append({"key": key, "value": str(value)})
+
+var x = 1
+
+func _initialize() -> void:
+	print("___MCP_RESULT___" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
+	get_tree().quit(0)
+"
+`;
