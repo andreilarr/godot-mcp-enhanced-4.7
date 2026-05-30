@@ -942,8 +942,6 @@ function handleDetachInstance(args: Record<string, unknown>): ToolResult {
 
 export function mergeTscn(ours: string, theirs: string): string {
   // Parse ext_resources from both sides
-  const extRegex = /\[ext_resource\s+([^[\]]+)\]/g;
-
   interface ExtRes { type: string; path: string; originalId: string; line: string }
   const parseExt = (content: string): ExtRes[] => {
     const result: ExtRes[] = [];
@@ -957,6 +955,18 @@ export function mergeTscn(ours: string, theirs: string): string {
       if (pathMatch) {
         result.push({ type: typeMatch?.[1] || '', path: pathMatch[1], originalId: idMatch?.[1] || '', line: m[0] });
       }
+    }
+    return result;
+  };
+
+  // Parse sub_resources from both sides
+  interface SubRes { type: string; originalId: string; body: string }
+  const parseSub = (content: string): SubRes[] => {
+    const result: SubRes[] = [];
+    const regex = /\[sub_resource\s+type="([^"]+)"\s+id="([^"]+)"\]([\s\S]*?)(?=\n\[sub_resource|\n\[node|\n\[ext_resource|$)/g;
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(content)) !== null) {
+      result.push({ type: m[1], originalId: m[2], body: m[3].trim() });
     }
     return result;
   };
@@ -975,7 +985,7 @@ export function mergeTscn(ours: string, theirs: string): string {
     return result;
   };
 
-  // Get header (before first ext_resource or node)
+  // Get header (before first ext_resource or sub_resource or node)
   const headerMatch = ours.match(/^([\s\S]*?)(?=\n\[ext_resource|\n\[sub_resource|\n\[node)/);
   const header = headerMatch ? headerMatch[1].trim() : '[gd_scene format=3]';
 
@@ -991,15 +1001,34 @@ export function mergeTscn(ours: string, theirs: string): string {
     }
   }
 
-  // Re-index: build old→new id map
-  const idMap: Record<string, string> = {};
+  // Merge sub_resources: ours first, then new from theirs (by type+body signature dedup)
+  const oursSub = parseSub(ours);
+  const theirsSub = parseSub(theirs);
+  const subSignature = (s: SubRes) => `${s.type}::${s.body}`;
+  const seenSubSigs = new Set(oursSub.map(s => subSignature(s)));
+  const mergedSub = [...oursSub];
+  for (const sub of theirsSub) {
+    if (!seenSubSigs.has(subSignature(sub))) {
+      mergedSub.push(sub);
+    }
+  }
+
+  // Re-index: build old→new id maps
+  const extIdMap: Record<string, string> = {};
   const reindexedExt: string[] = [];
-  mergedExt.forEach((ext, i) => {
-    const newId = String(i + 1);
-    if (ext.originalId) idMap[ext.originalId] = newId;
-    // Rebuild the ext_resource line with new id
-    const newLine = `[ext_resource type="${ext.type}" path="${ext.path}" id="${newId}"]`;
-    reindexedExt.push(newLine);
+  let nextId = 1;
+  mergedExt.forEach((ext) => {
+    const newId = String(nextId++);
+    if (ext.originalId) extIdMap[ext.originalId] = newId;
+    reindexedExt.push(`[ext_resource type="${ext.type}" path="${ext.path}" id="${newId}"]`);
+  });
+
+  const subIdMap: Record<string, string> = {};
+  const reindexedSub: string[] = [];
+  mergedSub.forEach((sub) => {
+    const newId = String(nextId++);
+    subIdMap[sub.originalId] = newId;
+    reindexedSub.push(`[sub_resource type="${sub.type}" id="${newId}"]\n${sub.body}`);
   });
 
   // Merge nodes: ours nodes + theirs nodes not in ours (by name)
@@ -1016,13 +1045,22 @@ export function mergeTscn(ours: string, theirs: string): string {
   // Rebuild the scene file
   const parts: string[] = [header, ''];
   parts.push(...reindexedExt);
+  if (reindexedSub.length > 0) {
+    parts.push('');
+    parts.push(...reindexedSub);
+  }
   parts.push('');
   for (const node of mergedNodes) {
     let body = node.body;
     // Remap ExtResource("oldId") → ExtResource("newId")
     body = body.replace(/ExtResource\("([^"]+)"\)/g, (_match, id: string) => {
-      const newId = idMap[id];
+      const newId = extIdMap[id];
       return newId ? `ExtResource("${newId}")` : `ExtResource("${id}")`;
+    });
+    // Remap SubResource("oldId") → SubResource("newId")
+    body = body.replace(/SubResource\("([^"]+)"\)/g, (_match, id: string) => {
+      const newId = subIdMap[id];
+      return newId ? `SubResource("${newId}")` : `SubResource("${id}")`;
     });
     parts.push(body);
     parts.push('');

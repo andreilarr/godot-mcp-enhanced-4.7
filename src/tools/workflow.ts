@@ -142,7 +142,7 @@ export function getToolDefinitions(): Tool[] {
                     type: { type: 'string', description: 'Assertion type: gdscript (default) or screenshot_diff', enum: ['gdscript', 'screenshot_diff'] },
                     expect_present: { type: 'array', items: { type: 'string' }, description: 'screenshot_diff: node names expected to be visible in scene tree' },
                   },
-                  required: ['description', 'gdscript'],
+                  required: ['description'],
                 },
               },
             },
@@ -208,6 +208,40 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       if (!code || typeof code !== 'string') {
         return opsErrorResult('INVALID_PARAMS', '"code" must be a non-empty string.');
+      }
+
+      // ── DSL detection: if all non-empty lines are valid DSL, run as Bridge sequence ──
+      const codeLines = code.split('\n');
+      const nonEmptyLines = codeLines.filter(l => l.trim().length > 0);
+      const dslCommands = nonEmptyLines.map(l => parseE2eDsl(l));
+      const allDsl = nonEmptyLines.length > 0 && dslCommands.every(c => c !== null);
+
+      if (allDsl) {
+        if (projectPath) setBridgeProjectDir(projectPath);
+        const dslResults: Array<{ command: string; success: boolean; error?: string }> = [];
+        for (const cmd of dslCommands) {
+          if (!cmd) continue;
+          if (cmd.method === '_sleep') {
+            await new Promise<void>(r => setTimeout(r, (cmd.params.ms as number) || 100));
+            dslResults.push({ command: `waitMs(${cmd.params.ms})`, success: true });
+            continue;
+          }
+          try {
+            const resp = await sendToBridge(cmd.method, cmd.params, 10000);
+            dslResults.push({
+              command: `${cmd.method}(${JSON.stringify(cmd.params)})`,
+              success: !resp.error,
+              error: resp.error?.message,
+            });
+          } catch (e: unknown) {
+            dslResults.push({
+              command: `${cmd.method}(${JSON.stringify(cmd.params)})`,
+              success: false,
+              error: (e as Error).message,
+            });
+          }
+        }
+        return textResult(JSON.stringify({ mode: 'dsl', results: dslResults }, null, 2));
       }
 
       const godot = await ctx.findGodot();

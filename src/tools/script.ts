@@ -171,9 +171,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         for (const line of lines) {
           const nsMatch = line.match(/^\s*namespace\s+(\S+)/);
           if (nsMatch) csNamespace = nsMatch[1];
-          const clsMatch = line.match(/^\s*(?:public\s+)?(?:partial\s+)?class\s+(\S+)/);
+          const clsMatch = line.match(/^\s*(?:public\s+)?(?:partial\s+)?class\s+([A-Za-z_]\w*)/);
           if (clsMatch && !csClassName) csClassName = clsMatch[1];
-          const baseMatch = line.match(/^\s*(?:public\s+)?(?:partial\s+)?class\s+\S+\s*:\s*(\S+)/);
+          const baseMatch = line.match(/^\s*(?:public\s+)?(?:partial\s+)?class\s+[A-Za-z_]\w*\s*:\s*([A-Za-z_]\w*)/);
           if (baseMatch) csBaseClass = baseMatch[1];
         }
         return textResult(JSON.stringify({

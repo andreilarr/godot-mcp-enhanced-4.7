@@ -63,4 +63,55 @@ script = ExtResource("2")
     const ids = extMatches!.map(m => m.match(/id="(\d+)"/)![1]);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it('应合并 sub_resource 段', () => {
+    const withSub = `[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://a.gd" id="1"]
+
+[sub_resource type="BoxShape3D" id="1"]
+size = Vector3(1, 1, 1)
+
+[node name="Root" type="Node3D"]
+`;
+    const withSub2 = `[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://a.gd" id="1"]
+
+[sub_resource type="SphereShape3D" id="1"]
+radius = 2.0
+
+[node name="Root" type="Node3D"]
+`;
+    const result = mergeTscn(withSub, withSub2);
+    expect(result).toContain('BoxShape3D');
+    expect(result).toContain('SphereShape3D');
+  });
+
+  it('应重映射 SubResource 引用', () => {
+    const ours = `[gd_scene load_steps=3 format=3]
+
+[sub_resource type="BoxShape3D" id="1"]
+size = Vector3(1, 1, 1)
+
+[node name="Root" type="Node3D"]
+
+[node name="Body" type="StaticBody3D" parent="."]
+
+[node name="Shape" type="CollisionShape3D" parent="Body"]
+shape = SubResource("1")
+`;
+    const theirs = `[gd_scene load_steps=2 format=3]
+
+[node name="Root" type="Node3D"]
+
+[node name="Extra" type="Node3D" parent="."]
+`;
+    const result = mergeTscn(ours, theirs);
+    // SubResource 引用应被重映射到新 id
+    const subRef = result.match(/SubResource\("(\d+)"\)/);
+    expect(subRef).toBeTruthy();
+    // 对应的 sub_resource id 应与引用一致
+    expect(result).toContain(`id="${subRef![1]}"]`);
+  });
 });

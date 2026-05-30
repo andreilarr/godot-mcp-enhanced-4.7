@@ -821,19 +821,24 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const csFiles = collectFilesByExt(p, ['.cs']);
       if (csFiles.length > 0) {
         const csResults: Array<{ file: string; status: string; engine: string; error?: string; warning?: string }> = [];
-        try {
-          execSync('dotnet build --no-restore 2>&1', {
-            cwd: p,
-            timeout: 30000,
-            encoding: 'utf-8',
-          });
-          csResults.push({ file: `${csFiles.length} .cs files`, status: 'valid', engine: 'dotnet' });
-        } catch (e: any) {
-          if (e.code === 'ENOENT') {
-            csResults.push({ file: `${csFiles.length} .cs files`, status: 'skipped', engine: 'dotnet', warning: 'dotnet CLI not found in PATH' });
-          } else {
-            const output = e.stdout || e.message || 'dotnet build failed';
-            csResults.push({ file: `${csFiles.length} .cs files`, status: 'error', engine: 'dotnet', error: output.substring(0, 2000) });
+        const csprojFiles = collectFilesByExt(p, ['.csproj']);
+        if (csprojFiles.length === 0) {
+          csResults.push({ file: `${csFiles.length} .cs files`, status: 'skipped', engine: 'dotnet', warning: 'No .csproj found, C# validation skipped' });
+        } else {
+          try {
+            execSync('dotnet build --no-restore 2>&1', {
+              cwd: p,
+              timeout: 30000,
+              encoding: 'utf-8',
+            });
+            csResults.push({ file: `${csFiles.length} .cs files`, status: 'valid', engine: 'dotnet' });
+          } catch (e: any) {
+            if (e.code === 'ENOENT') {
+              csResults.push({ file: `${csFiles.length} .cs files`, status: 'skipped', engine: 'dotnet', warning: 'dotnet CLI not found in PATH' });
+            } else {
+              const output = e.stdout || e.message || 'dotnet build failed';
+              csResults.push({ file: `${csFiles.length} .cs files`, status: 'error', engine: 'dotnet', error: output.substring(0, 2000) });
+            }
           }
         }
         scriptsSummary.csharp = csResults;

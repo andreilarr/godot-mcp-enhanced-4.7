@@ -22,7 +22,8 @@ describe('dev_loop acceptance parameter', () => {
     expect(items.properties.gdscript).toBeTruthy();
     expect(items.properties.expect).toBeTruthy();
     expect(items.required.includes('description')).toBeTruthy();
-    expect(items.required.includes('gdscript')).toBeTruthy();
+    // gdscript is optional — screenshot_diff assertions don't need it
+    expect(items.required.includes('gdscript')).toBeFalsy();
   });
 
   it('acceptance does not expose max_retries (removed until implemented)', async () => {

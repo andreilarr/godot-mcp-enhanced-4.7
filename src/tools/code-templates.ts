@@ -625,9 +625,23 @@ export function renderTemplate(code: string, variables: Record<string, string>):
   });
 }
 
-/** 获取所有模板（内置 + 用户） */
+/** 获取所有模板（内置 + 架构模式 + 用户） */
 export function getAllTemplates(projectPath?: string): CodeTemplate[] {
   const builtIn = [...TEMPLATES];
+  // 架构模式模板转换为 CodeTemplate 格式并入
+  const archTemplates: CodeTemplate[] = Object.values(ARCHITECTURE_TEMPLATES).map(at => ({
+    id: at.id,
+    name: at.name,
+    description: at.description,
+    relatedRules: [],
+    params: at.params,
+    generate: at.generate,
+    verifiedGodotVersion: '4.3',
+    lastVerified: '2026-05-30',
+    tags: ['architecture', 'pattern'],
+  }));
+  builtIn.push(...archTemplates);
+
   if (!projectPath) return builtIn;
   const user = loadUserTemplates(projectPath);
   if (user.length === 0) return builtIn;

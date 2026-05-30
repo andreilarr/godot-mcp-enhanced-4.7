@@ -39,7 +39,7 @@ function ensureCleanupTimer(): void {
 // router and uses the old name directly (e.g. 'remove_node'), the guard WILL NOT catch it.
 // GodotServer.handleToolCall() is the single entry point and always resolves to merged names.
 const GUARDED: Record<string, Set<string> | null> = {
-  scene: new Set(['remove_node', 'save_scene', 'detach_instance']),
+  scene: new Set(['remove_node', 'save_scene', 'detach_instance', 'merge_scene']),
   script: null, // write_script / edit_script / project_replace / execute_gdscript 全部需确认
   animation: new Set(['delete']),
   tilemap: new Set(['tilemap_clear']),

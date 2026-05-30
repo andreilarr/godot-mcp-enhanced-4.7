@@ -241,9 +241,10 @@ describe('用户模板加载', () => {
     expect(all.some(t => t.id === 'T001')).toBeTruthy();
   });
 
-  it('getAllTemplates 无 projectPath 时只返回内置模板', () => {
+  it('getAllTemplates 无 projectPath 时返回内置 + 架构模板', () => {
     const all = getAllTemplates();
-    expect(all.length).toBe(TEMPLATES.length);
+    expect(all.length).toBeGreaterThanOrEqual(TEMPLATES.length);
+    expect(all.some(t => t.id === 'A001')).toBeTruthy();
   });
 
   it('用户模板覆盖同名内置模板', () => {
