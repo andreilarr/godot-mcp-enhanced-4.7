@@ -16,6 +16,7 @@ const ACTIONS = [
   'read_scene', 'create_scene', 'add_node', 'save_scene', 'load_sprite',
   'quick_scene', 'batch_add_nodes', 'query_scene_tree', 'inspect_node',
   'edit_node', 'remove_node', 'instance_scene', 'set_instance_property', 'detach_instance',
+  'health_check',
 ] as const;
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
@@ -571,6 +572,29 @@ func _initialize():
       return handleDetachInstance(args);
     }
 
+    case 'health_check': {
+      const p = requireProjectPath(args);
+      const scenePath = args.scene_path as string;
+      if (!scenePath) {
+        return opsErrorResult('INVALID_PARAMS', 'scene_path is required for health_check', {
+          suggestion: 'Provide the scene file path relative to project, e.g. "scenes/main.tscn"',
+        });
+      }
+      const fullPath = resolveWithinRoot(p, scenePath);
+      if (!existsSync(fullPath)) {
+        return opsErrorResult('FILE_NOT_FOUND', `Scene not found: ${scenePath}`);
+      }
+      const content = readFileSync(fullPath, 'utf-8');
+      const result = checkSceneHealth(content, scenePath);
+      return textResult(JSON.stringify({
+        scene: scenePath,
+        healthy: result.issues.length === 0,
+        issue_count: result.issues.length,
+        issues: result.issues,
+        nodes_checked: result.nodesChecked,
+      }, null, 2));
+    }
+
     default:
       return null;
   }
@@ -883,6 +907,97 @@ function handleDetachInstance(args: Record<string, unknown>): ToolResult {
   }
 
   return textResult(`Detached instance "${nodeName}" — inlined from ${info.sourcePath} (${info.propertyOverrides.length} property override(s) preserved)`);
+}
+
+// ─── Scene health check ────────────────────────────────────────────────────────
+
+export function checkSceneHealth(
+  content: string,
+  scenePath: string,
+): { issues: string[]; nodesChecked: number } {
+  const issues: string[] = [];
+  const lines = content.split('\n');
+
+  // Parse nodes: [node name="X" type="Y" parent="Z"]
+  const nodeRegex = /^\[node\s+name="([^"]+)"(?:\s+type="([^"]+)")?(?:\s+parent="([^"]*)")?\]/;
+  const nodes: Array<{ name: string; type?: string; parent?: string; hasScript: boolean; line: number }> = [];
+
+  let currentSection = '';
+  let currentNode: typeof nodes[0] | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    if (line.startsWith('[node ')) {
+      const match = line.match(nodeRegex);
+      if (match) {
+        currentNode = { name: match[1], type: match[2], parent: match[3], hasScript: false, line: i + 1 };
+        nodes.push(currentNode);
+      }
+      currentSection = 'node';
+      continue;
+    }
+
+    if (line.startsWith('[')) {
+      currentSection = line.startsWith('[gd_') ? 'header' : 'resource';
+      currentNode = null;
+      continue;
+    }
+
+    // Track if node has script
+    if (currentNode && currentSection === 'node') {
+      if (/^script\s*=/.test(line)) {
+        currentNode.hasScript = true;
+      }
+    }
+  }
+
+  // Check 1: Self-referencing instance (circular)
+  const extSceneRegex = /\[ext_resource[^[]*type="PackedScene"[^[]*path="([^"]+)"/g;
+  let extMatch: RegExpExecArray | null;
+  while ((extMatch = extSceneRegex.exec(content)) !== null) {
+    const resPath = extMatch[1];
+    // Convert scenePath to res:// format for comparison
+    const normalizedScene = scenePath.replace(/\\/g, '/');
+    if (resPath.endsWith(normalizedScene) || normalizedScene.endsWith(resPath.replace('res://', ''))) {
+      issues.push(`Circular self-reference: scene instances itself via ${resPath}`);
+    }
+  }
+
+  // Check 2: Duplicate node names at same parent level
+  const childrenByParent: Record<string, string[]> = {};
+  for (const node of nodes) {
+    const parent = node.parent || '.';
+    if (!childrenByParent[parent]) childrenByParent[parent] = [];
+    childrenByParent[parent].push(node.name);
+  }
+  for (const [parent, names] of Object.entries(childrenByParent)) {
+    const seen = new Set<string>();
+    for (const name of names) {
+      if (seen.has(name)) {
+        issues.push(`Duplicate node name "${name}" under parent "${parent}"`);
+      }
+      seen.add(name);
+    }
+  }
+
+  // Check 3: Orphan leaf nodes (no script, no children, not a built-in type)
+  const parentPaths = new Set(nodes.map(n => n.parent ? `${n.parent}/${n.name}` : n.name));
+  const builtInTypes = new Set(['Camera2D', 'Camera3D', 'CollisionShape2D', 'CollisionShape3D',
+    'VisibleOnScreenNotifier2D', 'VisibleOnScreenNotifier3D', 'AudioListener2D', 'AudioListener3D']);
+
+  for (const node of nodes) {
+    const hasChildren = nodes.some(n => {
+      if (!n.parent) return false;
+      const expected = node.parent ? `${node.parent}/${node.name}` : node.name;
+      return n.parent === expected || (node.parent === '.' && n.parent === node.name);
+    });
+    if (!node.hasScript && !hasChildren && node.type && !builtInTypes.has(node.type)) {
+      issues.push(`Orphan node "${node.name}" (${node.type}) has no script and no children`);
+    }
+  }
+
+  return { issues, nodesChecked: nodes.length };
 }
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
