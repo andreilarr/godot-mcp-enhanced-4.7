@@ -9,6 +9,7 @@ import {
   buildAutoloads, buildInputMap, buildPhysics, buildLayerNames, buildMcpMapping,
   buildTypeGuide, mergeSections, SECTION_ORDER, GODOT_MCP_RULES,
 } from './claudemd-builder.js';
+import { DETAILED_RULE_TEMPLATES } from './rule-templates.js';
 import { validatePath, requireString, requireProjectPath, resolveWithinRoot, type GodotConfig } from '../helpers.js';
 import { getScaffoldFiles, PROJECT_TEMPLATES } from './code-templates.js';
 
@@ -424,15 +425,29 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           actions.push('CLAUDE.md: created with project metadata');
         }
 
-        // ── rules file ──
+        // ── rules files ──
         const rulesDir = join(p, '.claude', 'rules');
+        mkdirSync(rulesDir, { recursive: true });
+
+        // Base rules: godot-mcp.md
         const rulesPath = join(rulesDir, 'godot-mcp.md');
         if (!existsSync(rulesPath)) {
-          mkdirSync(rulesDir, { recursive: true });
           writeAtomic(rulesPath, GODOT_MCP_RULES);
           actions.push('rules: created .claude/rules/godot-mcp.md');
         } else if (force) {
-          actions.push('rules: skipped (file exists, will not overwrite user modifications)');
+          actions.push('rules: preserved godot-mcp.md (user modifications protected)');
+        }
+
+        // Detailed subsystem rules: godot-mcp-core.md, godot-mcp-bridge.md, etc.
+        const detailEntries = Object.entries(DETAILED_RULE_TEMPLATES).sort(([a], [b]) => a.localeCompare(b));
+        for (const [filename, content] of detailEntries) {
+          const detailPath = join(rulesDir, filename);
+          if (!existsSync(detailPath)) {
+            writeAtomic(detailPath, content);
+            actions.push(`rules: created .claude/rules/${filename}`);
+          } else if (force) {
+            actions.push(`rules: preserved ${filename} (user modifications protected)`);
+          }
         }
       }
 

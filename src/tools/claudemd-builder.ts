@@ -271,7 +271,16 @@ export function buildLayerNames(config: GodotConfig | null): string | null {
 }
 
 export function buildMcpMapping(): string {
-  return '| 领域 | rules 文件 |\n|------|-----------|\n| 全部工具规则 | .claude/rules/godot-mcp.md |';
+  return [
+    '| 领域 | rules 文件 |',
+    '|------|-----------|',
+    '| 全部工具规则 | .claude/rules/godot-mcp.md |',
+    '| 核心决策树 | .claude/rules/godot-mcp-core.md |',
+    '| Game Bridge | .claude/rules/godot-mcp-bridge.md |',
+    '| 编辑器模式 | .claude/rules/godot-mcp-editor.md |',
+    '| UI 布局 | .claude/rules/godot-mcp-ui.md |',
+    '| 录制回放 | .claude/rules/godot-mcp-recording.md |',
+  ].join('\n');
 }
 
 export function buildTypeGuide(): string {

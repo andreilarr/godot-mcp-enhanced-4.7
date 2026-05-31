@@ -364,7 +364,8 @@ describe('project-tools handleTool — setup_project_rules', () => {
     expect(result).not.toBeNull();
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.actions).toBeDefined();
-    expect(parsed.actions.length).toBe(3);
+    // hooks(1) + CLAUDE.md(1) + 6 rule files = 8
+    expect(parsed.actions.length).toBe(8);
 
     // Verify settings.json
     const settingsPath = join(dir, '.claude', 'settings.json');
@@ -387,6 +388,21 @@ describe('project-tools handleTool — setup_project_rules', () => {
     const claudeMd = readFileSync(claudeMdPath, 'utf-8');
     expect(claudeMd).toContain('## MCP 规则映射');
     expect(claudeMd).toContain('.claude/rules/godot-mcp.md');
+    // Verify all detailed rule files are listed in mapping table
+    expect(claudeMd).toContain('godot-mcp-core.md');
+    expect(claudeMd).toContain('godot-mcp-bridge.md');
+    expect(claudeMd).toContain('godot-mcp-editor.md');
+    expect(claudeMd).toContain('godot-mcp-ui.md');
+    expect(claudeMd).toContain('godot-mcp-recording.md');
+
+    // Verify all 6 rule files were created
+    const rulesDir = join(dir, '.claude', 'rules');
+    expect(existsSync(join(rulesDir, 'godot-mcp.md'))).toBe(true);
+    expect(existsSync(join(rulesDir, 'godot-mcp-core.md'))).toBe(true);
+    expect(existsSync(join(rulesDir, 'godot-mcp-bridge.md'))).toBe(true);
+    expect(existsSync(join(rulesDir, 'godot-mcp-editor.md'))).toBe(true);
+    expect(existsSync(join(rulesDir, 'godot-mcp-ui.md'))).toBe(true);
+    expect(existsSync(join(rulesDir, 'godot-mcp-recording.md'))).toBe(true);
   });
 
   it('skips hooks when hooks=false', async () => {
@@ -399,7 +415,8 @@ describe('project-tools handleTool — setup_project_rules', () => {
     expect(result).not.toBeNull();
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.actions).toBeDefined();
-    expect(parsed.actions.length).toBe(2);
+    // CLAUDE.md(1) + 6 rule files = 7 (no hooks)
+    expect(parsed.actions.length).toBe(7);
     expect(parsed.actions.some(a => a.includes('CLAUDE.md'))).toBe(true);
     expect(parsed.actions.some(a => a.includes('rules'))).toBe(true);
     expect(existsSync(join(dir, '.claude', 'settings.json'))).toBe(false);
@@ -505,6 +522,20 @@ describe('project-tools handleTool — setup_project_rules', () => {
 
     const rules = readFileSync(join(dir, '.claude', 'rules', 'godot-mcp.md'), 'utf-8');
     expect(rules).toBe('my custom rules');
+  });
+
+  it('does not overwrite existing detailed rule files', async () => {
+    const ctx = createMockCtx();
+    mkdirSync(join(dir, '.claude', 'rules'), { recursive: true });
+    // Pre-create a detailed rule file with custom content
+    writeFileSync(join(dir, '.claude', 'rules', 'godot-mcp-bridge.md'), 'my custom bridge rules', 'utf-8');
+
+    await callProject('setup_project_rules', { project_path: dir, force: true }, ctx);
+
+    const bridgeRules = readFileSync(join(dir, '.claude', 'rules', 'godot-mcp-bridge.md'), 'utf-8');
+    expect(bridgeRules).toBe('my custom bridge rules');
+    // Other detailed rules should still be created
+    expect(existsSync(join(dir, '.claude', 'rules', 'godot-mcp-core.md'))).toBe(true);
   });
 
   it('setup_project_rules is non-readonly via TOOL_META', () => {
