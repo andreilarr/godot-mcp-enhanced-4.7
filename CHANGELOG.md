@@ -75,6 +75,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **I-03**: 参数键只保留 snake_case 版本，消除 camelCase/snake_case 双键冲突
 - **T-09/T-10**: ui-tools 生成的 GDScript 统一使用 tab 缩进；`draw_arc` 补充 `point_count` 参数
 - **I-06**: `parseConfigValue` 空白字符串不再被错误解析为数字 0
+- **I-01**: `gdEscape()` 移除无效的 `$` 转义 — GDScript 双引号字符串中 `$` 不是特殊字符（仅在表达式级别用于 NodePath）
+- **I-02**: `ToolDispatcher` 统一所有错误响应使用 `opsErrorResult()` — 7 条路径从混用纯文本/手动 JSON 改为结构化 JSON
+- **A-10**: `editor-auth.ts` 消除 TOCTOU 竞争 — 去掉 `existsSync()` 前置检查，直接 `readFileSync()` + try-catch
+- **A-01**: `tscn-parser.ts` parseDictContent 分隔符检查 `:` 优先于 `=`（Godot 4.x 标准用冒号）
+- **A-02**: Godot 二进制搜索增强 — `detectProjectPath` 深度 5→15，新增 `GODOT_PROJECT_PATH` / `GODOT_MCP_SEARCH_PATHS` 环境变量，扩展用户目录搜索（Downloads/Desktop）
+- **C-01**: `godot_operations.gd` return 语句缩进修复（1tab→2tab）+ 混合行尾统一
+
+### Changed
+
+- **A-11**: `.gitignore` 新增 `.ruff_cache/`、`.reviews/`、`.claude/worktrees/`、`tsconfig.tsbuildinfo` 等条目
+- **I-03/I-04/I-05**: `EditorConnection.notify()`、`process-state` 并发安全、`gdscript-executor` 沙箱扫描器局限性 — 补充 JSDoc 文档注释
 
 ### Added
 
