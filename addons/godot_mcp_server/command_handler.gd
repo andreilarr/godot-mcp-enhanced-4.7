@@ -214,6 +214,16 @@ func handle(method: String, params: Dictionary, request_id: int) -> Dictionary:
 		#   animation (play/stop/seek/list_players) - runtime AnimationPlayer control
 		#   recording_save / recording_load - file I/O handled by TS side
 		#   ui_draw_recipe / ui_build_layout - complex declarative ops via GDScript exec
+		# I-01: 文本资源写入守卫（TS 侧写入脚本/着色器前调用）
+		"guard_text_resource_write":
+			if _editor_guards == null:
+				return {"error": {"code": -32003, "message": "Editor guards not available"}}
+			var guard_path: String = params.get("path", "")
+			var force: bool = params.get("force", false)
+			var guard_result = _editor_guards.guard_text_resource_write(guard_path, force)
+			if guard_result.is_empty():
+				return {"result": {"status": "ok", "path": guard_path}}
+			return guard_result
 		_:
 			return {"error": {"code": -32601, "message": "Unknown method: %s" % method}}
 

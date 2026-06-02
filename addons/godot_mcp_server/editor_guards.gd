@@ -143,7 +143,7 @@ func _is_scene_resource_path(path: String) -> bool:
 
 func _is_text_resource_path(path: String) -> bool:
 	var ext: String = path.get_extension().to_lower()
-	return ext == "gd" or ext == "gdshader" or ext == "gdshaderinc" or ext == "shader" or ext == "tscn"
+	return ext == "gd" or ext == "gdshader" or ext == "gdshaderinc" or ext == "shader"
 
 
 func _is_shader_resource_path(path: String) -> bool:

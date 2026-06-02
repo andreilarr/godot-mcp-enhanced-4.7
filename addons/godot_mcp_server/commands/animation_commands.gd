@@ -93,7 +93,8 @@ func handle_animation_track(params: Dictionary) -> Dictionary:
 				var undo_ops: Array = [
 					{"type": "method", "target": anim, "method": "add_track", "args": [old_type]},
 				]
-				var new_idx = anim.get_track_count()  # remove 后 add_track 会在末尾，即原 get_track_count()-1
+				# C-01 fix: remove 执行后 count=N-1, add_track 追加到末尾索引=N-1
+			var new_idx = anim.get_track_count() - 1
 				# 但 remove 在 do 阶段执行，undo 时 track 已被移除，add_track 后索引 = get_track_count()-1
 				# 用 get_track_count() 即为 add_track 后的末尾索引
 				if old_path:
@@ -223,7 +224,8 @@ func handle_animation_keyframe(params: Dictionary) -> Dictionary:
 				if time != null:
 					do_ops.append({"type": "method", "target": anim, "method": "track_set_key_time", "args": [ti, ki, float(time)]})
 					undo_ops.append({"type": "method", "target": anim, "method": "track_set_key_time", "args": [ti, ki, old_time]})
-				_undo_manager.create_action_mixed(0, do_ops, undo_ops)
+				if do_ops.size() > 0:
+					_undo_manager.create_action_mixed(0, do_ops, undo_ops)
 			else:
 				var value = params.get("value")
 				if value != null:

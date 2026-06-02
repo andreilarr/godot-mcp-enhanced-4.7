@@ -40,16 +40,20 @@ func handle_add_node(params: Dictionary, request_id: int) -> Dictionary:
 		return {"error": {"code": -32000, "message": "Cannot instantiate: %s" % node_type}}
 	cls.name = node_name
 
-	_undo_manager.create_action_mixed(request_id,
-		[
-			{"type": "method", "target": parent_node, "method": "add_child", "args": [cls]},
-			{"type": "method", "target": cls, "method": "set_owner", "args": [root]},
-			{"type": "reference", "value": cls}
-		],
-		[
-			{"type": "method", "target": parent_node, "method": "remove_child", "args": [cls]}
-		]
-	)
+	if _undo_manager != null:
+		_undo_manager.create_action_mixed(request_id,
+			[
+				{"type": "method", "target": parent_node, "method": "add_child", "args": [cls]},
+				{"type": "method", "target": cls, "method": "set_owner", "args": [root]},
+				{"type": "reference", "value": cls}
+			],
+			[
+				{"type": "method", "target": parent_node, "method": "remove_child", "args": [cls]}
+			]
+		)
+	else:
+		parent_node.add_child(cls)
+		cls.owner = root
 	return {"result": {"node_path": str(cls.get_path()), "status": "created"}}
 
 func _is_allowed_node_type(node_type: String) -> bool:
