@@ -14,6 +14,7 @@ import {
   getModuleForTool,
   LITE_TOOLS,
   MINIMAL_TOOLS,
+  resolveProfile,
 } from './tool-registry.js';
 import { isPathInAllowedRoots, parseGodotConfig } from '../helpers.js';
 import { opsErrorResult, COMMON_ERROR_CODES } from '../tools/shared.js';
@@ -27,7 +28,7 @@ function log(...args: unknown[]): void {
 export interface DispatcherOptions {
   // 模式控制
   readOnly: boolean;
-  mode: 'full' | 'lite' | 'minimal';
+  mode: string;  // 'full' | 'lite' | 'minimal' | profile name (e.g. 'bridge_dev') | comma-separated groups
   connectionMode: 'headless' | 'editor';
   noFallback: boolean;
 
@@ -91,13 +92,21 @@ export class ToolDispatcher {
       log('READ_ONLY_MODE: %d tools available', allTools.length);
     }
 
-    // LITE 模式过滤
+    // LITE / MINIMAL / PROFILE 模式过滤
     if (this.options.mode === 'lite') {
       allTools = allTools.filter(t => LITE_TOOLS.has(t.name));
       log('LITE mode: %d tools available', allTools.length);
     } else if (this.options.mode === 'minimal') {
       allTools = allTools.filter(t => MINIMAL_TOOLS.has(t.name));
       log('MINIMAL mode: %d tools available', allTools.length);
+    } else if (this.options.mode !== 'full') {
+      // Profile mode: resolve profile name or comma-separated groups
+      const profileTools = resolveProfile(this.options.mode);
+      if (profileTools.size > 0) {
+        allTools = allTools.filter(t => profileTools.has(t.name));
+        log('PROFILE mode (%s): %d tools available', this.options.mode, allTools.length);
+      }
+      // If profile resolved to empty set, fall through to full
     }
 
     return allTools;

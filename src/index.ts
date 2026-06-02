@@ -6,7 +6,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const args = process.argv.slice(2);
-const toolMode = args.includes('--minimal') ? 'minimal'
+// --profile=<name> or GODOT_MCP_PROFILE for fine-grained tool selection
+const profileArg = args.find(a => a.startsWith('--profile='));
+const profileFromArg = profileArg ? profileArg.split('=')[1] : null;
+const profileFromEnv = process.env.GODOT_MCP_PROFILE;
+
+const activeProfile = profileFromArg || profileFromEnv;
+
+const toolMode = activeProfile ? activeProfile
+  : args.includes('--minimal') ? 'minimal'
   : args.includes('--lite') ? 'lite'
   : process.env.GODOT_MCP_MODE === 'minimal' ? 'minimal'
   : process.env.GODOT_MCP_MODE === 'lite' ? 'lite'

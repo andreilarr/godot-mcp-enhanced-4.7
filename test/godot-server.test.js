@@ -205,15 +205,27 @@ describe('GodotServer', () => {
     it('lite mode filters to LITE_TOOLS set only', async () => {
       const handlers = createServerAndGetHandlers({ mode: 'lite' });
       const names = await getToolNamesFromHandler(handlers);
-      // LITE_TOOLS from tool-registry.ts (15 merged tool names)
+      // LITE_TOOLS from tool-registry.ts — now derived from PROFILES.lite
+      // Groups: core, bridge, animation, audio, signal, visual, code, test, profiler
       const liteTools = [
-        'project', 'scene', 'script',
-        'runtime', 'validation',
-        'confirm_and_execute',
-        'animation', 'audio', 'docs',
-        'signal', 'material', 'test',
-        'screenshot', 'profiler', 'workflow',
+        // core
+        'project', 'scene', 'script', 'runtime', 'validation', 'confirm_and_execute',
+        // bridge
         'game',
+        // animation (now includes animtree + animation_track)
+        'animation', 'animtree', 'animation_track',
+        // audio
+        'audio',
+        // signal
+        'signal',
+        // visual
+        'material', 'screenshot', 'particles',
+        // code
+        'docs', 'templates', 'batch', 'game_design',
+        // test (verify_delivery is the actual registered name)
+        'test', 'verify_delivery',
+        // profiler
+        'profiler', 'workflow',
       ];
       // All returned tools should be in the LITE set
       for (const name of names) {

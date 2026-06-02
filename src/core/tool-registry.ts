@@ -105,33 +105,71 @@ export function clearRegistry(): void {
   modules.length = 0;
 }
 
+// ─── Tool groups ─────────────────────────────────────────────────────────────
+
+/** 16 tool groups for fine-grained profile configuration. */
+export const TOOL_GROUPS: Record<string, string[]> = {
+  core:       ['project', 'scene', 'script', 'runtime', 'validation', 'confirm_and_execute'],
+  editor:     ['editor'],
+  bridge:     ['game'],
+  animation:  ['animation', 'animtree', 'animation_track'],
+  audio:      ['audio'],
+  visual:     ['material', 'screenshot', 'particles'],
+  physics:    ['physics', 'node_create_3d'],
+  navigation: ['nav'],
+  ui:         ['ui'],
+  tilemap:    ['tilemap'],
+  signal:     ['signal'],
+  profiler:   ['profiler', 'workflow'],
+  test:       ['test', 'verify_delivery'],
+  code:       ['docs', 'templates', 'batch', 'game_design'],
+  ik:         ['ik'],
+  recording:  ['recording'],
+};
+
+/** 5 preset profiles. Each maps to an array of group names. */
+export const PROFILES: Record<string, string[]> = {
+  full:        Object.keys(TOOL_GROUPS),
+  // BREAKING CHANGE: lite now uses group-based expansion (matches current LITE_TOOLS content)
+  lite:        ['core', 'bridge', 'animation', 'audio', 'signal', 'visual', 'code', 'test', 'profiler'],
+  minimal:     ['core'],
+  bridge_dev:  ['core', 'bridge', 'profiler', 'test', 'recording'],
+  '3d_dev':    ['core', 'animation', 'visual', 'physics', 'navigation', 'ik'],  // physics includes node_create_3d
+};
+
+/** Expand an array of group names to a deduplicated set of tool names. */
+export function expandGroups(groups: string[]): Set<string> {
+  const tools = new Set<string>();
+  for (const g of groups) {
+    const groupTools = TOOL_GROUPS[g];
+    if (groupTools) {
+      for (const t of groupTools) tools.add(t);
+    }
+  }
+  return tools;
+}
+
+/** Resolve a profile name (or comma-separated group list) to a Set of tool names. */
+export function resolveProfile(profile: string): Set<string> {
+  // Check if it's a known profile name
+  const profileGroups = PROFILES[profile];
+  if (profileGroups) {
+    return expandGroups(profileGroups);
+  }
+  // Treat as comma-separated group names
+  const groups = profile.split(',').map(g => g.trim()).filter(Boolean);
+  return expandGroups(groups);
+}
+
 // ─── Mode filters ────────────────────────────────────────────────────────────
 
-// LITE mode tool set — coarse-grained after tool consolidation.
-// Each merged tool name (e.g. 'scene') includes both safe and destructive actions.
-// Destructive actions are protected by the confirmation token guard (guard.ts GUARDED map),
-// which provides the second layer of defense at the action level.
-export const LITE_TOOLS = new Set([
-  'project', 'scene', 'script',           // 核心 CRUD
-  'runtime', 'validation',                // 运行和验证
-  'confirm_and_execute',                   // 确认执行
-  'animation',                             // 动画基础
-  'audio',                                 // 音频基础
-  'docs',                                  // 文档查询
-  'signal',                                // 信号操作
-  'material',                              // 材质基础
-  'test',                                  // 测试
-  'screenshot',                            // 截图
-  'profiler',                              // 性能
-  'workflow',                              // dev_loop
-  'game',                                  // Bridge
-]);
+// LITE/MINIMAL mode tool sets — now derived from PROFILES to avoid manual drift.
+// BREAKING CHANGE: LITE_TOOLS expanded to include visual (material,screenshot,particles)
+// and code (docs,templates,batch,game_design) groups. Previously these were listed
+// individually as 'material', 'docs', 'screenshot' etc.
+export const LITE_TOOLS: Set<string> = resolveProfile('lite');
 
-export const MINIMAL_TOOLS = new Set([
-  'project', 'scene', 'script',           // 最小可用集
-  'runtime', 'validation',                // 运行和验证
-  'confirm_and_execute',                   // 确认执行
-]);
+export const MINIMAL_TOOLS: Set<string> = resolveProfile('minimal');
 
 // Tools eligible for quick verification (run_and_verify).
 // After consolidation, these merged tools may contain actions without a quickVerify handler —
