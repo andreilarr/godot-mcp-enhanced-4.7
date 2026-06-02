@@ -411,25 +411,21 @@ func _cmd_find_nodes(params: Dictionary) -> Dictionary:
 	var max_results: int = int(params.get("limit", 100))
 	if max_results > 500:
 		max_results = 500
-	var results: Array = []
-	var stack: Array[Node] = [get_tree().root]
-	while stack.size() > 0 and results.size() < max_results:
-		var node: Node = stack.pop_back()
-		if node == null:
-			continue
-		var match_found := true
-		if pattern != "" and not node.name.match(pattern):
-			match_found = false
-		if match_found and type_filter != "" and not node.is_class(type_filter):
-			match_found = false
-		if match_found and group != "" and not node.is_in_group(group):
-			match_found = false
-		if match_found:
-			results.append(_node_info(node))
-		var children := node.get_children()
-		for i in range(children.size() - 1, -1, -1):
-			stack.append(children[i])
-	return {"nodes": results, "count": results.size()}
+	var results: Array = _traverse_tree(
+		func(node: Node) -> bool:
+			if pattern != "" and not node.name.match(pattern):
+				return false
+			if type_filter != "" and not node.is_class(type_filter):
+				return false
+			if group != "" and not node.is_in_group(group):
+				return false
+			return true,
+		{"max_results": max_results}
+	)
+	var serialized: Array = []
+	for node in results:
+		serialized.append(_node_info(node))
+	return {"nodes": serialized, "count": serialized.size()}
 
 
 
@@ -517,6 +513,27 @@ func _jsonify(val: Variant) -> Variant:
 	if val is Node:
 		return str(val.get_path())
 	return val
+
+
+# ─── Shared tree traversal ──────────────────────────────────────────────────
+# Callback receives each node; return true to include in results.
+func _traverse_tree(callback: Callable, opts: Dictionary = {}) -> Array:
+	var root_node: Node = opts.get("root", get_tree().root) as Node
+	var max_results: int = int(opts.get("max_results", 500))
+	if root_node == null:
+		return []
+	var results: Array = []
+	var stack: Array[Node] = [root_node]
+	while stack.size() > 0 and results.size() < max_results:
+		var node: Node = stack.pop_back()
+		if node == null:
+			continue
+		if callback.call(node):
+			results.append(node)
+		var children := node.get_children()
+		for i in range(children.size() - 1, -1, -1):
+			stack.append(children[i])
+	return results
 
 
 const MAX_SAFE_VALUE_DEPTH := 10
