@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, statSy
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { requireProjectPath, resolveWithinRoot, ensureDir } from '../helpers.js';
+import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath, ensureDir } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { batchValidateScripts } from './validation.js';
 import { lintGDScript, formatLintResults } from './gdscript-lint.js';
@@ -57,8 +57,22 @@ async function validateAndRevert(
           `Rollback error: ${rollbackErr}\n` +
           `File may be in a corrupted state: ${fullPath}`;
       }
+      // 尝试解析结构化错误信息
+      const parsed = parseGodotErrors(valResult[0].errors);
+      let errorLines: string;
+      if (parsed.length > 0) {
+        errorLines = parsed.map(e => {
+          let line = `  Line ${e.line}: ${e.message}`;
+          if (e.identifier) line += ` (${e.identifier})`;
+          return line;
+        }).join('\n');
+      } else {
+        // 回退到原始格式
+        errorLines = valResult[0].errors.map(e => `  ${e}`).join('\n');
+      }
+
       return `⚠️ Edit REVERTED due to GDScript parse error:\n` +
-        valResult[0].errors.map(e => `  ${e}`).join('\n') +
+        errorLines +
         `\n\nOriginal file restored. Please fix the edit content and retry.` +
         (contextInfo ? `\n\n--- Attempted change ---\n${contextInfo}` : '');
     }
@@ -77,6 +91,94 @@ const ACTIONS = [
   'execute_gdscript',
   'project_replace',
 ] as const;
+
+// ─── GDScript error parsing (best-effort) ────────────────────────────────────
+
+interface ParseErrorDetail {
+  line: number;
+  message: string;
+  type: 'parse_error' | 'script_error';
+  /** 标识符名称（best-effort 提取，可能为空） */
+  identifier?: string;
+}
+
+/**
+ * 解析 Godot 验证错误输出。标识符提取是 best-effort，
+ * 提取失败不阻塞主要错误消息展示。
+ */
+function parseGodotErrors(rawErrors: string[]): ParseErrorDetail[] {
+  const details: ParseErrorDetail[] = [];
+  for (const err of rawErrors) {
+    const match = err.match(/:(\d+)\s*-\s*(Parse Error|Script Error):\s*(.*)/);
+    if (match) {
+      const detail: ParseErrorDetail = {
+        line: parseInt(match[1]),
+        message: match[3],
+        type: match[2] === 'Parse Error' ? 'parse_error' : 'script_error',
+      };
+      // best-effort 标识符提取
+      const identMatch =
+        match[3].match(/identifier "([^"]+)"/i) ||
+        match[3].match(/"(\w+)" not declared/i) ||
+        match[3].match(/Unexpected identifier:\s*"(\w+)"/i);
+      if (identMatch) {
+        detail.identifier = identMatch[1];
+      }
+      details.push(detail);
+    }
+  }
+  return details;
+}
+
+// ─── Indent detection (heuristic — GDScript typically uses tabs or 2/4 spaces) ──
+
+interface IndentStyle {
+  type: 'tab' | 'space';
+  size: number;
+}
+
+/**
+ * 检测文件缩进风格。只统计有实际缩进（>0）的行，排除空行和 0 级缩进行。
+ * 注意：这是启发式算法，非严格 GCD。对 3/6 空格交替等极端情况可能推断错误，
+ * 但 GDScript 几乎只用 tab 或 2/4 空格，99% 场景正确。
+ */
+function detectIndentStyle(lines: string[]): IndentStyle {
+  let tabCount = 0;
+  let spaceCount = 0;
+  const spaceSizes: number[] = [];
+
+  const sampleLines = lines.slice(0, 100);
+  for (const line of sampleLines) {
+    if (line.trim().length === 0) continue;
+    const leadingMatch = line.match(/^(\s+)/);
+    if (!leadingMatch) continue;
+
+    // 只统计有实际缩进的行（缩进长度 > 0 已经由 leadingMatch 保证）
+    const leading = leadingMatch[1];
+    if (leading.includes('\t')) {
+      tabCount++;
+    } else {
+      spaceCount++;
+      spaceSizes.push(leading.length);
+    }
+  }
+
+  if (tabCount >= spaceCount) {
+    return { type: 'tab', size: 1 };
+  }
+
+  // 计算最常见的空格缩进大小，推断单个缩进级别
+  const sizeCounts = new Map<number, number>();
+  for (const s of spaceSizes) {
+    sizeCounts.set(s, (sizeCounts.get(s) || 0) + 1);
+  }
+  const sorted = [...sizeCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const commonSize = sorted[0]?.[0] ?? 4;
+  // 启发式：bucket 到 2/4/8
+  const indentSize = commonSize <= 2 ? 2 : (commonSize <= 4 ? 4 : 8);
+
+  return { type: 'space', size: indentSize };
+}
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
@@ -156,7 +258,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
   switch (action) {
     case 'read_script': {
-      const sp = resolveWithinRoot(requireProjectPath(args), args.script_path as string);
+      const sp = resolveWithinRoot(requireProjectPath(args), normalizeUserProjectPath(args.script_path as string));
       if (!existsSync(sp)) return textResult(`Script not found: ${sp}`);
 
       const content = readFileSync(sp, 'utf-8');
@@ -209,7 +311,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
     case 'write_script': {
       const scriptPath = args.script_path as string;
-      const sp = resolveWithinRoot(requireProjectPath(args), scriptPath);
+      const sp = resolveWithinRoot(requireProjectPath(args), normalizeUserProjectPath(scriptPath));
       const content = args.content as string;
       const overwrite = args.overwrite === true; // default false
 
@@ -247,7 +349,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     case 'edit_script': {
       const scriptPath = args.script_path as string;
       const projectPath = requireProjectPath(args);
-      const fullPath = resolveWithinRoot(projectPath, scriptPath);
+      const fullPath = resolveWithinRoot(projectPath, normalizeUserProjectPath(scriptPath));
 
       if (!existsSync(fullPath)) {
         return opsErrorResult('NOT_FOUND', `File not found: ${fullPath}`, {
@@ -383,32 +485,64 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       let adjustedLines: string[];
 
       if (indentMode === 'smart') {
-        const originalLine = lines[startLine - 1] || '';
-        const originalBaseIndent = (originalLine.match(/^(\t*)/) || ['',''])[1].length;
+        // 检测文件实际缩进风格（排除 0 级缩进行，只统计有实际缩进的行）
+        const indentStyle = detectIndentStyle(lines);
 
-        const newNonEmptyLines = newLines.filter(l => l.trim() !== '');
-        let newMinIndent = Infinity;
-        for (const nl of newNonEmptyLines) {
-          const tabs = (nl.match(/^(\t*)/) || ['',''])[1].length;
-          if (tabs < newMinIndent) newMinIndent = tabs;
-        }
-        if (newMinIndent === Infinity) newMinIndent = 0;
+        if (indentStyle.type === 'tab') {
+          // 保持现有 tab 逻辑
+          const originalLine = lines[startLine - 1] || '';
+          const originalBaseIndent = (originalLine.match(/^(\t*)/) || ['',''])[1].length;
 
-        const indentDelta = originalBaseIndent - newMinIndent;
-
-        adjustedLines = newLines.map((line: string) => {
-          if (line.trim() === '') return line;
-
-          const currentTabs = (line.match(/^(\t*)/) || ['',''])[1].length;
-
-          if (indentDelta > 0) {
-            return '\t'.repeat(indentDelta) + line;
-          } else if (indentDelta < 0) {
-            const tabsToRemove = Math.min(-indentDelta, currentTabs);
-            return line.substring(tabsToRemove);
+          const newNonEmptyLines = newLines.filter(l => l.trim() !== '');
+          let newMinIndent = Infinity;
+          for (const nl of newNonEmptyLines) {
+            const tabs = (nl.match(/^(\t*)/) || ['',''])[1].length;
+            if (tabs < newMinIndent) newMinIndent = tabs;
           }
-          return line;
-        });
+          if (newMinIndent === Infinity) newMinIndent = 0;
+
+          const indentDelta = originalBaseIndent - newMinIndent;
+
+          adjustedLines = newLines.map((line: string) => {
+            if (line.trim() === '') return line;
+
+            const currentTabs = (line.match(/^(\t*)/) || ['',''])[1].length;
+
+            if (indentDelta > 0) {
+              return '\t'.repeat(indentDelta) + line;
+            } else if (indentDelta < 0) {
+              const tabsToRemove = Math.min(-indentDelta, currentTabs);
+              return line.substring(tabsToRemove);
+            }
+            return line;
+          });
+        } else {
+          // 空格缩进逻辑
+          const originalLine = lines[startLine - 1] || '';
+          const originalBaseIndent = (originalLine.match(/^( *)/) || ['',''])[1].length;
+
+          const newNonEmptyLines = newLines.filter(l => l.trim() !== '');
+          let newMinIndent = Infinity;
+          for (const nl of newNonEmptyLines) {
+            const spaces = (nl.match(/^( *)/) || ['',''])[1].length;
+            if (spaces < newMinIndent) newMinIndent = spaces;
+          }
+          if (newMinIndent === Infinity) newMinIndent = 0;
+
+          const indentDelta = originalBaseIndent - newMinIndent;
+
+          adjustedLines = newLines.map((line: string) => {
+            if (line.trim() === '') return line;
+            const currentSpaces = (line.match(/^( *)/) || ['',''])[1].length;
+            if (indentDelta > 0) {
+              return ' '.repeat(indentDelta) + line;
+            } else if (indentDelta < 0) {
+              const toRemove = Math.min(-indentDelta, currentSpaces);
+              return line.substring(toRemove);
+            }
+            return line;
+          });
+        }
       } else {
         adjustedLines = newLines;
       }
@@ -455,7 +589,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         return opsErrorResult('INVALID_PARAMS', 'script_path is required (e.g. "scripts/player.gd")');
       }
 
-      const fullScriptPath = resolveWithinRoot(projectPath, scriptPath);
+      const fullScriptPath = resolveWithinRoot(projectPath, normalizeUserProjectPath(scriptPath));
       if (!existsSync(fullScriptPath)) {
         return opsErrorResult('NOT_FOUND', `Script not found: ${fullScriptPath}`, {
           suggestion: 'Check the script_path for typos. Use validate_scripts to scan all scripts in the project.',

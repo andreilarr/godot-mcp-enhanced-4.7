@@ -12,6 +12,7 @@ import { opsErrorResult } from './shared.js';
 import { requireProjectPath, resolveWithinRoot, parseMcpScriptOutput, normalizeUserProjectPath, checkVersionMismatch, buildSafeEnv, scanFiles } from '../helpers.js';
 import { analyzeOutput, type AnalysisResult } from '../error-analyzer.js';
 import { forceKillTree } from '../core/process-state.js';
+import { lintGDScript, formatLintResults } from './gdscript-lint.js';
 
 // ─── Known base class methods/properties whitelist ───────────────────────────
 // The Godot headless parser cannot resolve inherited methods from base classes
@@ -643,6 +644,37 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
                 });
               }
             }
+
+            // Shader 引用检查：shader = "res://xxx.gdshader"
+            const shaderRegex = /shader\s*=\s*"([^"]+\.gdshader)"/g;
+            while ((match = shaderRegex.exec(content)) !== null) {
+              const shaderPath = match[1];
+              if (!shaderPath.startsWith('res://')) continue;
+              const absPath = resolveWithinRoot(p, shaderPath.replace('res://', ''));
+              if (!existsSync(absPath)) {
+                issues.push({
+                  severity: 'error',
+                  category: 'missing_resource',
+                  message: `Referenced shader not found: ${shaderPath}`,
+                  file: rel,
+                });
+              }
+            }
+
+            // Texture 引用检查：texture = ExtResource("xxx") 确保引用 ID 在上方定义
+            const texRefRegex = /texture\s*=\s*ExtResource\("([^"]+)"\)/g;
+            while ((match = texRefRegex.exec(content)) !== null) {
+              const refId = match[1];
+              const defRegex = new RegExp(`\\[ext_resource[^\\]]*id="${refId}"`, 's');
+              if (!defRegex.test(content)) {
+                issues.push({
+                  severity: 'error',
+                  category: 'missing_resource',
+                  message: `Texture references undefined ext_resource id: "${refId}"`,
+                  file: rel,
+                });
+              }
+            }
           } catch (e) {
             issues.push({
               severity: 'warning',
@@ -766,13 +798,34 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
         // API pitfall scan
         let warnings: string[] = [];
+        let hasLintErrors = false;
         try {
           const content = readFileSync(sf, 'utf-8');
           warnings = scanForCommonPitfalls(content);
           totalWarnings += warnings.length;
+
+          // Lint framework: call-order rules, deprecated API patterns, etc.
+          const lintOutput = lintGDScript(content);
+          hasLintErrors = lintOutput.errors.length > 0;
+          if (lintOutput.errors.length > 0 || lintOutput.warnings.length > 0) {
+            const lintText = formatLintResults(lintOutput);
+            for (const line of lintText.split('\n')) {
+              const trimmed = line.trim();
+              if (trimmed && !trimmed.startsWith('Lint') && !trimmed.startsWith('→')) {
+                warnings.push(trimmed);
+              } else if (trimmed.startsWith('→')) {
+                // Append suggestion to the previous warning
+                if (warnings.length > 0) {
+                  warnings[warnings.length - 1] += ' ' + trimmed;
+                }
+              }
+            }
+            totalErrors += lintOutput.errors.length;
+            totalWarnings += lintOutput.warnings.length;
+          }
         } catch (err) { console.debug('[validation] scan for pitfalls:', err); }
 
-        results.push({ file: rel, has_errors: errs.length > 0 || warnings.length > 0, errors: errs, warnings: warnings.length > 0 ? warnings : undefined });
+        results.push({ file: rel, has_errors: errs.length > 0 || hasLintErrors, errors: errs, warnings: warnings.length > 0 ? warnings : undefined });
       }
 
       // Shader validation

@@ -3,7 +3,7 @@ description: "godot-mcp 核心指南 模式选择 Headless Editor Bridge execute
 alwaysApply: true
 ---
 
-> 适用于 godot-mcp-enhanced v0.14.0+
+> 适用于 godot-mcp-enhanced v0.16.0+
 
 ## 概述与架构
 
@@ -71,6 +71,19 @@ godot-mcp-enhanced 提供 130+ 工具，通过三层架构操作 Godot：
 
 > 运行时工具适合验证和测试。若需持久化场景修改，必须使用 add_node + save_scene。
 
+## 2D 项目截图限制
+
+Headless 模式下 2D 场景（CanvasItem 子类，如 ColorRect/TextureRect/\_draw() 内容）的截图可能完全空白。
+这是 Godot headless 渲染器的已知限制——headless 进程不初始化渲染服务器，2D CanvasItem 无法渲染到纹理。
+
+**推荐工作流**：
+1. 用 `screenshot(action=capture)` 尝试截图
+2. 如果返回 `BLANK_DETECTED` 警告，使用以下替代方案：
+   - 用户手动截图（F5 运行后截图）
+   - `screenshot(action=analyze)` 分析用户提供的截图
+   - Bridge `take_screenshot`（如果游戏正在运行，渲染由 GPU 完成）
+3. 3D 场景（Node3D/MeshInstance3D 等）不受此限制影响
+
 ## 常见陷阱
 
 - **忘记 `_mcp_done()`**：片段模式中如果没有调用 `_mcp_done()`，执行会超时。
@@ -78,3 +91,4 @@ godot-mcp-enhanced 提供 130+ 工具，通过三层架构操作 Godot：
 - **运行时操作误认为持久化**：运行时工具的修改在 headless 进程退出后丢失。
 - **load_autoloads 性能开销**：仅在需要 Autoload 单例时开启，否则启动时间增加 3-5 倍。
 - **Bridge 密钥过期**：Bridge 密钥有 5 分钟 TTL 缓存，长时间未操作后首次调用可能稍慢。
+- **2D 截图空白**：Headless 模式无法渲染 2D CanvasItem，使用 Bridge 或手动截图替代。

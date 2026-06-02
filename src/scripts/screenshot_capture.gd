@@ -98,6 +98,31 @@ func _deferred_load_scene() -> void:
 	print("[SCREENSHOT] Scene loaded, waiting %d frames..." % _max_frames)
 
 
+## 采样检测图片是否为均匀色（空白）。采样约 100 个像素，
+## 如果 95% 以上与第一个像素颜色一致则判定为空白。
+func _detect_blank_image(img: Image) -> bool:
+	var w := img.get_width()
+	var h := img.get_height()
+	if w == 0 or h == 0:
+		return true
+
+	var total_pixels := w * h
+	var step := maxi(1, total_pixels / 100)
+	var first_color: Color = img.get_pixel(0, 0)
+	var sample_count := 0
+	var uniform_count := 0
+
+	for i in range(0, total_pixels, step):
+		var x := i % w
+		var y := i / w
+		var c := img.get_pixel(x, y)
+		sample_count += 1
+		if abs(c.r - first_color.r) < 0.01 and abs(c.g - first_color.g) < 0.01 and abs(c.b - first_color.b) < 0.01 and abs(c.a - first_color.a) < 0.01:
+			uniform_count += 1
+
+	return sample_count > 0 and float(uniform_count) / float(sample_count) > 0.95
+
+
 func _on_process_frame() -> void:
 	if _frames_left <= 0:
 		return
@@ -126,6 +151,9 @@ func _on_process_frame() -> void:
 	if err == OK:
 		var global_path := ProjectSettings.globalize_path(_output_path)
 		print("[SCREENSHOT] SAVED: %s (%dx%d)" % [global_path, img.get_width(), img.get_height()])
+		# 空白检测：采样像素判断是否为均匀色（2D headless 渲染限制）
+		if _detect_blank_image(img):
+			print("[SCREENSHOT] WARNING: BLANK_DETECTED - captured image appears to be uniform (possible 2D rendering limitation)")
 	else:
 		push_error("[SCREENSHOT] Save failed: error %d" % err)
 		printerr("[SCREENSHOT] Could not save to: %s (error %d)" % [_output_path, err])

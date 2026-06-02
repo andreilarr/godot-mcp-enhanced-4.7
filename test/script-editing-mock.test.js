@@ -113,4 +113,119 @@ describe('Level B: Script editing', () => {
       text.includes('Error') || text.includes('not found'),
     ).toBeTruthy();
   });
+
+  // #2 路径解析统一: res:// 前缀应被正确剥离
+  it('write_script with res:// prefix', async () => {
+    const result = await script.handleTool('script', {
+      project_path: dirRef.path,
+      action: 'write_script',
+      script_path: 'res://scripts/res_path_test.gd',
+      content: 'extends Node\n',
+      overwrite: true,
+    }, ctx);
+    expect(!result.isError).toBeTruthy();
+    expect(existsSync(join(dirRef.path, 'scripts', 'res_path_test.gd'))).toBeTruthy();
+  });
+
+  it('read_script with res:// prefix', async () => {
+    // 先写入
+    await script.handleTool('script', {
+      project_path: dirRef.path,
+      action: 'write_script',
+      script_path: 'res://scripts/res_read_test.gd',
+      content: 'extends Node\n# test comment\n',
+    }, ctx);
+    // 再用 res:// 读取
+    const result = await script.handleTool('script', {
+      project_path: dirRef.path,
+      action: 'read_script',
+      script_path: 'res://scripts/res_read_test.gd',
+    }, ctx);
+    expect(!result.isError).toBeTruthy();
+    expect(result.content[0].text.includes('test comment')).toBeTruthy();
+  });
+
+  it('edit_script with res:// prefix and path traversal fails', async () => {
+    // resolveWithinRoot 应阻止 res://../ 路径遍历
+    await expect(script.handleTool('script', {
+      project_path: dirRef.path,
+      action: 'edit_script',
+      script_path: 'res://../etc/passwd',
+      start_line: 1,
+      end_line: 1,
+      new_content: 'hacked',
+    }, ctx)).rejects.toThrow('Path traversal');
+  });
+
+  // #6 smart indent: 空格缩进文件应正确调整
+  it('edit_script with space-indented file adjusts indent correctly', async () => {
+    // 先创建空格缩进文件（2 空格）
+    await script.handleTool('script', {
+      project_path: dirRef.path,
+      action: 'write_script',
+      script_path: 'scripts/space_indent.gd',
+      content: 'extends Node\n\nfunc _ready():\n  var x = 1\n  if x > 0:\n    print(x)\n',
+    }, ctx);
+    // 用 smart indent 编辑，替换 if 块
+    const result = await script.handleTool('script', {
+      project_path: dirRef.path,
+      action: 'edit_script',
+      script_path: 'scripts/space_indent.gd',
+      start_line: 5,
+      end_line: 6,
+      new_content: 'if x > 0:\n  print("positive")\n  print("done")',
+      indent_mode: 'smart',
+    }, ctx);
+    expect(!result.isError).toBeTruthy();
+    const content = readFileSync(join(dirRef.path, 'scripts', 'space_indent.gd'), 'utf-8');
+    // 新内容应保持 2 空格缩进（与原文件一致）
+    expect(content.includes('  print("positive")')).toBeTruthy();
+  });
+
+  // #6 smart indent: tab 缩进文件行为不变（向后兼容）
+  it('edit_script with tab-indented file keeps tab indent', async () => {
+    const result = await script.handleTool('script', {
+      project_path: dirRef.path,
+      action: 'edit_script',
+      script_path: 'scripts/main.gd',
+      start_line: 1,
+      end_line: 1,
+      new_content: 'func new_func():\n\tpass',
+      indent_mode: 'smart',
+    }, ctx);
+    expect(!result.isError).toBeTruthy();
+    const content = readFileSync(join(dirRef.path, 'scripts', 'main.gd'), 'utf-8');
+    expect(content.includes('\tpass')).toBeTruthy();
+  });
+
+  // #3 级联删除信息: parse error 应显示结构化行号和标识符
+  it('edit_script revert shows structured parse error with line and identifier', async () => {
+    // 让 batchValidateScripts 返回结构化 parse error
+    vi.mocked(validation.batchValidateScripts).mockResolvedValueOnce([{
+      file: 'scripts/main.gd',
+      errors: [
+        'scripts/main.gd:15 - Parse Error: identifier "MAX_SPEED" not declared in current scope',
+        'scripts/main.gd:23 - Parse Error: Unexpected identifier: "calc_damage"',
+      ],
+      warnings: [],
+    }]);
+
+    const result = await script.handleTool('script', {
+      project_path: dirRef.path,
+      action: 'edit_script',
+      script_path: 'scripts/main.gd',
+      start_line: 1,
+      end_line: 1,
+      new_content: 'bad code',
+    }, ctx);
+    const text = result.content?.[0]?.text || '';
+    // 应包含结构化行号信息
+    expect(text.includes('Line 15')).toBeTruthy();
+    expect(text.includes('Line 23')).toBeTruthy();
+    // 应包含标识符
+    expect(text.includes('MAX_SPEED')).toBeTruthy();
+    expect(text.includes('calc_damage')).toBeTruthy();
+    // 文件应被恢复到原始状态
+    expect(text.includes('Original file restored')).toBeTruthy();
+  });
 });
