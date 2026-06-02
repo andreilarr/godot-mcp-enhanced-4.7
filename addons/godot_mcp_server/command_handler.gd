@@ -9,6 +9,7 @@ var _nav_commands: Node
 var _animtree_commands: Node
 var _sync_commands: Node
 var _undo_manager: Node
+var _editor_guards: Node
 var _animation_commands: Node
 var _recording_commands: Node
 var _ui_commands: Node
@@ -18,7 +19,12 @@ func setup(plugin: EditorPlugin) -> void:
 	_undo_manager.setup(plugin)
 	add_child(_undo_manager)
 
+	_editor_guards = preload("editor_guards.gd").new()
+	_editor_guards.setup(plugin)
+	add_child(_editor_guards)
+
 	_scene_commands = preload("commands/scene_commands.gd").new()
+	_scene_commands.setup(_undo_manager, _editor_guards)
 	add_child(_scene_commands)
 
 	_node_commands = preload("commands/node_commands.gd").new()
@@ -50,7 +56,7 @@ func setup(plugin: EditorPlugin) -> void:
 	add_child(_sync_commands)
 
 	_animation_commands = preload("commands/animation_commands.gd").new()
-	_animation_commands.setup(plugin)
+	_animation_commands.setup(plugin, _undo_manager)
 	add_child(_animation_commands)
 
 	_recording_commands = preload("commands/recording_commands.gd").new()
@@ -111,6 +117,9 @@ func cleanup() -> void:
 		if _undo_manager.has_method("cleanup"): _undo_manager.cleanup()
 		_undo_manager.queue_free()
 		_undo_manager = null
+	if _editor_guards:
+		_editor_guards.queue_free()
+		_editor_guards = null
 
 func handle(method: String, params: Dictionary, request_id: int) -> Dictionary:
 	match method:

@@ -40,10 +40,15 @@ func handle_add_node(params: Dictionary, request_id: int) -> Dictionary:
 		return {"error": {"code": -32000, "message": "Cannot instantiate: %s" % node_type}}
 	cls.name = node_name
 
-	_undo_manager.create_action(request_id,
-		[{"target": parent_node, "method": "add_child", "args": [cls]},
-		 {"target": cls, "method": "set_owner", "args": [root]}],
-		[{"target": parent_node, "method": "remove_child", "args": [cls]}]
+	_undo_manager.create_action_mixed(request_id,
+		[
+			{"type": "method", "target": parent_node, "method": "add_child", "args": [cls]},
+			{"type": "method", "target": cls, "method": "set_owner", "args": [root]},
+			{"type": "reference", "value": cls}
+		],
+		[
+			{"type": "method", "target": parent_node, "method": "remove_child", "args": [cls]}
+		]
 	)
 	return {"result": {"node_path": str(cls.get_path()), "status": "created"}}
 

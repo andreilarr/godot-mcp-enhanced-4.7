@@ -1,5 +1,13 @@
 extends Node
 
+var _undo_manager: Node
+var _editor_guards: Node
+
+func setup(undo_manager: Node, editor_guards: Node) -> void:
+	_undo_manager = undo_manager
+	_editor_guards = editor_guards
+
+
 func handle_open_scene(params: Dictionary) -> Dictionary:
 	var path: String = params.get("scene_path", "")
 	if path.is_empty():
@@ -10,10 +18,50 @@ func handle_open_scene(params: Dictionary) -> Dictionary:
 	ei.open_scene_from_path(path)
 	return {"result": {"status": "opened", "path": path}}
 
-func handle_save_scene(_params: Dictionary) -> Dictionary:
+
+func handle_save_scene(params: Dictionary) -> Dictionary:
+	var save_path: String = params.get("path", "")
 	var ei = Engine.get_singleton("EditorInterface") as EditorInterface
-	ei.save_scene()
-	return {"result": {"status": "saved"}}
+	var root = ei.get_edited_scene_root()
+
+	if root == null:
+		return {"error": {"code": -32003, "message": "No scene currently open"}}
+
+	if save_path.is_empty():
+		save_path = root.scene_file_path
+	if save_path.is_empty():
+		return {"error": {"code": -32004, "message": "No save path and scene has no file path"}}
+
+	# 守卫：不允许保存非活跃的已打开场景
+	if _editor_guards != null:
+		var guard = _editor_guards.guard_save_inactive_open_scene(save_path)
+		if not guard.is_empty():
+			return guard
+
+	# 守卫：如果保存到不同路径，确保目标不是已打开的其他场景
+	var normalized: String = _normalize_project_path(save_path)
+	if _editor_guards != null and not normalized.is_empty():
+		if root.scene_file_path.is_empty() or _normalize_project_path(root.scene_file_path) != normalized:
+			var offline_guard = _editor_guards.guard_offline_scene_save(normalized)
+			if not offline_guard.is_empty():
+				return offline_guard
+
+	# 使用 EditorInterface 保存（保留 undo 历史）
+	var err: int
+	var save_method: String
+	if root.scene_file_path.is_empty() or _normalize_project_path(root.scene_file_path) != normalized:
+		ei.save_scene_as(normalized)
+		err = OK
+		save_method = "save_scene_as"
+	else:
+		err = ei.save_scene()
+		save_method = "save_scene"
+
+	if err != OK:
+		return {"error": {"code": -32000, "message": "Save failed via %s: %s" % [save_method, error_string(err)]}}
+
+	return {"result": {"status": "saved", "path": normalized, "method": save_method}}
+
 
 func handle_instance_scene(params: Dictionary) -> Dictionary:
 	var scene_path: String = params.get("scene_path", "")
@@ -65,10 +113,25 @@ func handle_instance_scene(params: Dictionary) -> Dictionary:
 	var parent = _find_node_by_path(root, parent_path)
 	if parent == null:
 		parent = root
-	parent.add_child(instance)
-	instance.owner = root
+
+	# UndoRedo: instance_scene 加入场景树
+	if _undo_manager != null:
+		_undo_manager.create_action_mixed(0,
+			[
+				{"type": "method", "target": parent, "method": "add_child", "args": [instance]},
+				{"type": "method", "target": instance, "method": "set_owner", "args": [root]},
+				{"type": "reference", "value": instance}
+			],
+			[
+				{"type": "method", "target": parent, "method": "remove_child", "args": [instance]}
+			]
+		)
+	else:
+		parent.add_child(instance)
+		instance.owner = root
 
 	return {"result": {"node_name": str(instance.name), "instance_of": instance_path}}
+
 
 func handle_set_instance_property(params: Dictionary) -> Dictionary:
 	var node_path: String = params.get("node_path", "")
@@ -104,8 +167,22 @@ func handle_set_instance_property(params: Dictionary) -> Dictionary:
 		return {"error": {"code": -32004, "message": "OBJECT_VALUES_NOT_ALLOWED"}}
 	if not _property_exists_and_type_ok(target, prop_name, prop_value):
 		return {"error": {"code": -32004, "message": "PROPERTY_TYPE_MISMATCH: " + prop_name}}
-	target.set(prop_name, prop_value)
+
+	# UndoRedo: 记录旧值
+	var old_value = target.get(prop_name)
+	if _undo_manager != null:
+		_undo_manager.create_action_mixed(0,
+			[
+				{"type": "property", "target": target, "property": prop_name, "value": prop_value}
+			],
+			[
+				{"type": "property", "target": target, "property": prop_name, "value": old_value}
+			]
+		)
+	else:
+		target.set(prop_name, prop_value)
 	return {"result": {"node": str(target.name), "property": prop_name}}
+
 
 func _find_node_by_path(root: Node, path: String) -> Node:
 	if path.is_empty() or path == "root":
@@ -120,6 +197,18 @@ func _find_node_by_path(root: Node, path: String) -> Node:
 	if root.has_node(clean):
 		return root.get_node(clean)
 	return null
+
+
+func _normalize_project_path(path: String) -> String:
+	# Issue 5: 复用 editor_guards.normalize_path
+	if _editor_guards != null:
+		return _editor_guards.normalize_path(path)
+	if path.is_empty():
+		return ""
+	if path.begins_with("res://") or path.begins_with("user://"):
+		return path.simplify_path()
+	return ProjectSettings.localize_path(path).simplify_path()
+
 
 # SYNC: identical copy in ui_commands.gd — keep both in sync
 func _property_exists_and_type_ok(obj: Object, prop_name: String, val) -> bool:
