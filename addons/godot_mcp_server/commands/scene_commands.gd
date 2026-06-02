@@ -51,7 +51,9 @@ func handle_save_scene(params: Dictionary) -> Dictionary:
 	var save_method: String
 	if root.scene_file_path.is_empty() or _normalize_project_path(root.scene_file_path) != normalized:
 		ei.save_scene_as(normalized)
-		err = OK
+		# IMPORTANT-1: save_scene_as 是 void，保存后验证文件存在
+		var abs_path: String = ProjectSettings.globalize_path(normalized)
+		err = OK if FileAccess.file_exists(abs_path) else FAILED
 		save_method = "save_scene_as"
 	else:
 		err = ei.save_scene()
@@ -116,7 +118,7 @@ func handle_instance_scene(params: Dictionary) -> Dictionary:
 
 	# UndoRedo: instance_scene 加入场景树
 	if _undo_manager != null:
-		_undo_manager.create_action_mixed(0,
+		_undo_manager.create_action_mixed("Instance Scene",
 			[
 				{"type": "method", "target": parent, "method": "add_child", "args": [instance]},
 				{"type": "method", "target": instance, "method": "set_owner", "args": [root]},
@@ -169,9 +171,9 @@ func handle_set_instance_property(params: Dictionary) -> Dictionary:
 		return {"error": {"code": -32004, "message": "PROPERTY_TYPE_MISMATCH: " + prop_name}}
 
 	# UndoRedo: 记录旧值
-	var old_value = target.get(prop_name)
 	if _undo_manager != null:
-		_undo_manager.create_action_mixed(0,
+		var old_value = target.get(prop_name)
+		_undo_manager.create_action_mixed("Set Instance Property",
 			[
 				{"type": "property", "target": target, "property": prop_name, "value": prop_value}
 			],

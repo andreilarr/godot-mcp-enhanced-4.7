@@ -12,7 +12,7 @@ import { opsErrorResult } from './shared.js';
 import { requireProjectPath, resolveWithinRoot, parseMcpScriptOutput, normalizeUserProjectPath, checkVersionMismatch, buildSafeEnv, scanFiles } from '../helpers.js';
 import { analyzeOutput, type AnalysisResult } from '../error-analyzer.js';
 import { forceKillTree } from '../core/process-state.js';
-import { lintGDScript, formatLintResults } from './gdscript-lint.js';
+import { lintGDScript } from './gdscript-lint.js';
 
 // ─── Known base class methods/properties whitelist ───────────────────────────
 // The Godot headless parser cannot resolve inherited methods from base classes
@@ -808,19 +808,13 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           const lintOutput = lintGDScript(content);
           hasLintErrors = lintOutput.errors.length > 0;
           if (lintOutput.errors.length > 0 || lintOutput.warnings.length > 0) {
-            const lintText = formatLintResults(lintOutput);
-            for (const line of lintText.split('\n')) {
-              const trimmed = line.trim();
-              if (trimmed && !trimmed.startsWith('Lint') && !trimmed.startsWith('→')) {
-                warnings.push(trimmed);
-              } else if (trimmed.startsWith('→')) {
-                // Append suggestion to the previous warning
-                if (warnings.length > 0) {
-                  warnings[warnings.length - 1] += ' ' + trimmed;
-                }
-              }
+            // IMPORTANT-3: 直接使用结构化 lint 数据，跳过序列化→解析
+            const allLintItems = [...lintOutput.errors, ...lintOutput.warnings];
+            for (const item of allLintItems) {
+              let msg = item.rule + " (line " + item.line + "): " + item.message;
+              if (item.suggestion) msg += " → " + item.suggestion.split("\n")[0];
+              warnings.push(msg);
             }
-            totalErrors += lintOutput.errors.length;
             totalWarnings += lintOutput.warnings.length;
           }
         } catch (err) { console.debug('[validation] scan for pitfalls:', err); }

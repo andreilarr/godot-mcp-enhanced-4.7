@@ -32,9 +32,10 @@ func create_action_with_props(request_id: int, do_props: Array, undo_props: Arra
 ## {"type": "method", "target": Object, "method": String, "args": Array}
 ## {"type": "property", "target": Object, "property": String, "value": Variant}
 ## {"type": "reference", "value": Node}  # Issue 1: add_do_reference 仅限 Node
-func create_action_mixed(request_id: int, do_ops: Array, undo_ops: Array) -> void:
+func create_action_mixed(action_name, do_ops: Array, undo_ops: Array) -> void:
 	var undo_redo = _plugin.get_undo_redo()
-	undo_redo.create_action("MCP: op_%d" % request_id)
+	var label: String = "MCP: %s" % (action_name if action_name is String else "op_%d" % action_name)
+	undo_redo.create_action(label)
 	for op in do_ops:
 		_apply_op(undo_redo, "do", op)
 	for op in undo_ops:

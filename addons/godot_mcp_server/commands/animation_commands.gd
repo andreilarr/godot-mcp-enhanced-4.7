@@ -58,7 +58,7 @@ func handle_animation_track(params: Dictionary) -> Dictionary:
 				if insert_at != null and int(insert_at) >= 0 and int(insert_at) < anim.get_track_count() + 1:
 					do_ops.append({"type": "method", "target": anim, "method": "move_track", "args": [idx, int(insert_at)]})
 					idx = int(insert_at)
-				_undo_manager.create_action_mixed(0, do_ops, [
+				_undo_manager.create_action_mixed("Add Track", do_ops, [
 					{"type": "method", "target": anim, "method": "remove_track", "args": [idx]}
 				])
 			else:
@@ -104,8 +104,8 @@ func handle_animation_track(params: Dictionary) -> Dictionary:
 				if new_idx != ti:
 					undo_ops.append({"type": "method", "target": anim, "method": "move_track", "args": [new_idx, ti]})
 
-				_undo_manager.create_action_mixed(0, [
-					{"type": "method", "target": anim, "method": "remove_track", "args": [ti]}
+				_undo_manager.create_action_mixed("Remove Track", [
+				{"type": "method", "target": anim, "method": "remove_track", "args": [ti]}
 				], undo_ops)
 			else:
 				anim.remove_track(ti)
@@ -225,7 +225,7 @@ func handle_animation_keyframe(params: Dictionary) -> Dictionary:
 					do_ops.append({"type": "method", "target": anim, "method": "track_set_key_time", "args": [ti, ki, float(time)]})
 					undo_ops.append({"type": "method", "target": anim, "method": "track_set_key_time", "args": [ti, ki, old_time]})
 				if do_ops.size() > 0:
-					_undo_manager.create_action_mixed(0, do_ops, undo_ops)
+					_undo_manager.create_action_mixed("Update Keyframe", do_ops, undo_ops)
 			else:
 				var value = params.get("value")
 				if value != null:
@@ -295,7 +295,7 @@ func handle_animation_curve(params: Dictionary) -> Dictionary:
 		updated.append("out_handle")
 
 	if _undo_manager != null and do_ops.size() > 0:
-		_undo_manager.create_action_mixed(0, do_ops, undo_ops)
+		_undo_manager.create_action_mixed("Set Curve Handle", do_ops, undo_ops)
 	else:
 		# 无 undo_manager 时的回退逻辑
 		if in_handle != null and in_handle is Dictionary:
