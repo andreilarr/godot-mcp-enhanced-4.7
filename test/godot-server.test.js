@@ -289,7 +289,7 @@ describe('GodotServer', () => {
       expect(names).not.toContain('scene');
       expect(names).not.toContain('script');
       expect(names).not.toContain('project');
-      expect(names).not.toContain('confirm_and_execute');
+      expect(names).toContain('confirm_and_execute');
     });
 
     it('readOnly mode has fewer tools than default', async () => {

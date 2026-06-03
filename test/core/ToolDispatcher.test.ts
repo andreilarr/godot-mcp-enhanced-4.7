@@ -29,6 +29,7 @@ const {
 vi.mock('../../src/core/tool-registry.js', () => ({
   getAllToolDefinitions: mockGetAllToolDefinitions,
   getModuleForTool: mockGetModuleForTool,
+  registerInlineTool: vi.fn(),
   LITE_TOOLS: mockLITE_TOOLS,
   MINIMAL_TOOLS: mockMINIMAL_TOOLS,
 }));

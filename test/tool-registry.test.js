@@ -8,6 +8,7 @@ import {
   getReadOnlyTools,
   getWriteTools,
   getAllToolNames,
+  registerInlineTool,
 } from '../src/core/tool-registry.js';
 import { VERIFY_ELIGIBLE_TOOLS, isVerifyEligible } from '../src/core/tool-registry.js';
 
@@ -83,5 +84,33 @@ describe('L1 verify eligible tools', () => {
     expect(isVerifyEligible('profiler')).toBe(false);
     expect(isVerifyEligible('physics')).toBe(false);
     expect(isVerifyEligible('docs')).toBe(false);
+  });
+});
+
+describe('registerInlineTool', () => {
+  afterEach(() => clearRegistry());
+
+  it('registers an inline tool so isKnownTool returns true', () => {
+    registerInlineTool('confirm_and_execute', { readonly: true, long_running: false });
+    expect(isKnownTool('confirm_and_execute')).toBe(true);
+  });
+
+  it('registers readonly metadata correctly', () => {
+    registerInlineTool('confirm_and_execute', { readonly: true, long_running: false });
+    expect(isReadOnly('confirm_and_execute')).toBe(true);
+    expect(isLongRunning('confirm_and_execute')).toBe(false);
+  });
+
+  it('appears in getAllToolNames and getReadOnlyTools', () => {
+    registerInlineTool('confirm_and_execute', { readonly: true, long_running: false });
+    expect(getAllToolNames()).toContain('confirm_and_execute');
+    expect(getReadOnlyTools()).toContain('confirm_and_execute');
+  });
+
+  it('overwrites if called twice (idempotent)', () => {
+    registerInlineTool('confirm_and_execute', { readonly: true, long_running: false });
+    registerInlineTool('confirm_and_execute', { readonly: false, long_running: true });
+    expect(isReadOnly('confirm_and_execute')).toBe(false);
+    expect(isLongRunning('confirm_and_execute')).toBe(true);
   });
 });

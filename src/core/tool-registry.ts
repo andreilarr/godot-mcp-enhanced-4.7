@@ -46,6 +46,13 @@ export function registerModule(mod: ToolModule): void {
   }
 }
 
+// ─── Inline tool registration ────────────────────────────────────────────────
+
+/** Register an inline tool's metadata (for tools not in a ToolModule). */
+export function registerInlineTool(name: string, meta: Omit<ToolMeta, 'name'>): void {
+  metaRegistry.set(name, { name, ...meta });
+}
+
 // ─── Query functions ─────────────────────────────────────────────────────────
 
 /** Check whether a tool name is registered in the meta registry. */

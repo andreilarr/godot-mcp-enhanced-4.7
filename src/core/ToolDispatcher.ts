@@ -14,6 +14,7 @@ import {
   getModuleForTool,
   LITE_TOOLS,
   MINIMAL_TOOLS,
+  registerInlineTool,
   resolveProfile,
 } from './tool-registry.js';
 import { isPathInAllowedRoots, parseGodotConfig } from '../helpers.js';
@@ -71,6 +72,9 @@ export class ToolDispatcher {
       setProjectDir(d: string) { ps.setProjectDir(d); },
       parseGodotConfig,
     };
+
+    // 注册内联工具的元数据（confirm_and_execute 不属于任何 ToolModule）
+    registerInlineTool('confirm_and_execute', { readonly: true, long_running: false });
   }
 
   getFilteredTools(): Tool[] {
