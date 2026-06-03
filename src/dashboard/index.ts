@@ -102,7 +102,7 @@ function createStateStream(
     reader.stop();
     if (throttleTimer) clearTimeout(throttleTimer);
     if (resolveNext) {
-      resolveNext({ value: undefined as any, done: true });
+      resolveNext({ value: undefined as unknown as DashboardState, done: true });
       resolveNext = null;
     }
   });
@@ -121,7 +121,7 @@ function createStateStream(
         async return(): Promise<IteratorResult<DashboardState>> {
           reader.stop();
           if (throttleTimer) clearTimeout(throttleTimer);
-          return { value: undefined as any, done: true };
+          return { value: undefined as unknown as DashboardState, done: true };
         },
       };
     },

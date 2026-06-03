@@ -7,11 +7,9 @@ export interface LogReaderOptions {
   pollIntervalMs?: number;
 }
 
-declare interface LogReader {
-  on(event: 'entries', listener: (entries: LogEntry[]) => void): this;
-  on(event: 'error', listener: (err: Error) => void): this;
-  emit(event: 'entries', entries: LogEntry[]): boolean;
-  emit(event: 'error', err: Error): boolean;
+export interface LogReaderEvents {
+  entries: (entries: LogEntry[]) => void;
+  error: (err: Error) => void;
 }
 
 const DEFAULT_POLL_MS = 2000;
