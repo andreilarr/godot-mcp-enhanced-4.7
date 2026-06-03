@@ -74,7 +74,7 @@ function nanoid8(): string {
 }
 
 /** 确定日志目录 — XDG 标准路径 */
-function resolveLogDir(override?: string): string {
+export function resolveLogDir(override?: string): string {
   if (override) return override;
   const platform = process.platform;
   if (platform === 'win32') {
