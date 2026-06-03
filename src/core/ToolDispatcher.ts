@@ -20,13 +20,14 @@ import {
 import { isPathInAllowedRoots, parseGodotConfig } from '../helpers.js';
 import { opsErrorResult, COMMON_ERROR_CODES } from '../tools/shared.js';
 import * as ps from './process-state.js';
+import { getLogger } from './logger.js';
 
 /** Known profile names for IDE autocomplete. Unknown strings fall through to resolveProfile(). */
 type KnownProfile = 'full' | 'lite' | 'minimal' | 'bridge_dev' | '3d_dev';
 
 const DEBUG = process.env.DEBUG === 'true';
 function log(...args: unknown[]): void {
-  if (DEBUG) console.error('[tool-dispatcher]', ...args);
+  if (DEBUG) getLogger().debug('dispatcher', args.map(a => String(a)).join(' '));
 }
 
 export interface DispatcherOptions {
@@ -113,7 +114,7 @@ export class ToolDispatcher {
         allTools = allTools.filter(t => profileTools.has(t.name));
         log('PROFILE mode (%s): %d tools available', this.options.mode, allTools.length);
       } else {
-        console.warn('[ToolDispatcher] Profile "%s" resolved to empty set — falling back to full mode. Check for typos.', this.options.mode);
+        getLogger().warn('dispatcher', `Profile "${String(this.options.mode)}" resolved to empty set — falling back to full mode. Check for typos.`);
       }
     }
 
@@ -164,8 +165,11 @@ export class ToolDispatcher {
         // 复用同一 editor/headless 分支逻辑
         log('[CONFIRM] Executing confirmed tool: %s', pending.toolName);
         if (this.connectionMode === 'editor' && this.editorExecutor) {
+          const logger = getLogger();
+          const confirmCallId = logger.toolStart(pending.toolName, pending.args);
           const editorResult = await this.editorExecutor.execute(pending.toolName, pending.args);
           const duration = Date.now() - startTime;
+          logger.toolEnd(confirmCallId, pending.toolName, duration);
           return this.attachFallbackWarning({ ...editorResult, content: [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] });
         }
         return this.attachFallbackWarning(await this.dispatchTool(pending.toolName, pending.args, startTime));
@@ -190,8 +194,11 @@ export class ToolDispatcher {
 
       // ── 4. editor 模式 dispatch ──
       if (this.connectionMode === 'editor' && this.editorExecutor) {
+        const logger = getLogger();
+        const callId = logger.toolStart(name, args);
         const editorResult = await this.editorExecutor.execute(name, args);
         const duration = Date.now() - startTime;
+        logger.toolEnd(callId, name, duration);
         return this.attachFallbackWarning({ ...editorResult, content: [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] });
       }
 
@@ -270,11 +277,29 @@ export class ToolDispatcher {
     if (!targetMod) {
       return opsErrorResult('UNKNOWN_TOOL', `Unknown tool: ${toolName}`);
     }
-    const result = await targetMod.handleTool(toolName, args, this.ctx);
-    if (result !== null) {
+
+    const logger = getLogger();
+    const callId = logger.toolStart(toolName, args);
+
+    let result: ToolResult | null;
+    try {
+      result = await targetMod.handleTool(toolName, args, this.ctx);
+    } catch (err) {
       const duration = Date.now() - startTime;
-      return { ...result, content: [...result.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] };
+      logger.toolEnd(callId, toolName, duration, err instanceof Error ? err.message : String(err));
+      throw err;
     }
+
+    const duration = Date.now() - startTime;
+
+    if (result !== null) {
+      // 判断是否有错误（检查 content 中是否有 error 字段）
+      const hasError = result.content?.some(c => c.type === 'text' && c.text?.includes('"error"')) ?? false;
+      logger.toolEnd(callId, toolName, duration, hasError ? 'tool_error' : undefined);
+      const duration2 = Date.now() - startTime;
+      return { ...result, content: [...result.content, { type: 'text' as const, text: `_duration_ms: ${duration2}` }] };
+    }
+    logger.toolEnd(callId, toolName, duration, 'handler_null');
     return opsErrorResult('HANDLER_NULL', `Tool "${toolName}" registered but handler returned null`);
   }
 
