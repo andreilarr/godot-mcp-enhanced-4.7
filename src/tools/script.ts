@@ -1,5 +1,5 @@
 import { join, basename, extname } from 'path';
-import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, statSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, statSync, renameSync, unlinkSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
@@ -790,6 +790,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       let totalReplacements = 0;
       const MAX_FILE_SIZE = 1_000_000; // 1MB
 
+      // Phase 1: 收集所有变更到内存
+      const pendingWrites: Array<{ filePath: string; finalContent: string }> = [];
+
       for (const filePath of matchedFiles) {
         try {
           const fileSize = statSync(filePath).size;
@@ -813,10 +816,30 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         if (!dryRun) {
           const newContent = normalized.split(normalizedSearch).join(normalizedReplace);
           const finalContent = hasCRLF ? newContent.split('\n').join('\r\n') : newContent;
-          writeFileSync(filePath, finalContent, 'utf-8');
+          pendingWrites.push({ filePath, finalContent });
         }
 
         changedFiles.push(relOf(filePath));
+      }
+
+      // Phase 2: 原子写入 — 先写所有 .tmp 文件，全部成功后批量 rename
+      if (!dryRun && pendingWrites.length > 0) {
+        const tmpFiles: string[] = [];
+        try {
+          for (const pw of pendingWrites) {
+            const tmpPath = pw.filePath + '.tmp';
+            writeFileSync(tmpPath, pw.finalContent, 'utf-8');
+            tmpFiles.push(tmpPath);
+          }
+          for (let i = 0; i < pendingWrites.length; i++) {
+            renameSync(tmpFiles[i], pendingWrites[i].filePath);
+          }
+        } catch (writeErr) {
+          for (const tmp of tmpFiles) {
+            try { if (existsSync(tmp)) unlinkSync(tmp); } catch { /* best effort */ }
+          }
+          return opsErrorResult('ATOMIC_WRITE_FAILED', `Batch write failed: ${(writeErr as Error).message}. ${pendingWrites.length} files may be partially updated.`);
+        }
       }
 
       const prefix = dryRun ? '[DRY RUN] ' : '';
