@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ─── Mock MCP SDK (must be before GodotServer import) ────────────────────────
 const mockSetRequestHandler = vi.fn();
@@ -14,7 +14,7 @@ vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
 }));
 
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
-  StdioServerTransport: vi.fn().mockImplementation(() => ({})),
+  StdioServerTransport: vi.fn().mockImplementation(function() { return {}; }),
 }));
 
 vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
@@ -25,9 +25,21 @@ vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
   ReadResourceRequestSchema: 'ReadResourceRequestSchema',
 }));
 
+// ─── Mock fs to control detectProjectPath behavior ───────────────────────────
+const { mockExistsSync } = vi.hoisted(() => ({
+  mockExistsSync: vi.fn().mockReturnValue(false),
+}));
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, existsSync: mockExistsSync };
+});
+
 // ─── Mock editor auth (avoids real network/file access) ─────────────────────
+const { mockWaitForEditorSecret } = vi.hoisted(() => ({
+  mockWaitForEditorSecret: vi.fn().mockResolvedValue(null),
+}));
 vi.mock('../src/core/editor-auth.js', () => ({
-  waitForEditorSecret: vi.fn().mockResolvedValue(null),
+  waitForEditorSecret: (...args) => mockWaitForEditorSecret(...args),
 }));
 
 // ─── Mock EditorConnection and EditorToolExecutor ───────────────────────────
@@ -59,12 +71,36 @@ vi.mock('../src/core/process-state.js', () => ({
 
 // ─── Import SUT (after mocks) ────────────────────────────────────────────────
 import { GodotServer, clearGodotPathCache, getCachedGodotPath } from '../src/GodotServer.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { EditorConnection } from '../src/core/EditorConnection.js';
+import { EditorToolExecutor } from '../src/core/EditorToolExecutor.js';
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('GodotServer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Restore constructor mocks that clearAllMocks wipes out
+    vi.mocked(StdioServerTransport).mockImplementation(function() { return {}; });
+    // Default: existsSync returns false
+    mockExistsSync.mockReturnValue(false);
+    // Default: waitForEditorSecret returns null (no editor)
+    mockWaitForEditorSecret.mockResolvedValue(null);
+    // Default: EditorConnection fails to connect
+    vi.mocked(EditorConnection).mockImplementation(function() {
+      return {
+        connect: vi.fn().mockRejectedValue(new Error('no editor')),
+        disconnect: vi.fn(),
+      };
+    });
+    // Default: EditorToolExecutor creates a simple mock (must use function for `new`)
+    vi.mocked(EditorToolExecutor).mockImplementation(function() {
+      return { execute: vi.fn(), destroy: vi.fn() };
+    });
+  });
+
+  afterEach(() => {
+    delete process.env.GODOT_PROJECT_PATH;
   });
 
   // ── Re-exports ────────────────────────────────────────────────────────────
@@ -141,6 +177,78 @@ describe('GodotServer', () => {
     });
   });
 
+  // ── Editor reconnect fallback (I-01) ───────────────────────────────────────
+
+  describe('editor reconnect exhaustion fallback', () => {
+    it('degrades to headless when editor disconnect handler fires', async () => {
+      const disconnectHandlers = [];
+      const mockEditorConn = {
+        connect: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn(),
+        isConnected: vi.fn().mockReturnValue(true),
+        addOnDisconnectHandler: vi.fn((handler) => {
+          disconnectHandlers.push(handler);
+        }),
+      };
+
+      vi.mocked(EditorConnection).mockImplementation(function() { return mockEditorConn; });
+      mockWaitForEditorSecret.mockResolvedValue('test-secret');
+      // Make detectProjectPath return a valid path
+      mockExistsSync.mockReturnValue(true);
+
+      const server = new GodotServer('/fake/ops.gd', { connectionMode: 'editor' });
+      await server.run();
+
+      // Verify: editor connected, handler registered
+      expect(mockEditorConn.connect).toHaveBeenCalled();
+      expect(mockEditorConn.addOnDisconnectHandler).toHaveBeenCalled();
+      expect(server.connectionMode).toBe('editor');
+
+      // Simulate reconnect exhaustion: fire disconnect, mark not connected
+      mockEditorConn.isConnected.mockReturnValue(false);
+      for (const handler of disconnectHandlers) {
+        handler();
+      }
+
+      // Verify: degraded to headless
+      expect(server.connectionMode).toBe('headless');
+      expect(server.editorConn).toBeNull();
+
+      await server.close();
+    });
+
+    it('does NOT degrade if editor is still connected when handler fires', async () => {
+      const disconnectHandlers = [];
+      const mockEditorConn = {
+        connect: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn(),
+        isConnected: vi.fn().mockReturnValue(true),
+        addOnDisconnectHandler: vi.fn((handler) => {
+          disconnectHandlers.push(handler);
+        }),
+      };
+
+      vi.mocked(EditorConnection).mockImplementation(function() { return mockEditorConn; });
+      mockWaitForEditorSecret.mockResolvedValue('test-secret');
+      mockExistsSync.mockReturnValue(true);
+
+      const server = new GodotServer('/fake/ops.gd', { connectionMode: 'editor' });
+      await server.run();
+
+      // Fire disconnect handler BUT editor still reports connected
+      // (e.g., this was a stale/duplicate fireDisconnect call)
+      for (const handler of disconnectHandlers) {
+        handler();
+      }
+
+      // Should NOT have degraded — guard checks isConnected()
+      expect(server.connectionMode).toBe('editor');
+      expect(server.editorConn).toBeTruthy();
+
+      await server.close();
+    });
+  });
+
   // ── Tool filtering ────────────────────────────────────────────────────────
 
   describe('tool filtering', () => {
@@ -165,12 +273,8 @@ describe('GodotServer', () => {
     it('default mode registers a large set of merged tools', async () => {
       const handlers = createServerAndGetHandlers({});
       const names = await getToolNamesFromHandler(handlers);
-      // Merged tools: each module registers one tool (scene, script, project, etc.)
-      // Should be much fewer than 50 individual tools but still substantial
       expect(names.length).toBeGreaterThan(10);
-      // confirm_and_execute is always present
       expect(names).toContain('confirm_and_execute');
-      // Merged tool names should be present
       expect(names).toContain('scene');
       expect(names).toContain('script');
       expect(names).toContain('project');
@@ -179,15 +283,12 @@ describe('GodotServer', () => {
     it('readOnly mode excludes write tools', async () => {
       const handlers = createServerAndGetHandlers({ readOnly: true });
       const names = await getToolNamesFromHandler(handlers);
-      // Read-only tools (TOOL_META readonly=true) should still be present
       expect(names).toContain('docs');
       expect(names).toContain('screenshot');
       expect(names).toContain('physics');
-      // Write tools (TOOL_META readonly=false) should be filtered out
       expect(names).not.toContain('scene');
       expect(names).not.toContain('script');
       expect(names).not.toContain('project');
-      // confirm_and_execute is not in TOOL_META, so it gets filtered by ReadOnlyGuard too
       expect(names).not.toContain('confirm_and_execute');
     });
 
@@ -196,6 +297,7 @@ describe('GodotServer', () => {
       const defaultNames = await getToolNamesFromHandler(defaultHandlers);
 
       vi.clearAllMocks();
+      vi.mocked(StdioServerTransport).mockImplementation(function() { return {}; });
       const readonlyHandlers = createServerAndGetHandlers({ readOnly: true });
       const readonlyNames = await getToolNamesFromHandler(readonlyHandlers);
 
@@ -205,33 +307,20 @@ describe('GodotServer', () => {
     it('lite mode filters to LITE_TOOLS set only', async () => {
       const handlers = createServerAndGetHandlers({ mode: 'lite' });
       const names = await getToolNamesFromHandler(handlers);
-      // LITE_TOOLS from tool-registry.ts — now derived from PROFILES.lite
-      // Groups: core, bridge, animation, audio, signal, visual, code, test, profiler
       const liteTools = [
-        // core
         'project', 'scene', 'script', 'runtime', 'validation', 'confirm_and_execute',
-        // bridge
         'game',
-        // animation (now includes animtree + animation_track)
         'animation', 'animtree', 'animation_track',
-        // audio
         'audio',
-        // signal
         'signal',
-        // visual
         'material', 'screenshot', 'particles',
-        // code
         'docs', 'templates', 'batch', 'game_design',
-        // test (verify_delivery is the actual registered name)
         'test', 'verify_delivery',
-        // profiler
         'profiler', 'workflow',
       ];
-      // All returned tools should be in the LITE set
       for (const name of names) {
         expect(liteTools).toContain(name);
       }
-      // All LITE_TOOLS should be present
       for (const expected of liteTools) {
         expect(names).toContain(expected);
       }
@@ -242,6 +331,7 @@ describe('GodotServer', () => {
       const defaultNames = await getToolNamesFromHandler(defaultHandlers);
 
       vi.clearAllMocks();
+      vi.mocked(StdioServerTransport).mockImplementation(function() { return {}; });
       const liteHandlers = createServerAndGetHandlers({ mode: 'lite' });
       const liteNames = await getToolNamesFromHandler(liteHandlers);
 
@@ -251,15 +341,10 @@ describe('GodotServer', () => {
     it('combined readOnly and lite mode applies both filters', async () => {
       const handlers = createServerAndGetHandlers({ readOnly: true, mode: 'lite' });
       const names = await getToolNamesFromHandler(handlers);
-      // All LITE_TOOLS have readonly=false, so readOnly filter removes them all
-      // Only tools that pass BOTH filters (in LITE_TOOLS AND readonly=true) survive
-      // Since all lite tools are write tools, combined filter may return very few or none
       expect(names).not.toContain('scene');
       expect(names).not.toContain('script');
       expect(names).not.toContain('project');
-      // The result should be a subset of lite tools (possibly empty if none are readonly)
       for (const name of names) {
-        // confirm_and_execute is special — not in module registry
         if (name === 'confirm_and_execute') continue;
       }
     });

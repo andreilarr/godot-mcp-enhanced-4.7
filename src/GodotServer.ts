@@ -199,6 +199,17 @@ export class GodotServer {
           await this.editorConn.connect();
           this.editorExecutor = new EditorToolExecutor(this.editorConn);
           this.dispatcher?.setEditorExecutor(this.editorExecutor);
+          // I-01: editor reconnect exhaustion → auto-degrade to headless
+          this.editorConn.addOnDisconnectHandler(() => {
+            if (!this.editorConn?.isConnected()) {
+              console.error('[FALLBACK] Editor reconnect attempts exhausted — degrading to headless mode.');
+              this.dispatcher?.markEditorFallback();
+              this.connectionMode = 'headless';
+              this.dispatcher?.setConnectionMode('headless');
+              this.dispatcher?.setEditorExecutor(null);
+              this.editorConn = null;
+            }
+          });
           log('Editor: Connected to Godot plugin on port %d', port);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
