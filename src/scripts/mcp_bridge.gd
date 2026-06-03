@@ -390,6 +390,10 @@ func _handle_message(raw: String) -> String:
 			result = _cmd_watch_stop()
 		"watch.poll":
 			result = _cmd_watch_poll()
+		"find_ui_elements":
+			result = _cmd_find_ui_elements(params)
+		"click_button":
+			result = _cmd_click_button(params)
 		_:
 			error = {"code": -32601, "message": "Method not found: %s" % method}
 
@@ -1014,6 +1018,123 @@ func _cmd_watch_poll() -> Variant:
 		"signal_name": _watch_signal_name,
 		"events": events,
 		"event_count": events.size(),
+	}
+
+
+# ─── UI discovery commands ──────────────────────────────────────────────
+
+func _extract_ui_data(ctrl: Control) -> Dictionary:
+	var data: Dictionary = {
+		"path": str(ctrl.get_path()),
+		"type": ctrl.get_class(),
+		"visible": ctrl.visible,
+		"position": {"x": ctrl.position.x, "y": ctrl.position.y},
+		"size": {"x": ctrl.size.x, "y": ctrl.size.y},
+		"center": {"x": ctrl.position.x + ctrl.size.x / 2.0, "y": ctrl.position.y + ctrl.size.y / 2.0},
+	}
+	if ctrl is BaseButton:
+		data["text"] = str(ctrl.get("text")) if ctrl.get("text") != null else ""
+		data["disabled"] = ctrl.disabled
+	elif ctrl is Label:
+		data["text"] = ctrl.text
+	elif ctrl is Range:
+		data["value"] = ctrl.value
+		data["min_value"] = ctrl.min_value
+		data["max_value"] = ctrl.max_value
+		if ctrl is SpinBox:
+			data["editable"] = ctrl.editable
+	elif ctrl is LineEdit:
+		data["text"] = ctrl.text
+		data["editable"] = ctrl.editable
+		data["max_length"] = ctrl.max_length
+	elif ctrl is OptionButton:
+		data["text"] = ctrl.text
+		data["item_count"] = ctrl.item_count
+		var items: Array = []
+		for i in range(ctrl.item_count):
+			items.append(ctrl.get_item_text(i))
+		data["items"] = items
+	elif ctrl is ItemList:
+		data["item_count"] = ctrl.item_count
+	return data
+
+
+func _cmd_find_ui_elements(params: Dictionary) -> Variant:
+	var pattern: String = str(params.get("pattern", ""))
+	var type_filter: String = str(params.get("type", ""))
+	var visible_only: bool = params.get("visible_only", true)
+	var max_results: int = int(params.get("limit", 200))
+	if max_results > 500:
+		max_results = 500
+
+	var results: Array = []
+	var stack: Array = [get_tree().root]
+
+	while stack.size() > 0 and results.size() < max_results:
+		var node: Node = stack.pop_back()
+		if node == null:
+			continue
+		if not node is Control:
+			for child in node.get_children():
+				stack.append(child)
+			continue
+		var ctrl: Control = node as Control
+		if visible_only and not ctrl.visible:
+			for child in ctrl.get_children():
+				stack.append(child)
+			continue
+		var match_found := true
+		if pattern != "":
+			var text_to_match := ""
+			if "text" in ctrl:
+				text_to_match = str(ctrl.get("text"))
+			if not ctrl.name.match(pattern) and not text_to_match.match(pattern):
+				match_found = false
+		if match_found and type_filter != "" and not ctrl.is_class(type_filter):
+			match_found = false
+		if match_found:
+			results.append(_extract_ui_data(ctrl))
+		for child in ctrl.get_children():
+			stack.append(child)
+
+	return {"elements": results, "count": results.size()}
+
+
+func _cmd_click_button(params: Dictionary) -> Variant:
+	var text: String = str(params.get("text", ""))
+	var path: String = str(params.get("path", ""))
+
+	var target: BaseButton = null
+
+	if path != "":
+		var node := get_node_or_null(path)
+		if node == null:
+			return {"error": {"code": -1, "message": "Node not found: %s" % path}}
+		if not node is BaseButton:
+			return {"error": {"code": -2, "message": "Node is not a Button: %s (type: %s)" % [path, node.get_class()]}}
+		target = node as BaseButton
+	elif text != "":
+		var stack: Array = [get_tree().root]
+		while stack.size() > 0:
+			var node: Node = stack.pop_back()
+			if node is BaseButton:
+				var btn: BaseButton = node as BaseButton
+				var btn_text := str(btn.get("text")) if btn.get("text") != null else ""
+				if btn_text == text and btn.visible:
+					target = btn
+					break
+			for child in node.get_children():
+				stack.append(child)
+		if target == null:
+			return {"error": {"code": -3, "message": "No visible Button with text \"%s\" found" % text}}
+	else:
+		return {"error": {"code": -4, "message": "Either text or path is required"}}
+
+	target.emit_signal("pressed")
+	return {
+		"clicked": true,
+		"button_path": str(target.get_path()),
+		"button_text": str(target.get("text")) if target.get("text") != null else "",
 	}
 
 

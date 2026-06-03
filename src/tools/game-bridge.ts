@@ -303,13 +303,15 @@ const ACTIONS = [
   'watch_start',
   'watch_stop',
   'watch_poll',
+  'find_ui_elements',
+  'click_button',
 ] as const;
 
 export function getToolDefinitions(): Tool[] {
   return [
     {
       name: 'game',
-      description: '游戏桥接操作。安装/卸载: game_bridge_install, game_bridge_uninstall。查询: game_query (ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info, take_screenshot)。写入: game_write (set_node_property, call_method)。输入: game_input (send_key, send_mouse_click, send_mouse_move, send_text)。等待: game_wait (wait_for_node, wait_for_property)。监控: monitor_start/stop/poll (属性时间线采样)。信号: watch_start/stop/poll (信号事件记录)。',
+      description: '游戏桥接操作。安装/卸载: game_bridge_install, game_bridge_uninstall。查询: game_query (ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info, take_screenshot)。写入: game_write (set_node_property, call_method)。输入: game_input (send_key, send_mouse_click, send_mouse_move, send_text)。等待: game_wait (wait_for_node, wait_for_property)。监控: monitor_start/stop/poll (属性时间线采样)。信号: watch_start/stop/poll (信号事件记录)。UI: find_ui_elements/click_button (UI元素发现+按钮点击)。',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -334,6 +336,12 @@ export function getToolDefinitions(): Tool[] {
           interval_frames: { type: 'number', description: 'monitor_start: 采样间隔帧数（默认 10，最小 1，最大 300）' },
           signal_name: { type: 'string', description: 'watch_start: 要监听的信号名（如 "pressed"、"health_changed"）' },
           max_events: { type: 'number', description: 'watch_start: 最大记录事件数（默认 1000，最大 5000）' },
+          pattern: { type: 'string', description: 'find_ui_elements: 名称/文字匹配模式（Godot match 语法）' },
+          type: { type: 'string', description: 'find_ui_elements: 按类型过滤（如 "Button"、"Label"）' },
+          visible_only: { type: 'boolean', description: 'find_ui_elements: 仅返回可见元素（默认 true）' },
+          limit: { type: 'number', description: 'find_ui_elements: 最大返回数（默认 200，上限 500）' },
+          text: { type: 'string', description: 'click_button: 按钮文字（和 path 二选一）' },
+          path: { type: 'string', description: 'click_button: 按钮节点路径（和 text 二选一）' },
         },
         required: ['project_path', 'action'],
       },
@@ -525,6 +533,24 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       case 'watch_poll': {
         if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
         const resp = await sendToBridge('watch.poll', {}, (args.timeout as number) || DEFAULT_TIMEOUT);
+        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
+      }
+      case 'find_ui_elements': {
+        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
+        const resp = await sendToBridge('find_ui_elements', {
+          pattern: args.pattern as string ?? '',
+          type: args.type as string ?? '',
+          visible_only: args.visible_only !== false,
+          limit: (args.limit as number) ?? 200,
+        }, (args.timeout as number) || DEFAULT_TIMEOUT);
+        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
+      }
+      case 'click_button': {
+        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
+        const resp = await sendToBridge('click_button', {
+          text: args.text as string ?? '',
+          path: args.path as string ?? '',
+        }, (args.timeout as number) || DEFAULT_TIMEOUT);
         return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
       }
 

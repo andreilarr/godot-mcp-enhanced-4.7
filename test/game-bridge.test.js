@@ -29,6 +29,8 @@ describe('game-bridge tool definitions', () => {
       'watch_start',
       'watch_stop',
       'watch_poll',
+      'find_ui_elements',
+      'click_button',
     ]);
   });
 
