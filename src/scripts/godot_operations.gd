@@ -583,17 +583,24 @@ func _is_safe_value(val, depth: int = 0) -> bool:
 
 
 func _sanitize_res_path(path: String) -> String:
+	# Null byte check
 	if path.find(char(0)) != -1:
 		return "res://"
-	var full = path if path.begins_with("res://") else "res://" + path
+	# Normalize backslashes to forward slashes
+	var normalized_path = path.replace("\\", "/")
+	# Percent-decode (handles %2e%2e → ..)
+	normalized_path = normalized_path.uri_decode()
+	# Ensure res:// prefix
+	var full = normalized_path if normalized_path.begins_with("res://") else "res://" + normalized_path
 	var parts = full.substr(6).split("/")
-	var normalized = []
+	var result_parts = []
 	for part in parts:
-		if part.begins_with("."):
+		# Explicitly reject traversal segments
+		if part == ".." or part == ".":
 			continue
 		if not part.is_empty():
-			normalized.append(part)
-	return "res://" + "/".join(normalized)
+			result_parts.append(part)
+	return "res://" + "/".join(result_parts)
 
 # ─── File helpers ─────────────────────────────────────────────────────────────
 
