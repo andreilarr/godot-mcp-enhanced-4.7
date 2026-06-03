@@ -969,6 +969,7 @@ func _cmd_watch_start(params: Dictionary) -> Variant:
 	var err := node.connect(signal_name, callable)
 	if err != OK:
 		_watch_connected = false
+		_watch_active = false
 		return {"error": {"code": -5, "message": "Failed to connect signal: %s (error %d)" % [signal_name, err]}}
 
 	_watch_active = true
