@@ -517,7 +517,7 @@ func _cmd_set_node_property(params: Dictionary) -> Variant:
 		return {"error": {"code": -1, "message": "Node not found: %s" % path}}
 	if _is_blocked_property(prop):
 		return {"error": {"code": -2, "message": "Blocked property: %s" % prop}}
-	if not _is_safe_value(value):
+	if not SafeValues.is_safe(value):
 		return {"error": {"code": -3, "message": "Value type not allowed: %s" % value.get_class()}}
 	node.set(prop, value)
 	return {"success": true, "node": path, "property": prop}
@@ -595,42 +595,6 @@ func _traverse_tree(callback: Callable, opts: Dictionary = {}) -> Array:
 	return results
 
 
-const MAX_SAFE_VALUE_DEPTH := 10
-
-func _is_safe_value(val: Variant, depth: int = 0) -> bool:
-	# Whitelist: only allow safe value types for set_node_property
-	# A-17: depth limit prevents stack overflow from deeply nested values
-	if depth > MAX_SAFE_VALUE_DEPTH:
-		return false
-	if val == null:
-		return true
-	if val is bool or val is int or val is float or val is String:
-		return true
-	if val is Vector2 or val is Vector2i or val is Vector3 or val is Vector3i:
-		return true
-	if val is Color or val is Rect2 or val is Rect2i:
-		return true
-	if val is Transform2D or val is Transform3D or val is Basis or val is Quaternion:
-		return true
-	if val is Plane or val is AABB:
-		return true
-	if val is PackedByteArray or val is PackedInt32Array or val is PackedInt64Array:
-		return true
-	if val is PackedFloat32Array or val is PackedFloat64Array or val is PackedStringArray:
-		return true
-	if val is PackedVector2Array or val is PackedVector3Array or val is PackedColorArray:
-		return true
-	if val is Array:
-		for item in val:
-			if not _is_safe_value(item, depth + 1):
-				return false
-		return true
-	if val is Dictionary:
-		for key in val:
-			if not _is_safe_value(val[key], depth + 1):
-				return false
-		return true
-	return false
 
 
 func _is_blocked_property(prop: String) -> bool:

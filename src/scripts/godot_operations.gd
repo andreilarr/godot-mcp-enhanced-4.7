@@ -235,7 +235,7 @@ func add_node(params):
 	if params.has("properties"):
 		var properties = params.properties
 		for property in properties:
-			if _is_safe_property(property) and _is_safe_value(properties[property]):
+			if _is_safe_property(property) and SafeValues.is_safe(properties[property]):
 				new_node.set(property, properties[property])
 
 	parent.add_child(new_node)
@@ -308,7 +308,7 @@ func batch_add_nodes(params):
 		if node_def.has("properties"):
 			var properties = node_def.properties
 			for property in properties:
-				if _is_safe_property(property) and _is_safe_value(properties[property]):
+				if _is_safe_property(property) and SafeValues.is_safe(properties[property]):
 					new_node.set(property, properties[property])
 
 		parent.add_child(new_node)
@@ -543,42 +543,6 @@ func _is_safe_property(prop_name: String) -> bool:
 	return true
 
 
-const MAX_SAFE_VALUE_DEPTH := 10
-
-func _is_safe_value(val, depth: int = 0) -> bool:
-	# Whitelist: only allow safe value types (consistent with mcp_bridge.gd)
-	# A-17: depth limit prevents stack overflow from deeply nested values
-	if depth > MAX_SAFE_VALUE_DEPTH:
-		return false
-	if val == null:
-		return true
-	if val is bool or val is int or val is float or val is String:
-		return true
-	if val is Vector2 or val is Vector2i or val is Vector3 or val is Vector3i:
-		return true
-	if val is Color or val is Rect2 or val is Rect2i:
-		return true
-	if val is Transform2D or val is Transform3D or val is Basis or val is Quaternion:
-		return true
-	if val is Plane or val is AABB:
-		return true
-	if val is PackedByteArray or val is PackedInt32Array or val is PackedInt64Array:
-		return true
-	if val is PackedFloat32Array or val is PackedFloat64Array or val is PackedStringArray:
-		return true
-	if val is PackedVector2Array or val is PackedVector3Array or val is PackedColorArray:
-		return true
-	if val is Array:
-		for item in val:
-			if not _is_safe_value(item, depth + 1):
-				return false
-		return true
-	if val is Dictionary:
-		for key in val:
-			if not _is_safe_value(val[key], depth + 1):
-				return false
-		return true
-	return false
 
 
 
