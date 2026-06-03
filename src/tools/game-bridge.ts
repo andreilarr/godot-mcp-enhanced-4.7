@@ -300,13 +300,16 @@ const ACTIONS = [
   'monitor_start',
   'monitor_stop',
   'monitor_poll',
+  'watch_start',
+  'watch_stop',
+  'watch_poll',
 ] as const;
 
 export function getToolDefinitions(): Tool[] {
   return [
     {
       name: 'game',
-      description: '游戏桥接操作。安装/卸载: game_bridge_install, game_bridge_uninstall。查询: game_query (ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info, take_screenshot)。写入: game_write (set_node_property, call_method)。输入: game_input (send_key, send_mouse_click, send_mouse_move, send_text)。等待: game_wait (wait_for_node, wait_for_property)。监控: monitor_start/stop/poll (属性时间线采样)。',
+      description: '游戏桥接操作。安装/卸载: game_bridge_install, game_bridge_uninstall。查询: game_query (ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info, take_screenshot)。写入: game_write (set_node_property, call_method)。输入: game_input (send_key, send_mouse_click, send_mouse_move, send_text)。等待: game_wait (wait_for_node, wait_for_property)。监控: monitor_start/stop/poll (属性时间线采样)。信号: watch_start/stop/poll (信号事件记录)。',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -329,6 +332,8 @@ export function getToolDefinitions(): Tool[] {
           node_path: { type: 'string', description: 'monitor_start: 要监控的节点路径（如 root/Player）' },
           properties: { type: 'array', items: { type: 'string' }, description: 'monitor_start: 要监控的属性名列表（如 ["position", "health"]）' },
           interval_frames: { type: 'number', description: 'monitor_start: 采样间隔帧数（默认 10，最小 1，最大 300）' },
+          signal_name: { type: 'string', description: 'watch_start: 要监听的信号名（如 "pressed"、"health_changed"）' },
+          max_events: { type: 'number', description: 'watch_start: 最大记录事件数（默认 1000，最大 5000）' },
         },
         required: ['project_path', 'action'],
       },
@@ -501,6 +506,25 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       case 'monitor_poll': {
         if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
         const resp = await sendToBridge('monitor.poll', {}, (args.timeout as number) || DEFAULT_TIMEOUT);
+        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
+      }
+      case 'watch_start': {
+        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
+        const resp = await sendToBridge('watch.start', {
+          node_path: args.node_path as string ?? '',
+          signal_name: args.signal_name as string ?? '',
+          max_events: (args.max_events as number) ?? 1000,
+        }, (args.timeout as number) || DEFAULT_TIMEOUT);
+        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
+      }
+      case 'watch_stop': {
+        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
+        const resp = await sendToBridge('watch.stop', {}, (args.timeout as number) || DEFAULT_TIMEOUT);
+        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
+      }
+      case 'watch_poll': {
+        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
+        const resp = await sendToBridge('watch.poll', {}, (args.timeout as number) || DEFAULT_TIMEOUT);
         return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
       }
 

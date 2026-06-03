@@ -40,6 +40,14 @@ var _monitor_samples: Array = []
 var _monitor_max_samples: int = 500
 const MONITOR_MAX_PROPERTIES := 20
 
+# ─── Signal watch state ────────────────────────────────────────────────
+var _watch_active: bool = false
+var _watch_node_path: String = ""
+var _watch_signal_name: String = ""
+var _watch_events: Array = []
+var _watch_max_events: int = 1000
+var _watch_connected: bool = false
+
 const BLOCKED_PROPERTIES := [
 	"script", "owner", "process_mode", "process_priority", "process_input",
 	"process_unhandled_input", "process_unhandled_key_input", "process_internal",
@@ -376,6 +384,12 @@ func _handle_message(raw: String) -> String:
 			result = _cmd_monitor_stop()
 		"monitor.poll":
 			result = _cmd_monitor_poll()
+		"watch.start":
+			result = _cmd_watch_start(params)
+		"watch.stop":
+			result = _cmd_watch_stop()
+		"watch.poll":
+			result = _cmd_watch_poll()
 		_:
 			error = {"code": -32601, "message": "Method not found: %s" % method}
 
@@ -847,6 +861,159 @@ func _cmd_monitor_poll() -> Variant:
 		"node_path": _monitor_node_path,
 		"samples": samples,
 		"sample_count": samples.size(),
+	}
+
+
+# ─── Signal watch commands ──────────────────────────────────────────────
+
+func _on_watched_signal_0() -> void:
+	_record_watch_event([])
+
+func _on_watched_signal_1(arg0: Variant) -> void:
+	_record_watch_event([arg0])
+
+func _on_watched_signal_2(arg0: Variant, arg1: Variant) -> void:
+	_record_watch_event([arg0, arg1])
+
+func _on_watched_signal_3(arg0: Variant, arg1: Variant, arg2: Variant) -> void:
+	_record_watch_event([arg0, arg1, arg2])
+
+func _on_watched_signal_4(arg0: Variant, arg1: Variant, arg2: Variant, arg3: Variant) -> void:
+	_record_watch_event([arg0, arg1, arg2, arg3])
+
+
+func _record_watch_event(raw_args: Array) -> void:
+	if not _watch_active:
+		return
+	var safe_args: Array = []
+	for arg in raw_args:
+		safe_args.append(_jsonify(arg))
+	_watch_events.append({
+		"frame": Engine.get_process_frames(),
+		"time": Time.get_ticks_msec() / 1000.0,
+		"args": safe_args,
+	})
+	if _watch_events.size() >= _watch_max_events:
+		_do_watch_disconnect()
+		_watch_active = false
+
+
+func _do_watch_disconnect() -> void:
+	if not _watch_connected:
+		return
+	var node := get_node_or_null(_watch_node_path)
+	if node != null:
+		var callable := _get_watch_callable()
+		if node.has_signal(_watch_signal_name) and node.is_connected(_watch_signal_name, callable):
+			node.disconnect(_watch_signal_name, callable)
+	_watch_connected = false
+
+
+func _get_watch_callable() -> Callable:
+	# Pick the right lambda based on signal argument count
+	# We connect with the matching arity to avoid Godot type errors
+	var sig_list := []
+	var node := get_node_or_null(_watch_node_path)
+	if node != null and node.has_signal(_watch_signal_name):
+		sig_list = node.get_signal_list()
+	for sig_info in sig_list:
+		if sig_info.get("name", "") == _watch_signal_name:
+			var arg_count: int = sig_info.get("args", []).size()
+			match arg_count:
+				0: return _on_watched_signal_0
+				1: return _on_watched_signal_1
+				2: return _on_watched_signal_2
+				3: return _on_watched_signal_3
+				4: return _on_watched_signal_4
+				_: return _on_watched_signal_0
+	return _on_watched_signal_0
+
+
+func _cmd_watch_start(params: Dictionary) -> Variant:
+	var node_path: String = str(params.get("node_path", ""))
+	var signal_name: String = str(params.get("signal_name", ""))
+	var max_events: int = int(params.get("max_events", 1000))
+
+	if node_path == "":
+		return {"error": {"code": -1, "message": "node_path is required"}}
+	if signal_name == "":
+		return {"error": {"code": -2, "message": "signal_name is required"}}
+	if max_events < 1:
+		max_events = 1
+	if max_events > 5000:
+		max_events = 5000
+
+	var node := get_node_or_null(node_path)
+	if node == null:
+		return {"error": {"code": -3, "message": "Node not found: %s" % node_path}}
+	if not node.has_signal(signal_name):
+		return {"error": {"code": -4, "message": "Signal not found: %s on %s" % [signal_name, node_path]}}
+
+	# If already watching, disconnect first
+	if _watch_active:
+		_do_watch_disconnect()
+
+	var previous_events: Array = []
+	if _watch_events.size() > 0:
+		previous_events = _watch_events.duplicate(true)
+
+	# Temporarily set path/name so _get_watch_callable can resolve
+	_watch_node_path = node_path
+	_watch_signal_name = signal_name
+
+	var callable := _get_watch_callable()
+	var err := node.connect(signal_name, callable)
+	if err != OK:
+		_watch_connected = false
+		return {"error": {"code": -5, "message": "Failed to connect signal: %s (error %d)" % [signal_name, err]}}
+
+	_watch_active = true
+	_watch_connected = true
+	_watch_max_events = max_events
+	_watch_events = []
+
+	var result_dict: Dictionary = {
+		"watching": true,
+		"node_path": node_path,
+		"signal_name": signal_name,
+		"max_events": max_events,
+	}
+	if previous_events.size() > 0:
+		result_dict["previous_events"] = previous_events
+	return result_dict
+
+
+func _cmd_watch_stop() -> Variant:
+	if not _watch_active:
+		return {"watching": false, "events": [], "message": "No active watch"}
+	_do_watch_disconnect()
+	_watch_active = false
+	var events := _watch_events.duplicate(true)
+	var duration := 0.0
+	if events.size() > 0:
+		duration = events[events.size() - 1].get("time", 0.0) - events[0].get("time", 0.0)
+	var result_dict: Dictionary = {
+		"watching": false,
+		"node_path": _watch_node_path,
+		"signal_name": _watch_signal_name,
+		"events": events,
+		"event_count": events.size(),
+		"duration_seconds": duration,
+	}
+	_watch_events = []
+	return result_dict
+
+
+func _cmd_watch_poll() -> Variant:
+	if not _watch_active:
+		return {"watching": false, "events": [], "message": "No active watch"}
+	var events := _watch_events.duplicate(true)
+	return {
+		"watching": true,
+		"node_path": _watch_node_path,
+		"signal_name": _watch_signal_name,
+		"events": events,
+		"event_count": events.size(),
 	}
 
 
