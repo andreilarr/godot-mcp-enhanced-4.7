@@ -82,7 +82,7 @@ function log(...args: unknown[]): void {
 // ─── Server options ───────────────────────────────────────────────────────────
 
 export interface ServerOptions {
-  mode?: 'full' | 'lite' | 'minimal';
+  mode?: string;
   connectionMode?: 'headless' | 'editor';
   readOnly?: boolean;
   noFallback?: boolean;
