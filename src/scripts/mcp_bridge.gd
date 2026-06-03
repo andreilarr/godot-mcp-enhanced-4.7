@@ -147,7 +147,7 @@ func _process(_delta: float) -> void:
 			var node := get_node_or_null(_monitor_node_path)
 			if node == null:
 				_monitor_active = false
-				_monitor_samples.append({"frame": Engine.get_process_frames(), "time": Time.get_ticks_msec() / 1000.0, "error": "node_lost"})
+				_monitor_samples.append({"frame": Engine.get_process_frames(), "time": Time.get_ticks_msec() / 1000.0, "error": "node_lost", "stopped_reason": "node_lost"})
 			else:
 				var values: Dictionary = {}
 				for prop in _monitor_properties:
@@ -576,14 +576,17 @@ func _jsonify(val: Variant) -> Variant:
 func _traverse_tree(callback: Callable, opts: Dictionary = {}) -> Array:
 	var root_node: Node = opts.get("root", get_tree().root) as Node
 	var max_results: int = int(opts.get("max_results", 500))
+	var max_visited: int = int(opts.get("max_visited", 5000))
 	if root_node == null:
 		return []
 	var results: Array = []
 	var stack: Array[Node] = [root_node]
-	while stack.size() > 0 and results.size() < max_results:
+	var visited: int = 0
+	while stack.size() > 0 and results.size() < max_results and visited < max_visited:
 		var node: Node = stack.pop_back()
 		if node == null:
 			continue
+		visited += 1
 		if callback.call(node):
 			results.append(node)
 		var children := node.get_children()
@@ -852,6 +855,12 @@ func _cmd_monitor_stop() -> Variant:
 	var duration := 0.0
 	if samples.size() > 0:
 		duration = samples[samples.size() - 1].get("time", 0.0) - samples[0].get("time", 0.0)
+	# I-03: extract stopped_reason from last sample
+	var stopped_reason: String = ""
+	if samples.size() > 0:
+		var last: Dictionary = samples[-1]
+		if last.has("stopped_reason"):
+			stopped_reason = last["stopped_reason"]
 	var result_dict: Dictionary = {
 		"monitoring": false,
 		"samples": samples,
@@ -859,6 +868,8 @@ func _cmd_monitor_stop() -> Variant:
 		"total_frames": Engine.get_process_frames(),
 		"duration_seconds": duration,
 	}
+	if stopped_reason != "":
+		result_dict["stopped_reason"] = stopped_reason
 	_monitor_samples = []
 	_monitor_properties = []
 	return result_dict
@@ -866,7 +877,16 @@ func _cmd_monitor_stop() -> Variant:
 
 func _cmd_monitor_poll() -> Variant:
 	if not _monitor_active:
-		return {"monitoring": false, "samples": [], "message": "No active monitor"}
+		# I-03: return last stopped_reason
+		var last_reason: String = ""
+		if _monitor_samples.size() > 0:
+			var last: Dictionary = _monitor_samples[-1]
+			if last.has("stopped_reason"):
+				last_reason = last["stopped_reason"]
+		var msg := "No active monitor"
+		if last_reason != "":
+			msg = "Monitor stopped: %s" % last_reason
+		return {"monitoring": false, "samples": [], "stopped_reason": last_reason, "message": msg}
 	var samples := _monitor_samples.duplicate(true)
 	return {
 		"monitoring": true,
@@ -1076,37 +1096,30 @@ func _cmd_find_ui_elements(params: Dictionary) -> Variant:
 	if max_results > 500:
 		max_results = 500
 
-	var results: Array = []
-	var stack: Array = [get_tree().root]
+	# A-06: 复用 _traverse_tree + callback 过滤
+	var results: Array = _traverse_tree(
+		func(node: Node) -> bool:
+			if not node is Control:
+				return false
+			var ctrl: Control = node as Control
+			if visible_only and not ctrl.visible:
+				return false
+			if pattern != "":
+				var text_to_match := ""
+				if "text" in ctrl:
+					text_to_match = str(ctrl.get("text"))
+				if not ctrl.name.match(pattern) and not text_to_match.match(pattern):
+					return false
+			if type_filter != "" and not ctrl.is_class(type_filter):
+				return false
+			return true,
+		{"max_results": max_results, "max_visited": 5000}
+	)
 
-	while stack.size() > 0 and results.size() < max_results:
-		var node: Node = stack.pop_back()
-		if node == null:
-			continue
-		if not node is Control:
-			for child in node.get_children():
-				stack.append(child)
-			continue
-		var ctrl: Control = node as Control
-		if visible_only and not ctrl.visible:
-			for child in ctrl.get_children():
-				stack.append(child)
-			continue
-		var match_found := true
-		if pattern != "":
-			var text_to_match := ""
-			if "text" in ctrl:
-				text_to_match = str(ctrl.get("text"))
-			if not ctrl.name.match(pattern) and not text_to_match.match(pattern):
-				match_found = false
-		if match_found and type_filter != "" and not ctrl.is_class(type_filter):
-			match_found = false
-		if match_found:
-			results.append(_extract_ui_data(ctrl))
-		for child in ctrl.get_children():
-			stack.append(child)
-
-	return {"elements": results, "count": results.size()}
+	var extracted: Array = []
+	for node in results:
+		extracted.append(_extract_ui_data(node as Control))
+	return {"elements": extracted, "count": extracted.size()}
 
 
 func _cmd_click_button(params: Dictionary) -> Variant:
@@ -1128,6 +1141,8 @@ func _cmd_click_button(params: Dictionary) -> Variant:
 			var node: Node = stack.pop_back()
 			if node is BaseButton:
 				var btn: BaseButton = node as BaseButton
+					if btn.disabled:
+						continue  # I-02: skip disabled buttons
 				var btn_text := str(btn.get("text")) if btn.get("text") != null else ""
 				if btn_text == text and btn.visible:
 					target = btn
@@ -1138,6 +1153,10 @@ func _cmd_click_button(params: Dictionary) -> Variant:
 			return {"error": {"code": -3, "message": "No visible Button with text \"%s\" found" % text}}
 	else:
 		return {"error": {"code": -4, "message": "Either text or path is required"}}
+
+	# I-02: skip disabled buttons
+	if target.disabled:
+		return {"error": {"code": -5, "message": "Button is disabled: %s" % str(target.get_path())}}
 
 	target.emit_signal("pressed")
 	return {

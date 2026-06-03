@@ -645,8 +645,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
               }
             }
 
-            // Shader 引用检查：shader = "res://xxx.gdshader"
-            const shaderRegex = /shader\s*=\s*"([^"]+\.gdshader)"/g;
+            // Shader 引用检查：shader = "res://xxx.gdshader" (A-09: skip comment lines)
+            const shaderRegex = /^[^;]*shader\s*=\s*"([^"]+\.gdshader)"/gm;
             while ((match = shaderRegex.exec(content)) !== null) {
               const shaderPath = match[1];
               if (!shaderPath.startsWith('res://')) continue;
@@ -661,8 +661,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
               }
             }
 
-            // Texture 引用检查：texture = ExtResource("xxx") 确保引用 ID 在上方定义
-            const texRefRegex = /texture\s*=\s*ExtResource\("([^"]+)"\)/g;
+            // Texture 引用检查：texture = ExtResource("xxx") 确保引用 ID 在上方定义 (A-09: skip comment lines)
+            const texRefRegex = /^[^;]*texture\s*=\s*ExtResource\("([^"]+)"\)/gm;
             while ((match = texRefRegex.exec(content)) !== null) {
               const refId = match[1];
               const defRegex = new RegExp(`\\[ext_resource[^\\]]*id="${refId}"`, 's');

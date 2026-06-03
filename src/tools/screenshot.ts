@@ -85,18 +85,15 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       if (result.success) {
         // 双层空白检测：GDScript BLANK_DETECTED + TS 侧 fileSize 阈值
-        let blankWarningAdded = false;
         let blankWarning = '';
 
         if (result.godotOutput?.includes('BLANK_DETECTED')) {
           blankWarning = '\n⚠ Screenshot may be blank (2D rendering limitation in headless mode).\n' +
             'For 2D projects, consider using screenshot(action=analyze) with a user-provided screenshot instead.';
-          blankWarningAdded = true;
-        } else if ((result.fileSize ?? 0) < 5120) {
-          // 小文件（< 5KB）疑似空白，补充警告
+        } else if ((result.fileSize ?? 0) < 2048) {
+          // 小文件（< 2KB）疑似空白，补充警告
           blankWarning = `\n⚠ Screenshot file is unusually small (${result.fileSize} bytes), possibly blank.\n` +
             'For 2D projects, consider using screenshot(action=analyze) with a user-provided screenshot instead.';
-          blankWarningAdded = true;
         }
 
         return textResult(

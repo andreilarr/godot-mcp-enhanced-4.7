@@ -50,8 +50,8 @@ func handle_save_scene(params: Dictionary) -> Dictionary:
 	var err: int
 	var save_method: String
 	if root.scene_file_path.is_empty() or _normalize_project_path(root.scene_file_path) != normalized:
-		ei.save_scene_as(normalized)
-		# IMPORTANT-1: save_scene_as 是 void，保存后验证文件存在
+		ei.save_scene_as(normalized, false)
+		# IMPORTANT-1: save_scene_as 是 void 同步调用，保存后验证文件存在
 		var abs_path: String = ProjectSettings.globalize_path(normalized)
 		err = OK if FileAccess.file_exists(abs_path) else FAILED
 		save_method = "save_scene_as"
