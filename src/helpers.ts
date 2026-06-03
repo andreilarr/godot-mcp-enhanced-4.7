@@ -138,7 +138,11 @@ export function requireNumber(args: Record<string, unknown>, key: string, fallba
 
 /** Convenience: require and validate project_path in one call. */
 export function requireProjectPath(args: Record<string, unknown>): string {
-  return validatePath(requireString(args, 'project_path'));
+  const resolved = validatePath(requireString(args, 'project_path'));
+  if (!isPathInAllowedRoots(resolved)) {
+    throw new Error(`project_path not in ALLOWED_PROJECT_PATHS: ${resolved}. Set ALLOWED_PROJECT_PATHS or GODOT_MCP_UNRESTRICTED=true.`);
+  }
+  return resolved;
 }
 
 export function normalizeUserProjectPath(input: string): string {

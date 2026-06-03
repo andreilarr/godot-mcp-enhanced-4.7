@@ -747,14 +747,20 @@ func _cmd_wait_for_property(params: Dictionary) -> Variant:
 
 func _cmd_take_screenshot(params: Dictionary) -> Variant:
 	var path: String = str(params.get("path", "user://mcp_screenshot.png"))
-	if not path.begins_with("user://") or ".." in path:
-		return {"error": {"code": -1, "message": "Screenshot path must be user:// and contain no traversal"}}
+	# Normalize and check traversal
+	var clean_path: String = path.replace("\\", "/").uri_decode()
+	if not clean_path.begins_with("user://"):
+		return {"error": {"code": -1, "message": "Screenshot path must start with user://"}}
+	# Check each segment for traversal
+	for segment in clean_path.substr(8).split("/"):
+		if segment == ".." or segment == ".":
+			return {"error": {"code": -1, "message": "Screenshot path contains directory traversal"}}
 	var viewport := get_viewport()
 	var img := viewport.get_texture().get_image()
-	var err := img.save_png(path)
+	var err := img.save_png(clean_path)
 	if err != OK:
 		return {"error": {"code": -2, "message": "Failed to save screenshot: error %d" % err}}
-	return {"success": true, "path": path, "size": {"x": img.get_width(), "y": img.get_height()}}
+	return {"success": true, "path": clean_path, "size": {"x": img.get_width(), "y": img.get_height()}}
 
 
 func _cmd_get_performance() -> Dictionary:
