@@ -58,7 +58,6 @@ const DEFAULT_RETENTION_DAYS = 7;
 const MAX_STRING_LEN = 200;
 const TOOL_TIMEOUT_MS = 60_000;
 const SENSITIVE_RE = /password|secret|token|key|auth/i;
-const LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error'];
 
 // ---------------------------------------------------------------------------
 // 内部工具函数
@@ -176,7 +175,6 @@ function createLogger(opts: LoggerOptions = {}): Logger {
 
   function openFd(): void {
     ensureDir();
-    const path = currentFilePath();
     if (fd !== null) {
       // 已有 fd，检查是否需要轮转（日期变更）
       const today = todayStr();
