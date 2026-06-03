@@ -10,7 +10,15 @@ import { findInstanceNode, detachInstance, nodePathToNameAndParent } from '../ts
 import { executeGdscript } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, opsErrorResult, parseGdscriptResult, sanitizeResPath } from './shared.js';
 import { normalizeNodePath, gdEscape, toSnakeCase, valueToGd } from './shared.js';
-import { forceKillTree, acquireShortRunningSlot, releaseShortRunningSlot } from '../core/process-state.js';
+import { forceKillTree, acquireShortRunningSlot, releaseShortRunningSlot, getShortRunningCount } from '../core/process-state.js';
+
+/** Validate that a value is a non-empty string; returns opsErrorResult if not. */
+function requireScenePath(value: unknown): ToolResult | null {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return opsErrorResult('INVALID_PARAMS', `scene_path must be a non-empty string, got: ${value === undefined ? 'undefined' : value === null ? 'null' : typeof value}`);
+  }
+  return null;
+}
 
 const ACTIONS = [
   'read_scene', 'create_scene', 'add_node', 'save_scene', 'load_sprite',
@@ -87,6 +95,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
   switch (action) {
     case 'read_scene': {
+      const spErr = requireScenePath(args.scene_path);
+      if (spErr) return spErr;
       const sp = resolveWithinRoot(requireProjectPath(args), normalizeUserProjectPath(args.scene_path as string));
       if (!existsSync(sp)) return textResult(`Scene file not found: ${sp}`);
 
@@ -511,25 +521,29 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'edit_node': {
-      const p = requireProjectPath(args);
-      const scenePath = resolveWithinRoot(p, normalizeUserProjectPath(args.scene_path as string));
-      const nodePath = normalizeNodePath(args.node_path as string);
-      const properties = args.properties as Record<string, unknown>;
-      if (!properties || typeof properties !== 'object' || Object.keys(properties).length === 0) {
-        return opsErrorResult('INVALID_PARAMS', '"properties" must be a non-empty object.');
-      }
-
-      // Build GDScript property setter lines
-      let propLines = '';
-      for (const [key, value] of Object.entries(properties)) {
-        const gdKey = toSnakeCase(key);
-        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(gdKey)) {
-          return textResult(`Error: Invalid property name: "${key}"`);
+      const spErr = requireScenePath(args.scene_path);
+      if (spErr) return spErr;
+      if (!acquireShortRunningSlot()) return opsErrorResult('CONCURRENCY_LIMIT', 'too many concurrent headless operations (max 3). Please wait and retry.');
+      try {
+        const p = requireProjectPath(args);
+        const scenePath = resolveWithinRoot(p, normalizeUserProjectPath(args.scene_path as string));
+        const nodePath = normalizeNodePath(args.node_path as string);
+        const properties = args.properties as Record<string, unknown>;
+        if (!properties || typeof properties !== 'object' || Object.keys(properties).length === 0) {
+          return opsErrorResult('INVALID_PARAMS', '"properties" must be a non-empty object.');
         }
-        propLines += `\n\t${gdScriptSetLine(gdKey, value)}`;
-      }
 
-      const script = `${SCENE_TREE_HEADER}
+        // Build GDScript property setter lines
+        let propLines = '';
+        for (const [key, value] of Object.entries(properties)) {
+          const gdKey = toSnakeCase(key);
+          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(gdKey)) {
+            return textResult(`Error: Invalid property name: "${key}"`);
+          }
+          propLines += `\n\t${gdScriptSetLine(gdKey, value)}`;
+        }
+
+        const script = `${SCENE_TREE_HEADER}
 ${TRY_SET_HELPER}
 func _initialize():
 \tif not _mcp_load_scene("${gdEscape(scenePath)}"):
@@ -543,22 +557,29 @@ func _initialize():
 \t_mcp_output("edited", {"node": "${gdEscape(nodePath)}"})
 \t_mcp_done()
 `;
-      const godot = await ctx.findGodot();
-      const loadAutoloads = args.load_autoloads !== false;
-      const result = await executeGdscript({
-        godotPath: godot, projectPath: p, code: script, timeout: 30, loadAutoloads,
-      });
-      return parseGdscriptResult(result, [], (msg) => msg.includes('not found') ? 'NODE_NOT_FOUND' : 'SCRIPT_EXEC_FAILED', {
-        suggestion: 'Use query_scene_tree to list available nodes, or inspect_node to check a specific path.',
-      });
+        const godot = await ctx.findGodot();
+        const loadAutoloads = args.load_autoloads !== false;
+        const result = await executeGdscript({
+          godotPath: godot, projectPath: p, code: script, timeout: 30, loadAutoloads,
+        });
+        return parseGdscriptResult(result, [], (msg) => msg.includes('not found') ? 'NODE_NOT_FOUND' : 'SCRIPT_EXEC_FAILED', {
+          suggestion: 'Use query_scene_tree to list available nodes, or inspect_node to check a specific path.',
+        });
+      } finally {
+        releaseShortRunningSlot();
+      }
     }
 
     case 'remove_node': {
-      const p = requireProjectPath(args);
-      const scenePath = resolveWithinRoot(p, normalizeUserProjectPath(args.scene_path as string));
-      const nodePath = normalizeNodePath(args.node_path as string);
+      const spErr = requireScenePath(args.scene_path);
+      if (spErr) return spErr;
+      if (!acquireShortRunningSlot()) return opsErrorResult('CONCURRENCY_LIMIT', 'too many concurrent headless operations (max 3). Please wait and retry.');
+      try {
+        const p = requireProjectPath(args);
+        const scenePath = resolveWithinRoot(p, normalizeUserProjectPath(args.scene_path as string));
+        const nodePath = normalizeNodePath(args.node_path as string);
 
-      const script = `${SCENE_TREE_HEADER}
+        const script = `${SCENE_TREE_HEADER}
 func _initialize():
 \tif not _mcp_load_scene("${gdEscape(scenePath)}"):
 \t\t_mcp_done()
@@ -579,14 +600,17 @@ func _initialize():
 \t\t_mcp_output("error", "Cannot remove root node")
 \t_mcp_done()
 `;
-      const godot = await ctx.findGodot();
-      const loadAutoloads = args.load_autoloads !== false;
-      const result = await executeGdscript({
-        godotPath: godot, projectPath: p, code: script, timeout: 30, loadAutoloads,
-      });
-      return parseGdscriptResult(result, [], (msg) => msg.includes('not found') ? 'NODE_NOT_FOUND' : 'SCRIPT_EXEC_FAILED', {
-        suggestion: 'Use query_scene_tree to list available nodes, or inspect_node to check a specific path.',
-      });
+        const godot = await ctx.findGodot();
+        const loadAutoloads = args.load_autoloads !== false;
+        const result = await executeGdscript({
+          godotPath: godot, projectPath: p, code: script, timeout: 30, loadAutoloads,
+        });
+        return parseGdscriptResult(result, [], (msg) => msg.includes('not found') ? 'NODE_NOT_FOUND' : 'SCRIPT_EXEC_FAILED', {
+          suggestion: 'Use query_scene_tree to list available nodes, or inspect_node to check a specific path.',
+        });
+      } finally {
+        releaseShortRunningSlot();
+      }
     }
 
     case 'instance_scene': {
