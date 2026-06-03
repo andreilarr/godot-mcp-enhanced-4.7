@@ -33,9 +33,10 @@ export interface DashboardState {
 const RECENT_LOGS_CAPACITY = 500;
 const TIME_SERIES_MAX_BUCKETS = 30;
 
+/** 提取分钟级 key（本地时间，避免 UTC 偏移显示错误） */
 function minuteKey(ts: string): string {
   const d = new Date(ts);
-  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 export class Aggregator {
@@ -43,6 +44,7 @@ export class Aggregator {
   private totalErrors = 0;
   private toolStats = new Map<string, ToolStats>();
   private timeSeriesBuf = new RingBuffer<TimeSeriesBucket>(TIME_SERIES_MAX_BUCKETS);
+  private timeSeriesMap = new Map<string, TimeSeriesBucket>();
   private recentLogs = new RingBuffer<LogEntry>(RECENT_LOGS_CAPACITY);
   private mode = 'unknown';
   private projectPath = '';
@@ -95,21 +97,22 @@ export class Aggregator {
     }
 
     const key = minuteKey(entry.ts);
-    const buckets = this.timeSeriesBuf.toArray();
-    const existingBucket = buckets.find(b => b.minute === key);
+    const existingBucket = this.timeSeriesMap.get(key);
     if (existingBucket) {
       existingBucket.calls++;
       existingBucket.errors += isError ? 1 : 0;
       existingBucket.totalDurationMs += durationMs;
       existingBucket.count++;
     } else {
-      this.timeSeriesBuf.push({
+      const bucket: TimeSeriesBucket = {
         minute: key,
         calls: 1,
         errors: isError ? 1 : 0,
         totalDurationMs: durationMs,
         count: 1,
-      });
+      };
+      this.timeSeriesBuf.push(bucket);
+      this.timeSeriesMap.set(key, bucket);
     }
   }
 

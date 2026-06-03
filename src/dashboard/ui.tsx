@@ -46,10 +46,11 @@ function LogLine({ entry }: { entry: LogEntry }) {
   );
 }
 
-function LogStream({ logs, filter, levelFilter }: {
+function LogStream({ logs, filter, levelFilter, scrollOffset }: {
   logs: LogEntry[];
   filter: string;
   levelFilter: string;
+  scrollOffset: number;
 }) {
   let filtered = logs;
   if (filter) {
@@ -61,12 +62,18 @@ function LogStream({ logs, filter, levelFilter }: {
     filtered = filtered.filter(e => e.level === levelFilter.toLowerCase());
   }
 
+  // C-01: 支持 scrollOffset 从底部向上滚动
+  const maxVisible = 15;
+  const endIdx = Math.max(0, filtered.length - scrollOffset);
+  const startIdx = Math.max(0, endIdx - maxVisible);
+  const visible = filtered.slice(startIdx, endIdx);
+
   return (
     <Box flexDirection="column" flexGrow={1} borderStyle="single" borderColor={BORDER_COLOR} paddingX={0}>
       <Text bold> Log Stream (live)</Text>
       <Box flexDirection="column" flexGrow={1} overflow="hidden">
-        {filtered.slice(-15).map((entry, i) => (
-          <LogLine key={i} entry={entry} />
+        {visible.map((entry, i) => (
+          <LogLine key={`${entry.ts}-${i}`} entry={entry} />
         ))}
       </Box>
     </Box>
@@ -134,14 +141,20 @@ function Dashboard({ stateStream, initialFilter }: {
   const [levelFilter, setLevelFilter] = useState('ALL');
   const [inputMode, setInputMode] = useState<'normal' | 'filter'>('normal');
   const [filterInput, setFilterInput] = useState('');
+  const [scrollOffset, setScrollOffset] = useState(0);
+  const [streamEnded, setStreamEnded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       for await (const s of stateStream) {
         if (cancelled) break;
-        if (!paused) setState(s);
+        if (!paused) {
+          setState(s);
+          setScrollOffset(0);
+        }
       }
+      if (!cancelled) setStreamEnded(true);
     })();
     return () => { cancelled = true; };
   }, [paused]);
@@ -174,7 +187,17 @@ function Dashboard({ stateStream, initialFilter }: {
       const idx = levels.indexOf(levelFilter);
       setLevelFilter(levels[(idx + 1) % levels.length]);
     } else if (input === 'c') {
-      if (state) state.recentLogs.clear();
+      // C-02: clear 后强制重渲染
+      if (state) {
+        state.recentLogs.clear();
+        setState({ ...state });
+      }
+    } else if (key.upArrow) {
+      // C-01: 向上滚动（查看更早的日志）
+      setScrollOffset(prev => prev + 1);
+    } else if (key.downArrow) {
+      // C-01: 向下滚动（回到最新）
+      setScrollOffset(prev => Math.max(0, prev - 1));
     }
   });
 
@@ -190,6 +213,7 @@ function Dashboard({ stateStream, initialFilter }: {
           logs={state.recentLogs.toArray()}
           filter={filter}
           levelFilter={levelFilter}
+          scrollOffset={scrollOffset}
         />
         <Box flexDirection="column">
           <ToolStatsTable tools={[...state.toolStats.values()]} />
@@ -199,6 +223,9 @@ function Dashboard({ stateStream, initialFilter }: {
       <KeybindBar filter={filter} levelFilter={levelFilter} />
       {inputMode === 'filter' && (
         <Text color="yellow">Filter: {filterInput}_</Text>
+      )}
+      {streamEnded && (
+        <Text color="yellow">Stream ended — press q to quit</Text>
       )}
     </Box>
   );

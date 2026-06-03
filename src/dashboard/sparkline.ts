@@ -54,6 +54,8 @@ export function sparkline(data: number[], opts: SparklineOptions = {}): string {
   return values
     .map(v => {
       if (!Number.isFinite(v)) return CHARS[0];
+      // A-01: 单值 range===0 → 满格（█），多值相同 → 最低（▁）
+      // 语义：单个数据点暗示"有数据"显示满格；多个相同值无法区分高低显示最低
       if (range === 0) return singlePoint ? CHARS[CHARS.length - 1] : CHARS[0];
       const normalized = (v - min) / range;
       const idx = Math.min(Math.floor(normalized * (CHARS.length - 1)), CHARS.length - 1);

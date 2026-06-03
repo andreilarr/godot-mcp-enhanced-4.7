@@ -14,6 +14,7 @@ export interface LogReaderEvents {
 
 const DEFAULT_POLL_MS = 2000;
 const MAX_INITIAL_LINES = 500;
+const INITIAL_READ_CAP = 100 * 1024; // 初始最多读最后 100KB
 
 class LogReader extends EventEmitter {
   private logDir: string;
@@ -21,6 +22,7 @@ class LogReader extends EventEmitter {
   private byteOffset = 0;
   private currentFile = '';
   private skippedCount = 0;
+  private pendingTail = '';
   private watcher: ReturnType<typeof watch> | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private stopped = false;
@@ -35,12 +37,17 @@ class LogReader extends EventEmitter {
     this.currentFile = this.getTodayFile();
 
     if (existsSync(this.currentFile)) {
-      const result = this.readFromOffset(this.currentFile, 0);
+      const stat = statSync(this.currentFile);
+      // A-03: 大文件只读最后 100KB，避免全量加载
+      const startOffset = Math.max(0, stat.size - INITIAL_READ_CAP);
+      const result = this.readFromOffset(this.currentFile, startOffset);
       const trimmed = result.entries.slice(-MAX_INITIAL_LINES);
       if (trimmed.length > 0) {
         this.emit('entries', trimmed);
       }
-      this.byteOffset = result.bytesRead;
+      // 初始加载后从文件末尾开始增量读取
+      this.byteOffset = stat.size;
+      this.pendingTail = '';
     }
 
     this.startWatch();
@@ -97,6 +104,7 @@ class LogReader extends EventEmitter {
     if (todayFile !== this.currentFile) {
       this.currentFile = todayFile;
       this.byteOffset = 0;
+      this.pendingTail = ''; // 日期切换时清除旧文件尾部残留
     }
 
     if (!existsSync(this.currentFile)) return;
@@ -123,7 +131,7 @@ class LogReader extends EventEmitter {
 
   /**
    * 用 readSync + Buffer 从 byteOffset 读取增量内容。
-   * 精确的字节操作，不依赖字符串偏移。
+   * I-03: 用 pendingTail 缓冲不完整尾部，防止 UTF-8 多字节截断。
    */
   private readFromOffset(filePath: string, offset: number): { entries: LogEntry[]; bytesRead: number } {
     try {
@@ -147,8 +155,26 @@ class LogReader extends EventEmitter {
         return { entries: [], bytesRead: 0 };
       }
 
-      const content = buf.toString('utf-8', 0, totalBytes);
-      const lines = content.split('\n').filter(l => l.trim().length > 0);
+      // I-03: 拼接上次的尾部不完整行
+      const raw = buf.toString('utf-8', 0, totalBytes);
+      const content = this.pendingTail + raw;
+      this.pendingTail = '';
+
+      // 找到最后一个 \n，其后的内容可能是不完整行
+      const lastNl = content.lastIndexOf('\n');
+      let completeContent: string;
+      if (lastNl >= 0 && lastNl < content.length - 1) {
+        this.pendingTail = content.slice(lastNl + 1);
+        completeContent = content.slice(0, lastNl);
+      } else if (lastNl === content.length - 1) {
+        completeContent = content;
+      } else {
+        // 没有 \n — 全部是不完整行，留到下次
+        this.pendingTail = content;
+        return { entries: [], bytesRead: totalBytes };
+      }
+
+      const lines = completeContent.split('\n').filter(l => l.trim().length > 0);
 
       const entries: LogEntry[] = [];
       for (const line of lines) {

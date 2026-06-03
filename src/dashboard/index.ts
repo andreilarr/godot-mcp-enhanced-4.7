@@ -12,11 +12,20 @@ import type { DashboardState } from './aggregator.js';
 async function checkInk(): Promise<void> {
   try {
     await import('ink');
+  } catch {
+    console.error(
+      'Error: ink is required for the dashboard.\n' +
+      'Install it with: npm install ink\n' +
+      'Or reinstall the package with optional dependencies.'
+    );
+    process.exit(1);
+  }
+  try {
     await import('react');
   } catch {
     console.error(
-      'Error: ink and react are required for the dashboard.\n' +
-      'Install them with: npm install ink react\n' +
+      'Error: react is required for the dashboard (ink peer dependency).\n' +
+      'Install it with: npm install react\n' +
       'Or reinstall the package with optional dependencies.'
     );
     process.exit(1);
@@ -92,11 +101,14 @@ function createStateStream(
     }
   });
 
-  reader.on('error', (_err: Error) => {
-    // 静默处理读取错误，不中断面板
+  reader.on('error', (err: Error) => {
+    // I-04: 输出错误信息到 stderr，让用户知道发生了什么
+    console.error('[dashboard] Log read error:', err.message);
   });
 
-  reader.start().catch(() => {});
+  reader.start().catch((err: Error) => {
+    console.error('[dashboard] Failed to start log reader:', err.message);
+  });
 
   abortSignal.addEventListener('abort', () => {
     reader.stop();
