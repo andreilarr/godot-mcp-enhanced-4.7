@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, readdirSync } from '
 import { join } from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { getLogger } from './core/logger.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -162,7 +163,7 @@ export function getAllowedProjectPaths(): string[] {
 export function allowOutsideProjectPaths(): boolean {
   // Deprecated: ALLOW_OUTSIDE_PROJECT_PATHS — use ALLOWED_PROJECT_PATHS whitelist instead
   if (process.env.ALLOW_OUTSIDE_PROJECT_PATHS === 'true') {
-    console.error('[SECURITY] [DEPRECATED] ALLOW_OUTSIDE_PROJECT_PATHS is enabled — migrate to ALLOWED_PROJECT_PATHS whitelist');
+    getLogger().error('security', 'ALLOW_OUTSIDE_PROJECT_PATHS is enabled — migrate to ALLOWED_PROJECT_PATHS whitelist');
     return true;
   }
   return false;
@@ -181,14 +182,14 @@ function ensureSep(p: string): string {
  *  Explicit override: GODOT_MCP_UNRESTRICTED=true allows all paths. */
 export function isPathInAllowedRoots(requestedPath: string): boolean {
   if (process.env.GODOT_MCP_UNRESTRICTED === 'true') {
-    console.warn('[SECURITY] GODOT_MCP_UNRESTRICTED=true — all path restrictions bypassed');
+    getLogger().warn('security', 'GODOT_MCP_UNRESTRICTED=true — all path restrictions bypassed');
     return true;
   }
   if (allowOutsideProjectPaths()) return true;
   const allowed = getAllowedProjectPaths();
   if (allowed.length === 0) {
     if (!_pathAllowWarned) {
-      console.warn('[SECURITY] ALLOWED_PROJECT_PATHS not set — restricted to process.cwd(). Set ALLOWED_PROJECT_PATHS or GODOT_MCP_UNRESTRICTED=true to override.');
+      getLogger().warn('security', 'ALLOWED_PROJECT_PATHS not set — restricted to process.cwd(). Set ALLOWED_PROJECT_PATHS or GODOT_MCP_UNRESTRICTED=true to override.');
       _pathAllowWarned = true;
     }
     const cwd = resolvePath(process.cwd());
@@ -243,7 +244,7 @@ export async function checkVersionMismatch(projectPath: string, godotBin: string
     }
     return null;
   } catch (err) {
-    console.warn('[helpers] checkVersionMismatch failed:', (err as Error).message);
+    getLogger().warn('helpers', `checkVersionMismatch failed: ${(err as Error).message}`);
     return null;
   }
 }
@@ -392,7 +393,7 @@ export function scanFiles(
           results.push(full);
         }
       }
-    } catch (err) { console.debug('[helpers] scanFiles:', err); }
+    } catch (err) { getLogger().debug('helpers', `scanFiles: ${err}`); }
   }
   scan(rootDir, 0);
   return results;

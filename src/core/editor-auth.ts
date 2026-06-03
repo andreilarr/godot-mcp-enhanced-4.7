@@ -2,6 +2,7 @@
 import { readFileSync, chmodSync, statSync } from 'fs';
 import { join } from 'path';
 import { execFileSync } from 'child_process';
+import { getLogger } from './logger.js';
 
 const SECRET_FILE_NAME = 'mcp_editor.key';
 let _permWarned = false;
@@ -15,7 +16,7 @@ function restrictFileWindows(filePath: string): boolean {
     if (!/^[A-Za-z0-9_\-\\]+$/.test(username)) {
       if (!_permWarned) {
         _permWarned = true;
-        console.error(`[SECURITY] Cannot set ACL: USERNAME "${username}" contains unexpected characters.`);
+        getLogger().error('security', `Cannot set ACL: USERNAME "${username}" contains unexpected characters.`);
       }
       return false;
     }
@@ -28,7 +29,7 @@ function restrictFileWindows(filePath: string): boolean {
     if (!output.toLowerCase().includes(effectiveUser.toLowerCase())) {
       if (!_permWarned) {
         _permWarned = true;
-        console.error(`[SECURITY] ACL verification failed for ${filePath}: ${output.trim()}`);
+        getLogger().error('security', `ACL verification failed for ${filePath}: ${output.trim()}`);
       }
       return false;
     }
@@ -36,7 +37,7 @@ function restrictFileWindows(filePath: string): boolean {
   } catch {
     if (!_permWarned) {
       _permWarned = true;
-      console.error(`[SECURITY] Failed to set Windows ACL on ${filePath}`);
+      getLogger().error('security', `Failed to set Windows ACL on ${filePath}`);
     }
     return false;
   }
@@ -48,12 +49,12 @@ function checkFilePermissions(filePath: string): boolean {
     // Windows: restrictFileWindows applies ACL restrictions; always returns true.
     return restrictFileWindows(filePath);
   }
-  try { chmodSync(filePath, 0o600); } catch (err) { console.debug('[editor-auth] chmod secret:', err); }
+  try { chmodSync(filePath, 0o600); } catch (err) { getLogger().debug('auth', `chmod secret: ${err}`); }
   const stat = statSync(filePath);
   if ((stat.mode & 0o007) !== 0) {
     if (!_permWarned) {
       _permWarned = true;
-      console.error(`[SECURITY] Editor secret ${filePath} is world-readable. Attempted chmod 0600.`);
+      getLogger().error('security', `Editor secret ${filePath} is world-readable. Attempted chmod 0600.`);
     }
     return false;
   }
@@ -67,7 +68,7 @@ export function readEditorSecret(projectPath: string): string | null {
     // Read directly without existsSync to avoid TOCTOU race between check and read.
     const content = readFileSync(secretPath, 'utf-8').trim();
     if (!checkFilePermissions(secretPath)) {
-      console.error(`[SECURITY] Refusing to use editor secret with insecure permissions: ${secretPath}`);
+      getLogger().error('security', `Refusing to use editor secret with insecure permissions: ${secretPath}`);
       return null;
     }
     return content;

@@ -6,6 +6,7 @@ import { appendOutput, clearOutputBuffer, killProcess, forceKillTree, setProcess
 import { requireProjectPath, checkVersionMismatch, buildSafeEnv } from '../helpers.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { getLogger } from '../core/logger.js';
 
 const ACTIONS = [
   'launch_editor',
@@ -82,7 +83,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const godot = await ctx.findGodot();
       const child = spawn(godot, ['--editor', '--path', p], { detached: true, stdio: 'ignore', env: buildSafeEnv() });
       child.on('error', (err) => {
-        console.error(`[runtime] Failed to launch editor: ${err.message}`);
+        getLogger().error('runtime', `Failed to launch editor: ${err.message}`);
       });
       child.unref();
       return textResult(`Launched Godot editor for project: ${p}`);

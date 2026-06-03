@@ -1,5 +1,6 @@
 // src/core/EditorConnection.ts
 import WebSocket from 'ws';
+import { getLogger } from './logger.js';
 
 // Auth uses a dedicated id outside the normal requestId sequence to avoid conflicts
 const AUTH_REQUEST_ID = -1;
@@ -174,7 +175,7 @@ export class EditorConnection {
             this.authFailureCount++;
             if (this.authFailureCount >= MAX_AUTH_FAILURES) {
               this.authLockoutUntil = Date.now() + AUTH_LOCKOUT_MS;
-              console.error(`[AUTH] Locked out for ${AUTH_LOCKOUT_MS / 1000}s after ${MAX_AUTH_FAILURES} failures`);
+              getLogger().error('auth', `Locked out for ${AUTH_LOCKOUT_MS / 1000}s after ${MAX_AUTH_FAILURES} failures`);
             }
             this.connected = false;
             this.connectAttempt = true;
@@ -230,7 +231,7 @@ export class EditorConnection {
       const raw = typeof data === 'string' ? data : data.toString();
       try {
         if (Buffer.byteLength(raw, 'utf8') > MAX_INBOUND_MESSAGE_SIZE) {
-          console.warn('[MCP Editor] Inbound message exceeds size limit, discarding');
+          getLogger().warn('editor', 'Inbound message exceeds size limit, discarding');
           return;
         }
         const msg = JSON.parse(raw);
@@ -254,7 +255,7 @@ export class EditorConnection {
         }
       } catch (err) {
         const snippet = typeof raw === 'string' ? raw.substring(0, 200) : '(unavailable)';
-        console.warn('[editor-conn] parse WebSocket message:', (err as Error).message, 'raw:', snippet);
+        getLogger().warn('editor', `parse WebSocket message: ${(err as Error).message} raw: ${snippet}`);
         // Attempt to extract id from malformed JSON and reject the pending request
         const idMatch = raw.match(/"id"\s*:\s*(\d+)/);
         if (idMatch) {
@@ -324,7 +325,7 @@ export class EditorConnection {
       this.ws.send(JSON.stringify({ jsonrpc: '2.0', method, params }));
     } catch (err) {
       this._droppedNotifications++;
-      console.error('[EditorConnection] notify send failed (method=%s, dropped=%d):', method, this._droppedNotifications, err);
+      getLogger().error('editor', `notify send failed (method=${method}, dropped=${this._droppedNotifications}): ${err}`);
     }
   }
 
@@ -414,7 +415,7 @@ export class EditorConnection {
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return;
     if (this.reconnectAttempt >= this.maxReconnectAttempts) {
-      console.error(`[EditorConnection] Max reconnect attempts (${this.maxReconnectAttempts}) reached, giving up`);
+      getLogger().error('editor', `Max reconnect attempts (${this.maxReconnectAttempts}) reached, giving up`);
       this.reconnectEnabled = false;
       this.fireDisconnect();
       return;
@@ -424,14 +425,14 @@ export class EditorConnection {
       this.maxReconnectMs,
     );
     this.reconnectAttempt++;
-    console.error(`[EditorConnection] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempt})`);
+    getLogger().error('editor', `Reconnecting in ${delay}ms (attempt ${this.reconnectAttempt})`);
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
       try {
         await this.connect();
-        console.error('[EditorConnection] Reconnected');
+        getLogger().error('editor', 'Reconnected');
       } catch (err) {
-        console.warn('[EditorConnection] reconnect failed:', err);
+        getLogger().warn('editor', `reconnect failed: ${err}`);
       }
     }, delay);
   }

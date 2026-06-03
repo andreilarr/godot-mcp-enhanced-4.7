@@ -4,6 +4,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { getLogger } from './core/logger.js';
 
 export interface MethodInfo {
   name: string;
@@ -202,7 +203,7 @@ export function initDocs(docsPath: string): void {
 
   initialized = true;
   const versionInfo = docsVersion ? ` (Godot ${docsVersion})` : '';
-  console.error(`[godot-docs] Loaded ${classMap.size} classes from ${docsPath}${versionInfo}`);
+  getLogger().error('godot-docs', `Loaded ${classMap.size} classes from ${docsPath}${versionInfo}`);
 }
 
 function ensureInit(): void {

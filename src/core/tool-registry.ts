@@ -2,6 +2,7 @@
 
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolResult, ToolContext } from '../types.js';
+import { getLogger } from './logger.js';
 
 // ─── Tool metadata ──────────────────────────────────────────────────────────
 
@@ -41,7 +42,7 @@ export function registerModule(mod: ToolModule): void {
   } else {
     const toolNames = mod.getToolDefinitions().map(t => t.name);
     if (toolNames.length > 0) {
-      console.warn(`[tool-registry] Module defines ${toolNames.length} tool(s) but has no TOOL_META — dispatch will fail: ${toolNames.join(', ')}`);
+      getLogger().warn('tool-registry', `Module defines ${toolNames.length} tool(s) but has no TOOL_META — dispatch will fail: ${toolNames.join(', ')}`);
     }
   }
 }

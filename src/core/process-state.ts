@@ -12,6 +12,7 @@
 
 import type { ChildProcess } from 'child_process';
 import { spawn } from 'child_process';
+import { getLogger } from './logger.js';
 
 const isWin = process.platform === 'win32';
 
@@ -28,7 +29,7 @@ export function forceKillTree(proc: ChildProcess): void {
       const child = spawn('taskkill', ['/F', '/T', '/PID', String(proc.pid)], { stdio: 'ignore' });
       child.on('error', () => { proc.kill(); });
     } catch (err) {
-      console.debug('[process-state] taskkill failed, falling back to proc.kill:', err);
+      getLogger().debug('process-state', `taskkill failed, falling back to proc.kill: ${err}`);
       proc.kill();
     }
   } else {
@@ -155,11 +156,7 @@ export function setRunningProcess(proc: ChildProcess | null): void {
   // Clearing the process always clears busy state
   if (proc === null) {
     if (_processBusy) {
-      console.warn(
-        '[process-state] setRunningProcess(null) called while process is busy (owner: %s). ' +
-        'This bypasses acquire/release semantics. Consider using releaseShortRunningSlot() or setProcessBusy(false) instead.',
-        _busyOwner || '(unknown)',
-      );
+      getLogger().warn('process-state', `setRunningProcess(null) called while process is busy (owner: ${_busyOwner || '(unknown)'}). This bypasses acquire/release semantics. Consider using releaseShortRunningSlot() or setProcessBusy(false) instead.`);
     }
     _processBusy = false;
     _busyOwner = '';

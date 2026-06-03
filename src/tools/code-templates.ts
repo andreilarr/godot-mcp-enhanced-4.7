@@ -4,6 +4,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolResult } from '../types.js';
 import { textResult as okResult, errorResult } from '../types.js';
 import { validateProjectRoot, resolveWithinRoot, ensureDir } from '../helpers.js';
+import { getLogger } from '../core/logger.js';
 
 // ─── Code Template Types ────────────────────────────────────────────────────
 
@@ -282,6 +283,46 @@ func transition_to(new_state: State):
   },
 };
 
+const tilesetAtlasSetup: CodeTemplate = {
+  id: "T011",
+  name: "tileset_atlas_setup",
+  description: "TileSet + TileSetAtlasSource + 碰撞层（正确调用顺序）",
+  relatedRules: ["L018"],
+  verifiedGodotVersion: "4.6",
+  lastVerified: "2026-05-31",
+  params: [
+    { name: "tile_size", type: "int", default: "16" },
+    { name: "columns", type: "int", default: "4" },
+    { name: "rows", type: "int", default: "4" },
+  ],
+  generate: (p) => `# TileSet 创建 — 注意调用顺序：先 add_source，再操作 TileData
+var tileset := TileSet.new()
+tileset.tile_size = Vector2i(${p.tile_size ?? "16"}, ${p.tile_size ?? "16"})
+
+# 1. 创建并添加 source（必须先于 TileData 操作）
+var atlas := TileSetAtlasSource.new()
+atlas.texture_region_size = Vector2i(${p.tile_size ?? "16"}, ${p.tile_size ?? "16"})
+var source_id := tileset.add_source(atlas)  # ← 先注册 source
+
+# 2. 添加碰撞层
+tileset.add_physics_layer()
+tileset.set_physics_layer_collision_layer(0, 1)
+tileset.set_physics_layer_collision_mask(0, 1)
+
+# 3. 现在可以安全操作 TileData
+for y in range(${p.rows ?? "4"}):
+\tfor x in range(${p.columns ?? "4"}):
+\t\tatlas.create_tile(Vector2i(x, y))  # ← 先创建瓦片
+\t\tvar tile_data: TileData = atlas.get_tile_data(Vector2i(x, y), 0)
+\t\tif tile_data:
+\t\t\ttile_data.add_collision_polygon(0)
+\t\t\ttile_data.set_collision_polygon_points(0, 0, PackedVector2Array([
+\t\t\t\tVector2(0, 0), Vector2(${p.tile_size ?? "16"}, 0),
+\t\t\t\tVector2(${p.tile_size ?? "16"}, ${p.tile_size ?? "16"}), Vector2(0, ${p.tile_size ?? "16"}),
+\t\t\t]))
+`.trim(),
+};
+
 // ─── Exports ────────────────────────────────────────────────────────────────
 
 export const TEMPLATES: CodeTemplate[] = [
@@ -295,6 +336,7 @@ export const TEMPLATES: CodeTemplate[] = [
   characterBody2dMovement,
   timerPattern,
   stateMachineSimple,
+  tilesetAtlasSetup,
 ];
 
 // ─── Project scaffold templates ───────────────────────────────────────────────
@@ -529,6 +571,7 @@ const RULE_TO_TEMPLATE: Record<string, string> = {
   "L006": "T005",
   "L014": "T006",
   "L012": "T007",
+  "L018": "T011",
 };
 
 export function getTemplateSuggestion(ruleId: string): string | null {
@@ -582,7 +625,7 @@ export function loadUserTemplates(projectPath: string): CodeTemplate[] {
 
       const id = validated.id;
       if (builtInIds.has(id)) {
-        console.warn(`[template] User template '${id}' in ${file} overrides built-in template`);
+        getLogger().warn('code-templates', `User template '${id}' in ${file} overrides built-in template`);
       }
 
       userTemplates.push({
@@ -598,7 +641,7 @@ export function loadUserTemplates(projectPath: string): CodeTemplate[] {
         appliesTo: validated.appliesTo ?? [],
       });
     } catch (err) {
-      console.warn(`[template] Failed to load ${file}: ${err instanceof Error ? err.message : err}`);
+      getLogger().warn('code-templates', `Failed to load ${file}: ${err instanceof Error ? err.message : err}`);
     }
   }
 

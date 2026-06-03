@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 
 import { validatePath, resolveWithinRoot, ensureDir, normalizeUserProjectPath, allowOutsideProjectPaths, parseConfigValue, isPathInAllowedRoots, _resetPathAllowWarned } from '../src/helpers.js';
+import { getLogger } from '../src/core/logger.js';
 
 describe('validatePath', () => {
   it('resolves relative paths to absolute', () => {
@@ -247,7 +248,8 @@ describe('isPathInAllowedRoots', () => {
   });
 
   it('should print warning only once when no whitelist set', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(getLogger(), 'warn').mockImplementation(() => {});
+    _resetPathAllowWarned();
     isPathInAllowedRoots('/a');
     isPathInAllowedRoots('/b');
     expect(warnSpy).toHaveBeenCalledTimes(1);

@@ -8,6 +8,7 @@ import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { opsErrorResult } from './shared.js';
 import { requireProjectPath } from '../helpers.js';
+import { getLogger } from '../core/logger.js';
 
 const BRIDGE_PORT = 9081;
 const BRIDGE_HOST = 'localhost';
@@ -78,34 +79,34 @@ function readBridgeSecret(): string | null {
         if (username && /^[A-Za-z0-9_\-\\]+$/.test(username)) {
           execFileSync('icacls', [secretPath, '/inheritance:r', '/grant:r', `${username}:R`], { stdio: 'ignore' });
         }
-      } catch (err) { console.debug('[bridge] restrict Windows file permissions:', err); }
+      } catch (err) { getLogger().debug('bridge', `restrict Windows file permissions: ${err}`); }
     } else {
       try {
         chmodSync(secretPath, 0o600);
-      } catch (err) { console.debug('[bridge] chmod secret file:', err); }
+      } catch (err) { getLogger().debug('bridge', `chmod secret file: ${err}`); }
     }
     const lstat = lstatSync(secretPath);
     if (lstat.isSymbolicLink()) {
-      console.error(`[SECURITY] Bridge secret file ${secretPath} is a symlink — refusing to read.`);
+      getLogger().error('security', `Bridge secret file ${secretPath} is a symlink — refusing to read.`);
       return null;
     }
     const stat = statSync(secretPath);
     if (!_permWarned && process.platform !== 'win32' && (stat.mode & 0o007) !== 0) {
       _permWarned = true;
-      console.error(`[SECURITY] Bridge secret file ${secretPath} is world-readable. Attempted chmod 0600.`);
+      getLogger().error('security', `Bridge secret file ${secretPath} is world-readable. Attempted chmod 0600.`);
     }
     _cachedSecret = readFileSync(secretPath, 'utf-8').trim();
     _cachedSecretAt = Date.now();
     return _cachedSecret;
   } catch (err) {
-    console.warn('[bridge] read bridge secret failed (%s): %s', (err as Error).message, secretPath);
+    getLogger().warn('bridge', `read bridge secret failed (${(err as Error).message}): ${secretPath}`);
     return null;
   }
 }
 
 function _invalidateSocket(): void {
   if (_socket) {
-    try { _socket.destroy(); } catch (err) { console.debug('[bridge] destroy socket:', err); }
+    try { _socket.destroy(); } catch (err) { getLogger().debug('bridge', `destroy socket: ${err}`); }
     _socket = null;
   }
   _socketAuthenticated = false;
@@ -258,7 +259,7 @@ export function sendToBridge(method: string, params: Record<string, unknown> = {
             return;
           } catch {
             // Log unparseable lines instead of silently discarding (I-10)
-            console.warn('[bridge] sendToBridge: unparseable JSON line (request %d): %s', id, line.substring(0, 120));
+            getLogger().warn('bridge', `sendToBridge: unparseable JSON line (request ${id}): ${line.substring(0, 120)}`);
             continue;
           }
         }

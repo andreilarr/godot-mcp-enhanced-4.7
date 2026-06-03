@@ -22,6 +22,7 @@ import { analyzeOutput, type ParsedError } from './error-analyzer.js';
 import { forceKillTree, getProjectDir, getRunningProcess, acquireShortRunningSlot, releaseShortRunningSlot } from './core/process-state.js';
 import { buildSafeEnv } from './helpers.js';
 import { MARKER_RESULT as MARKER_RESULT_SHARED, MARKER_ERROR as MARKER_ERROR_SHARED, GD_MCP_GET_ROOT, GD_MCP_GET_NODE, GD_MCP_LOAD_MAIN_SCENE, GD_MCP_OUTPUT } from './tools/shared.js';
+import { getLogger } from './core/logger.js';
 
 
 // ─── Sandbox scanner (C-SEC-02) ──────────────────────────────────────────────
@@ -51,7 +52,7 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
  *  true sandboxing, use container/VM isolation. */
 export function scanGdscriptSandbox(code: string): string[] {
   if (process.env.GODOT_MCP_SANDBOX === 'disabled') {
-    console.warn('[SECURITY] GODOT_MCP_SANDBOX=disabled — sandbox scanning skipped');
+    getLogger().warn('security', 'GODOT_MCP_SANDBOX=disabled — sandbox scanning skipped');
     return [];
   }
   const warnings: string[] = [];
@@ -144,7 +145,7 @@ function cleanupOldSessions(): void {
         rmSync(dirPath, { recursive: true, force: true });
       }
     }
-  } catch (err) { console.debug('[executor] cleanup stale dirs:', err); }
+  } catch (err) { getLogger().debug('gdscript', `cleanup stale dirs: ${err}`); }
 }
 
 function writeTempScript(code: string, sessionDir: string): string {
@@ -432,7 +433,7 @@ export async function executeGdscript(
   // Warn if same project is being used by a running game process
   const activeProjectDir = getProjectDir();
   if (activeProjectDir && getRunningProcess() && resolve(projectPath) === resolve(activeProjectDir)) {
-    console.warn(`[executor] Warning: project ${projectPath} is also being used by a running game process. Headless execution should be safe but watch for .godot/ cache conflicts.`);
+    getLogger().warn('gdscript', `Warning: project ${projectPath} is also being used by a running game process. Headless execution should be safe but watch for .godot/ cache conflicts.`);
   }
 
   // Hard kill switch: set ALLOW_EXECUTE_GDSCRIPT=false to disable GDScript execution
@@ -451,7 +452,7 @@ export async function executeGdscript(
     };
   }
   if (sandboxWarnings.length > 0 && process.env.GODOT_MCP_ALLOW_UNSAFE === 'true') {
-    console.warn('[SECURITY] GODOT_MCP_ALLOW_UNSAFE=true — executing despite sandbox warnings:', sandboxWarnings);
+    getLogger().warn('security', `GODOT_MCP_ALLOW_UNSAFE=true — executing despite sandbox warnings: ${sandboxWarnings}`);
     // I-18: Mark execution output so downstream consumers know sandbox was bypassed
     code = '# [UNSANDBOXED] Executing with GODOT_MCP_ALLOW_UNSAFE=true\n' + code;
   }
@@ -539,7 +540,7 @@ export async function executeGdscript(
       tempFiles.push(loaderScenePath);
       godotArgs.push('--scene', loaderScenePath);
     } catch (err) {
-      try { rmSync(sessionDir, { recursive: true, force: true }); } catch (e) { console.debug('[executor] cleanup session on error:', e); }
+      try { rmSync(sessionDir, { recursive: true, force: true }); } catch (e) { getLogger().debug('gdscript', `cleanup session on error: ${e}`); }
       return {
         success: false,
         compile_success: false,
@@ -598,7 +599,7 @@ export async function executeGdscript(
       clearTimeout(timer);
       releaseShortRunningSlot();
       // Cleanup session directory
-      try { rmSync(sessionDir, { recursive: true, force: true }); } catch (e) { console.debug('[executor] cleanup session on close:', e); }
+      try { rmSync(sessionDir, { recursive: true, force: true }); } catch (e) { getLogger().debug('gdscript', `cleanup session on close: ${e}`); }
 
       const rawOutput = stdout + stderr;
       const duration = Date.now() - startTime;
@@ -662,7 +663,7 @@ export async function executeGdscript(
     proc.on('error', (err) => {
       clearTimeout(timer);
       releaseShortRunningSlot();
-      try { rmSync(sessionDir, { recursive: true, force: true }); } catch (e) { console.debug('[executor] cleanup session on proc error:', e); }
+      try { rmSync(sessionDir, { recursive: true, force: true }); } catch (e) { getLogger().debug('gdscript', `cleanup session on proc error: ${e}`); }
 
       resolve({
         success: false,
