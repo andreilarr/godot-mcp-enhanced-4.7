@@ -814,13 +814,21 @@ func _cmd_monitor_start(params: Dictionary) -> Variant:
 	if node == null:
 		return {"error": {"code": -3, "message": "Node not found: %s" % node_path}}
 
+	# I-11: filter out blocked property names
+	var filtered_props: Array = []
+	for prop in properties:
+		if not _is_blocked_property(str(prop)):
+			filtered_props.append(prop)
+	if filtered_props.size() == 0:
+		return {"error": {"code": -7, "message": "All requested properties are blocked"}}
+
 	var previous_samples: Array = []
 	if _monitor_active:
 		previous_samples = _monitor_samples.duplicate(true)
 
 	_monitor_active = true
 	_monitor_node_path = node_path
-	_monitor_properties = properties
+	_monitor_properties = filtered_props
 	_monitor_interval_frames = interval
 	_monitor_frame_counter = 0
 	_monitor_samples = []

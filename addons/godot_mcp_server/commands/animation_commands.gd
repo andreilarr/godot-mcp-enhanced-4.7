@@ -93,10 +93,9 @@ func handle_animation_track(params: Dictionary) -> Dictionary:
 				var undo_ops: Array = [
 					{"type": "method", "target": anim, "method": "add_track", "args": [old_type]},
 				]
-				# C-01 fix: remove 执行后 count=N-1, add_track 追加到末尾索引=N-1
-			var new_idx = anim.get_track_count() - 1
+				# remove 执行后 count=N-1, add_track 追加到末尾索引=N-1
 				# 但 remove 在 do 阶段执行，undo 时 track 已被移除，add_track 后索引 = get_track_count()-1
-				# 用 get_track_count() 即为 add_track 后的末尾索引
+				var new_idx: int = anim.get_track_count() - 1
 				if old_path:
 					undo_ops.append({"type": "method", "target": anim, "method": "track_set_path", "args": [new_idx, old_path]})
 				for key in old_keys:
@@ -105,7 +104,7 @@ func handle_animation_track(params: Dictionary) -> Dictionary:
 					undo_ops.append({"type": "method", "target": anim, "method": "move_track", "args": [new_idx, ti]})
 
 				_undo_manager.create_action_mixed("Remove Track", [
-				{"type": "method", "target": anim, "method": "remove_track", "args": [ti]}
+					{"type": "method", "target": anim, "method": "remove_track", "args": [ti]},
 				], undo_ops)
 			else:
 				anim.remove_track(ti)
@@ -159,7 +158,7 @@ func handle_animation_keyframe(params: Dictionary) -> Dictionary:
 					# upsert: 更新现有关键帧
 					var old_val = anim.track_get_key_value(ti, existing_idx)
 					var old_trans = anim.track_get_key_transition(ti, existing_idx)
-					_undo_manager.create_action_mixed(0, [
+					_undo_manager.create_action_mixed("Upsert Keyframe", [
 						{"type": "method", "target": anim, "method": "track_set_key_value", "args": [ti, existing_idx, value]},
 						{"type": "method", "target": anim, "method": "track_set_key_transition", "args": [ti, existing_idx, trans_val]},
 					], [
@@ -169,7 +168,7 @@ func handle_animation_keyframe(params: Dictionary) -> Dictionary:
 					key_idx = existing_idx
 				else:
 					# 新增关键帧
-					_undo_manager.create_action_mixed(0, [
+					_undo_manager.create_action_mixed("Insert Keyframe", [
 						{"type": "method", "target": anim, "method": "track_insert_key", "args": [ti, float(time), value, trans_val]},
 					], [
 						# Issue 2 fix: undo 用 track_remove_key_at_time 而非错误的索引
@@ -191,7 +190,7 @@ func handle_animation_keyframe(params: Dictionary) -> Dictionary:
 				var old_time: float = anim.track_get_key_time(ti, ki)
 				var old_val = anim.track_get_key_value(ti, ki)
 				var old_trans: float = anim.track_get_key_transition(ti, ki)
-				_undo_manager.create_action_mixed(0, [
+				_undo_manager.create_action_mixed("Remove Keyframe", [
 					{"type": "method", "target": anim, "method": "track_remove_key", "args": [ti, ki]},
 				], [
 					{"type": "method", "target": anim, "method": "track_insert_key", "args": [ti, old_time, old_val, old_trans]},

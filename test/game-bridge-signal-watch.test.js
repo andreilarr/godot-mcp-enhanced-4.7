@@ -72,6 +72,26 @@ describe('game-bridge signal watch', () => {
   });
 
   describe('watch handler', () => {
+    it('should reject watch_start without node_path', async () => {
+      const result = await handleTool('game', {
+        project_path: '/tmp/test',
+        action: 'watch_start',
+        signal_name: 'pressed',
+      }, { opsScript: '' });
+      expect(result).toBeDefined();
+      expect(result.content[0].text).toContain('node_path is required');
+    });
+
+    it('should reject watch_start without signal_name', async () => {
+      const result = await handleTool('game', {
+        project_path: '/tmp/test',
+        action: 'watch_start',
+        node_path: 'root/Button',
+      }, { opsScript: '' });
+      expect(result).toBeDefined();
+      expect(result.content[0].text).toContain('signal_name is required');
+    });
+
     it('should handle watch_start when bridge is unavailable', async () => {
       const result = await handleTool('game', {
         project_path: '/tmp/test-watch',

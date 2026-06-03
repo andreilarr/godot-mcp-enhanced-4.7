@@ -32,9 +32,9 @@ func create_action_with_props(request_id: int, do_props: Array, undo_props: Arra
 ## {"type": "method", "target": Object, "method": String, "args": Array}
 ## {"type": "property", "target": Object, "property": String, "value": Variant}
 ## {"type": "reference", "value": Node}  # Issue 1: add_do_reference 仅限 Node
-func create_action_mixed(action_name, do_ops: Array, undo_ops: Array) -> void:
+func create_action_mixed(action_name: String, do_ops: Array, undo_ops: Array) -> void:
 	var undo_redo = _plugin.get_undo_redo()
-	var label: String = "MCP: %s" % (action_name if action_name is String else "op_%d" % action_name)
+	var label: String = "MCP: %s" % action_name
 	undo_redo.create_action(label)
 	for op in do_ops:
 		_apply_op(undo_redo, "do", op)
@@ -70,7 +70,13 @@ func _apply_op(undo_redo: UndoRedo, mode: String, op: Dictionary) -> void:
 			_add_method_call(undo_redo, mode, op)
 		"property":
 			var target: Object = op.target
-			var prop: String = op.property
+			if target == null:
+				push_warning("undo_manager: null target for property '%s'" % str(op.get("property", "")))
+				return
+			var prop: String = str(op.get("property", ""))
+			if prop.is_empty():
+				push_warning("undo_manager: empty property name, skipping")
+				return
 			var val = op.value
 			if mode == "do":
 				undo_redo.add_do_property(target, prop, val)

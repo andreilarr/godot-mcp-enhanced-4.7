@@ -100,6 +100,15 @@ describe('game-bridge UI discovery', () => {
   });
 
   describe('handler', () => {
+    it('should reject click_button without text or path', async () => {
+      const result = await handleTool('game', {
+        project_path: '/tmp/test',
+        action: 'click_button',
+      }, { opsScript: '' });
+      expect(result).toBeDefined();
+      expect(result.content[0].text).toContain('text');
+    });
+
     it('should handle find_ui_elements when bridge is unavailable', async () => {
       const result = await handleTool('game', {
         project_path: '/tmp/test-ui',

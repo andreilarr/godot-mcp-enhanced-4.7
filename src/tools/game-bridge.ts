@@ -374,6 +374,13 @@ const WAIT_METHODS = new Set([
   'wait_for_node', 'wait_for_property',
 ]);
 
+/** Shared helper: set project dir, send to bridge, format response. */
+async function bridgeAction(method: string, params: Record<string, unknown>, ctx: ToolContext, timeout: number): Promise<ToolResult> {
+  if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
+  const resp = await sendToBridge(method, params, timeout);
+  return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
+}
+
 export async function handleTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
   if (name !== 'game') return null;
 
@@ -498,60 +505,56 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
 
       case 'monitor_start': {
-        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
-        const resp = await sendToBridge('monitor.start', {
-          node_path: args.node_path as string ?? '',
-          properties: args.properties as string[] ?? [],
+        if (!args.node_path || typeof args.node_path !== 'string') {
+          return opsErrorResult('INVALID_PARAMS', 'node_path is required for monitor_start');
+        }
+        if (!Array.isArray(args.properties) || (args.properties as string[]).length === 0) {
+          return opsErrorResult('INVALID_PARAMS', 'properties must be a non-empty array');
+        }
+        return await bridgeAction('monitor.start', {
+          node_path: args.node_path as string,
+          properties: args.properties as string[],
           interval_frames: (args.interval_frames as number) ?? 10,
-        }, (args.timeout as number) || DEFAULT_TIMEOUT);
-        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
+        }, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
       }
-      case 'monitor_stop': {
-        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
-        const resp = await sendToBridge('monitor.stop', {}, (args.timeout as number) || DEFAULT_TIMEOUT);
-        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
-      }
-      case 'monitor_poll': {
-        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
-        const resp = await sendToBridge('monitor.poll', {}, (args.timeout as number) || DEFAULT_TIMEOUT);
-        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
-      }
+      case 'monitor_stop':
+        return await bridgeAction('monitor.stop', {}, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
+      case 'monitor_poll':
+        return await bridgeAction('monitor.poll', {}, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
       case 'watch_start': {
-        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
-        const resp = await sendToBridge('watch.start', {
-          node_path: args.node_path as string ?? '',
-          signal_name: args.signal_name as string ?? '',
+        if (!args.node_path || typeof args.node_path !== 'string') {
+          return opsErrorResult('INVALID_PARAMS', 'node_path is required for watch_start');
+        }
+        if (!args.signal_name || typeof args.signal_name !== 'string') {
+          return opsErrorResult('INVALID_PARAMS', 'signal_name is required for watch_start');
+        }
+        return await bridgeAction('watch.start', {
+          node_path: args.node_path as string,
+          signal_name: args.signal_name as string,
           max_events: (args.max_events as number) ?? 1000,
-        }, (args.timeout as number) || DEFAULT_TIMEOUT);
-        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
+        }, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
       }
-      case 'watch_stop': {
-        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
-        const resp = await sendToBridge('watch.stop', {}, (args.timeout as number) || DEFAULT_TIMEOUT);
-        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
-      }
-      case 'watch_poll': {
-        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
-        const resp = await sendToBridge('watch.poll', {}, (args.timeout as number) || DEFAULT_TIMEOUT);
-        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
-      }
-      case 'find_ui_elements': {
-        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
-        const resp = await sendToBridge('find_ui_elements', {
-          pattern: args.pattern as string ?? '',
-          type: args.type as string ?? '',
+      case 'watch_stop':
+        return await bridgeAction('watch.stop', {}, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
+      case 'watch_poll':
+        return await bridgeAction('watch.poll', {}, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
+      case 'find_ui_elements':
+        return await bridgeAction('find_ui_elements', {
+          pattern: (args.pattern as string) ?? '',
+          type: (args.type as string) ?? '',
           visible_only: args.visible_only !== false,
           limit: (args.limit as number) ?? 200,
-        }, (args.timeout as number) || DEFAULT_TIMEOUT);
-        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
-      }
+        }, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
       case 'click_button': {
-        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
-        const resp = await sendToBridge('click_button', {
-          text: args.text as string ?? '',
-          path: args.path as string ?? '',
-        }, (args.timeout as number) || DEFAULT_TIMEOUT);
-        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
+        const hasText = args.text && typeof args.text === 'string';
+        const hasPath = args.path && typeof args.path === 'string';
+        if (!hasText && !hasPath) {
+          return opsErrorResult('INVALID_PARAMS', 'click_button requires "text" or "path" parameter');
+        }
+        return await bridgeAction('click_button', {
+          text: (args.text as string) ?? '',
+          path: (args.path as string) ?? '',
+        }, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
       }
 
       default:

@@ -87,6 +87,37 @@ describe('game-bridge monitor', () => {
       expect(result).toBeNull();
     });
 
+    it('should reject monitor_start without node_path', async () => {
+      const result = await handleTool('game', {
+        project_path: '/tmp/test',
+        action: 'monitor_start',
+        properties: ['position'],
+      }, { opsScript: '' });
+      expect(result).toBeDefined();
+      expect(result.content[0].text).toContain('node_path is required');
+    });
+
+    it('should reject monitor_start without properties', async () => {
+      const result = await handleTool('game', {
+        project_path: '/tmp/test',
+        action: 'monitor_start',
+        node_path: 'root/Player',
+      }, { opsScript: '' });
+      expect(result).toBeDefined();
+      expect(result.content[0].text).toContain('non-empty array');
+    });
+
+    it('should reject monitor_start with empty properties array', async () => {
+      const result = await handleTool('game', {
+        project_path: '/tmp/test',
+        action: 'monitor_start',
+        node_path: 'root/Player',
+        properties: [],
+      }, { opsScript: '' });
+      expect(result).toBeDefined();
+      expect(result.content[0].text).toContain('non-empty array');
+    });
+
     it('should handle monitor_start when bridge is unavailable', async () => {
       const result = await handleTool('game', {
         project_path: '/tmp/test-monitor',

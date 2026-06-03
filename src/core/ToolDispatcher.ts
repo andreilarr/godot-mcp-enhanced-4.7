@@ -20,6 +20,9 @@ import { isPathInAllowedRoots, parseGodotConfig } from '../helpers.js';
 import { opsErrorResult, COMMON_ERROR_CODES } from '../tools/shared.js';
 import * as ps from './process-state.js';
 
+/** Known profile names for IDE autocomplete. Unknown strings fall through to resolveProfile(). */
+type KnownProfile = 'full' | 'lite' | 'minimal' | 'bridge_dev' | '3d_dev';
+
 const DEBUG = process.env.DEBUG === 'true';
 function log(...args: unknown[]): void {
   if (DEBUG) console.error('[tool-dispatcher]', ...args);
@@ -28,7 +31,7 @@ function log(...args: unknown[]): void {
 export interface DispatcherOptions {
   // 模式控制
   readOnly: boolean;
-  mode: string;  // 'full' | 'lite' | 'minimal' | profile name (e.g. 'bridge_dev') | comma-separated groups
+  mode: KnownProfile | string;  // 'full' | 'lite' | 'minimal' | profile name | comma-separated groups
   connectionMode: 'headless' | 'editor';
   noFallback: boolean;
 
@@ -105,8 +108,9 @@ export class ToolDispatcher {
       if (profileTools.size > 0) {
         allTools = allTools.filter(t => profileTools.has(t.name));
         log('PROFILE mode (%s): %d tools available', this.options.mode, allTools.length);
+      } else {
+        console.warn('[ToolDispatcher] Profile "%s" resolved to empty set — falling back to full mode. Check for typos.', this.options.mode);
       }
-      // If profile resolved to empty set, fall through to full
     }
 
     return allTools;
