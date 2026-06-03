@@ -10,7 +10,7 @@ import { findInstanceNode, detachInstance, nodePathToNameAndParent } from '../ts
 import { executeGdscript } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, opsErrorResult, parseGdscriptResult, sanitizeResPath } from './shared.js';
 import { normalizeNodePath, gdEscape, toSnakeCase, valueToGd } from './shared.js';
-import { forceKillTree, acquireShortRunningSlot, releaseShortRunningSlot, getShortRunningCount } from '../core/process-state.js';
+import { forceKillTree, acquireShortRunningSlot, releaseShortRunningSlot } from '../core/process-state.js';
 
 /** Validate that a value is a non-empty string; returns opsErrorResult if not. */
 function requireScenePath(value: unknown): ToolResult | null {
