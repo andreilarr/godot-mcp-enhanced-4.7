@@ -154,6 +154,13 @@ export function setRunningProcess(proc: ChildProcess | null): void {
   }
   // Clearing the process always clears busy state
   if (proc === null) {
+    if (_processBusy) {
+      console.warn(
+        '[process-state] setRunningProcess(null) called while process is busy (owner: %s). ' +
+        'This bypasses acquire/release semantics. Consider using releaseShortRunningSlot() or setProcessBusy(false) instead.',
+        _busyOwner || '(unknown)',
+      );
+    }
     _processBusy = false;
     _busyOwner = '';
   }

@@ -5,6 +5,8 @@ interface PendingToken {
   toolName: string;
   args: Record<string, unknown>;
   createdAt: number;
+  // FUTURE: Add clientId field for multi-client isolation.
+  // Currently MCP is single-client, so token-to-caller binding is unnecessary.
 }
 
 const TOKEN_TTL_MS = 180_000; // 3 minutes
@@ -87,6 +89,14 @@ export function createPendingToken(toolName: string, args: Record<string, unknow
   return token;
 }
 
+/**
+ * Consume a pending confirmation token.
+ *
+ * SECURITY NOTE: This function validates the token value but does NOT verify
+ * the caller's identity. In the current single-client MCP architecture this
+ * is safe. If multi-client support is added, PendingToken needs a `clientId`
+ * field and this function must verify it matches the current caller.
+ */
 export function consumeToken(token: string): { toolName: string; args: Record<string, unknown> } | null {
   const pending = pendingTokens.get(token);
   if (!pending) return null;
