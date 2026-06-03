@@ -117,6 +117,15 @@ export class Aggregator {
   }
 
   getState(): DashboardState {
+    // IMPORTANT-01: 清理已被 RingBuffer 淘汰的 map 幽灵条目
+    // 仅在 buffer 满时执行（O(30)），防止 24h+ 运行后相同分钟 key 命中旧 bucket
+    if (this.timeSeriesBuf.length >= TIME_SERIES_MAX_BUCKETS) {
+      const active = this.timeSeriesBuf.toArray();
+      const activeKeys = new Set(active.map(b => b.minute));
+      for (const key of this.timeSeriesMap.keys()) {
+        if (!activeKeys.has(key)) this.timeSeriesMap.delete(key);
+      }
+    }
     return {
       startTime: this.startTime,
       mode: this.mode,

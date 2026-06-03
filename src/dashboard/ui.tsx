@@ -193,8 +193,11 @@ function Dashboard({ stateStream, initialFilter }: {
         setState({ ...state });
       }
     } else if (key.upArrow) {
-      // C-01: 向上滚动（查看更早的日志）
-      setScrollOffset(prev => prev + 1);
+      // C-01: 向上滚动（查看更早的日志），限制不超过日志总量
+      setScrollOffset(prev => {
+        const maxOffset = Math.max(0, (state?.recentLogs.length ?? 1) - 1);
+        return Math.min(prev + 1, maxOffset);
+      });
     } else if (key.downArrow) {
       // C-01: 向下滚动（回到最新）
       setScrollOffset(prev => Math.max(0, prev - 1));
