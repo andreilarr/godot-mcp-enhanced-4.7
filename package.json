@@ -13,7 +13,8 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "godot-mcp-enhanced": "./build/index.js"
+    "godot-mcp-enhanced": "./build/index.js",
+    "godot-mcp-dashboard": "./build/dashboard/index.js"
   },
   "files": [
     "build/**/*.js",
@@ -43,6 +44,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^20.11.24",
+    "@types/react": "^19.2.16",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.1.7",
     "eslint": "^10.4.0",
@@ -54,5 +56,9 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "optionalDependencies": {
+    "ink": "^7.0.5",
+    "react": "^19.2.7"
   }
 }
