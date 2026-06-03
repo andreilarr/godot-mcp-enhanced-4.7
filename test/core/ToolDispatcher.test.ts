@@ -16,6 +16,7 @@ const {
   mockRequiresConfirmation,
   mockCreatePendingToken,
   mockConsumeToken,
+  mockIsPathInAllowedRoots,
 } = vi.hoisted(() => ({
   mockGetAllToolDefinitions: vi.fn<() => Tool[]>(),
   mockGetModuleForTool: vi.fn(),
@@ -24,6 +25,7 @@ const {
   mockRequiresConfirmation: vi.fn(),
   mockCreatePendingToken: vi.fn(),
   mockConsumeToken: vi.fn(),
+  mockIsPathInAllowedRoots: vi.fn().mockReturnValue(true),
 }));
 
 vi.mock('../../src/core/tool-registry.js', () => ({
@@ -41,7 +43,7 @@ vi.mock('../../src/guard.js', () => ({
 }));
 
 vi.mock('../../src/helpers.js', () => ({
-  isPathInAllowedRoots: vi.fn().mockReturnValue(true),
+  isPathInAllowedRoots: mockIsPathInAllowedRoots,
   parseGodotConfig: vi.fn().mockReturnValue({}),
 }));
 
@@ -663,5 +665,100 @@ describe('ToolDispatcher.handleCall', () => {
     expect(result.isError).toBe(true);
     const parsed = JSON.parse((result.content[0] as { text: string }).text);
     expect(parsed.error_code).toBe('INVALID_PARAMS');
+  });
+
+  // ── IMPORTANT-02: path allowlist validation (all modes) ──────────────────
+
+  // [P1] editor 模式下 project_path 不在白名单 → 被拦截，不转发到 editorExecutor
+  it('rejects disallowed project_path in editor mode (I-02)', async () => {
+    const guard = createMockGuard(false);
+    mockIsPathInAllowedRoots.mockReturnValue(false);
+    const mockExecutor = { execute: vi.fn().mockResolvedValue(mockToolResult), destroy: vi.fn() } as unknown as EditorToolExecutor;
+    const dispatcher = createDispatcherForHandleCall({ readOnlyGuard: guard, connectionMode: 'editor' });
+    dispatcher.setEditorExecutor(mockExecutor);
+    const result = await dispatcher.handleCall({
+      params: { name: 'scene', arguments: { project_path: '/etc/passwd', action: 'read_scene' } },
+    });
+    expect(result.isError).toBe(true);
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.error_code).toBe('PATH_NOT_ALLOWED');
+    expect(mockExecutor.execute).not.toHaveBeenCalled();
+  });
+
+  // [P2] headless 模式下 project_path 不在白名单 → 同样被拦截
+  it('rejects disallowed project_path in headless mode (I-02)', async () => {
+    const guard = createMockGuard(false);
+    mockIsPathInAllowedRoots.mockReturnValue(false);
+    const mockModule = { handleTool: vi.fn().mockResolvedValue(mockToolResult) };
+    mockGetModuleForTool.mockReturnValue(mockModule);
+    const dispatcher = createDispatcherForHandleCall({ readOnlyGuard: guard });
+    const result = await dispatcher.handleCall({
+      params: { name: 'scene', arguments: { project_path: '/etc/shadow', action: 'read_scene' } },
+    });
+    expect(result.isError).toBe(true);
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.error_code).toBe('PATH_NOT_ALLOWED');
+    expect(mockModule.handleTool).not.toHaveBeenCalled();
+  });
+
+  // [P3] confirm_and_execute 中 pending.args 包含不允许的路径 → 被拦截
+  it('rejects disallowed project_path in confirm_and_execute pending.args (I-02)', async () => {
+    const guard = createMockGuard(false);
+    mockIsPathInAllowedRoots.mockImplementation((p: string) => !p.includes('forbidden'));
+    mockConsumeToken.mockReturnValue({ toolName: 'scene', args: { project_path: '/forbidden/path', action: 'read_scene' } });
+    const dispatcher = createDispatcherForHandleCall({ readOnlyGuard: guard });
+    const result = await dispatcher.handleCall({
+      params: { name: 'confirm_and_execute', arguments: { token: 'valid' } },
+    });
+    expect(result.isError).toBe(true);
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.error_code).toBe('PATH_NOT_ALLOWED');
+  });
+
+  // [P4] confirm_and_execute editor 分支中 pending.args 包含不允许的路径 → 被拦截
+  it('rejects disallowed path in confirm_and_execute editor mode (I-02)', async () => {
+    const guard = createMockGuard(false);
+    mockIsPathInAllowedRoots.mockImplementation((p: string) => !p.includes('evil'));
+    mockConsumeToken.mockReturnValue({ toolName: 'scene', args: { project_path: '/evil/path', action: 'remove_node' } });
+    const mockExecutor = { execute: vi.fn().mockResolvedValue(mockToolResult), destroy: vi.fn() } as unknown as EditorToolExecutor;
+    const dispatcher = createDispatcherForHandleCall({ readOnlyGuard: guard, connectionMode: 'editor' });
+    dispatcher.setEditorExecutor(mockExecutor);
+    const result = await dispatcher.handleCall({
+      params: { name: 'confirm_and_execute', arguments: { token: 'valid' } },
+    });
+    expect(result.isError).toBe(true);
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.error_code).toBe('PATH_NOT_ALLOWED');
+    expect(mockExecutor.execute).not.toHaveBeenCalled();
+  });
+
+  // [P5] 允许的路径 → 正常通过所有分支
+  it('allows valid project_path in editor mode (I-02)', async () => {
+    const guard = createMockGuard(false);
+    mockIsPathInAllowedRoots.mockReturnValue(true);
+    const mockExecutor = { execute: vi.fn().mockResolvedValue(mockToolResult), destroy: vi.fn() } as unknown as EditorToolExecutor;
+    const dispatcher = createDispatcherForHandleCall({ readOnlyGuard: guard, connectionMode: 'editor' });
+    dispatcher.setEditorExecutor(mockExecutor);
+    const result = await dispatcher.handleCall({
+      params: { name: 'scene', arguments: { project_path: '/valid/project', action: 'read_scene' } },
+    });
+    expect(mockExecutor.execute).toHaveBeenCalled();
+    expect(result.isError).not.toBe(true);
+  });
+
+  // [P6] search_dir 不在白名单 → 被拦截
+  it('rejects disallowed search_dir in editor mode (I-02)', async () => {
+    const guard = createMockGuard(false);
+    mockIsPathInAllowedRoots.mockImplementation((p: string) => !p.includes('secret'));
+    const mockExecutor = { execute: vi.fn().mockResolvedValue(mockToolResult), destroy: vi.fn() } as unknown as EditorToolExecutor;
+    const dispatcher = createDispatcherForHandleCall({ readOnlyGuard: guard, connectionMode: 'editor' });
+    dispatcher.setEditorExecutor(mockExecutor);
+    const result = await dispatcher.handleCall({
+      params: { name: 'project', arguments: { search_dir: '/secret/dir', action: 'list_projects' } },
+    });
+    expect(result.isError).toBe(true);
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.error_code).toBe('PATH_NOT_ALLOWED');
+    expect(mockExecutor.execute).not.toHaveBeenCalled();
   });
 });

@@ -136,6 +136,10 @@ export class ToolDispatcher {
         return opsErrorResult(String(guardResult.errorCode ?? 'READ_ONLY'), guardResult.message ?? 'Operation blocked in read-only mode');
       }
 
+      // ── 1.5. Path allowlist validation (all modes) ──
+      const pathErr = this.validatePathArgs(args);
+      if (pathErr) return pathErr;
+
       // ── 2. confirm_and_execute 分支 ──
       if (name === 'confirm_and_execute') {
         const token = args.token as string;
@@ -152,6 +156,10 @@ export class ToolDispatcher {
         if (confirmedGuardResult.blocked) {
           return opsErrorResult(String(confirmedGuardResult.errorCode ?? 'READ_ONLY'), confirmedGuardResult.message ?? 'Operation blocked in read-only mode');
         }
+
+        // 二次路径校验（pending.args 可能包含与外层 args 不同的 project_path）
+        const confirmedPathErr = this.validatePathArgs(pending.args);
+        if (confirmedPathErr) return confirmedPathErr;
 
         // 复用同一 editor/headless 分支逻辑
         log('[CONFIRM] Executing confirmed tool: %s', pending.toolName);
@@ -258,8 +266,6 @@ export class ToolDispatcher {
   }
 
   private async dispatchTool(toolName: string, args: Record<string, unknown>, startTime: number): Promise<ToolResult> {
-    const pathErr = this.validatePathArgs(args);
-    if (pathErr) return pathErr;
     const targetMod = getModuleForTool(toolName);
     if (!targetMod) {
       return opsErrorResult('UNKNOWN_TOOL', `Unknown tool: ${toolName}`);
