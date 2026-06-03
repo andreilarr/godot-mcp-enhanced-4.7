@@ -287,6 +287,7 @@ function runSingleVerify(
 ): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
     let out = '';
+    let settled = false;
     const sceneArg = `res://${scene.replace(/\\/g, '/')}`;
     const proc = spawn(godot, ['--headless', '--path', projectPath, sceneArg], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -297,11 +298,15 @@ function runSingleVerify(
     proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
 
     const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
       if (!proc.killed) forceKillTree(proc);
       resolve({ scene, status: 'timed_out' });
     }, timeoutSec * 1000);
 
     proc.on('close', (code) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       const analysis = analyzeOutput(out.split('\n'));
       const result: Record<string, unknown> = {
@@ -322,6 +327,8 @@ function runSingleVerify(
     });
 
     proc.on('error', (err) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       resolve({ scene, status: 'error', errors: [err.message] });
     });

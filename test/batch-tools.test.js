@@ -201,3 +201,129 @@ describe('batch_create_files real file creation', () => {
     expect(parsed.skipped).toBe(0);
   });
 });
+
+// ─── runSingleVerify settled guard ────────────────────────────────────────────
+
+describe('runSingleVerify settled guard', () => {
+  let mockProc;
+  let mockSpawn;
+  let tmpDir;
+
+  beforeEach(() => {
+    vi.resetModules();
+    mockProc = {
+      killed: false,
+      stdout: { on: vi.fn() },
+      stderr: { on: vi.fn() },
+      on: vi.fn(),
+      kill: vi.fn(),
+    };
+    mockSpawn = vi.fn(() => mockProc);
+    vi.doMock('child_process', () => ({ spawn: mockSpawn, exec: vi.fn(), execFile: vi.fn() }));
+
+    // Create a temp dir with a fake scene file so existsSync passes
+    tmpDir = join(tmpdir(), `batch-settled-test-${Date.now()}`);
+    mkdirSync(tmpDir, { recursive: true });
+    writeFileSync(join(tmpDir, 'test.tscn'), '[gd_scene]\n', 'utf-8');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unmock('child_process');
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('timeout fires first, then close is ignored (settled guard)', async () => {
+    let closeHandler;
+    mockProc.on.mockImplementation((event, cb) => {
+      if (event === 'close') closeHandler = cb;
+    });
+
+    // Dynamic import AFTER doMock so it uses the mock
+    const mod = await import('../src/tools/batch-tools.js');
+    const { handleTool: ht } = mod;
+
+    const resultPromise = ht('batch', {
+      project_path: tmpDir,
+      action: 'run_verify',
+      scenes: ['test.tscn'],
+      timeout: 0.01,
+    }, { findGodot: async () => '/fake/godot' });
+
+    // Wait for timeout to fire (10ms + margin)
+    await new Promise(r => setTimeout(r, 80));
+
+    // Now fire close (simulating race condition — should be ignored by settled guard)
+    if (closeHandler) closeHandler(0);
+
+    const result = await resultPromise;
+    expect(result).toBeTruthy();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.results).toBeDefined();
+    // Should be timed_out (timeout won the race), not passed (close was ignored)
+    const scene = parsed.results[0];
+    expect(scene.status).toBe('timed_out');
+  });
+
+  it('close fires first, then error is ignored (settled guard)', async () => {
+    let closeHandler, errorHandler;
+    mockProc.on.mockImplementation((event, cb) => {
+      if (event === 'close') closeHandler = cb;
+      if (event === 'error') errorHandler = cb;
+    });
+
+    const mod = await import('../src/tools/batch-tools.js');
+    const { handleTool: ht } = mod;
+
+    const resultPromise = ht('batch', {
+      project_path: tmpDir,
+      action: 'run_verify',
+      scenes: ['test.tscn'],
+      timeout: 30,
+    }, { findGodot: async () => '/fake/godot' });
+
+    await new Promise(r => setTimeout(r, 20));
+
+    // Fire close first (settles the promise)
+    if (closeHandler) closeHandler(0);
+    // Then fire error — should be ignored (settled = true)
+    if (errorHandler) errorHandler(new Error('spawn ENOENT'));
+
+    const result = await resultPromise;
+    expect(result).toBeTruthy();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.results).toBeDefined();
+    const scene = parsed.results[0];
+    // Should be 'passed' from close, NOT 'error' from error handler
+    expect(scene.status).toBe('passed');
+  });
+
+  it('timeout fires first, then error is also ignored', async () => {
+    let errorHandler;
+    mockProc.on.mockImplementation((event, cb) => {
+      if (event === 'error') errorHandler = cb;
+    });
+
+    const mod = await import('../src/tools/batch-tools.js');
+    const { handleTool: ht } = mod;
+
+    const resultPromise = ht('batch', {
+      project_path: tmpDir,
+      action: 'run_verify',
+      scenes: ['test.tscn'],
+      timeout: 0.01,
+    }, { findGodot: async () => '/fake/godot' });
+
+    // Wait for timeout to fire
+    await new Promise(r => setTimeout(r, 80));
+
+    // Then fire error — should be ignored
+    if (errorHandler) errorHandler(new Error('late error'));
+
+    const result = await resultPromise;
+    expect(result).toBeTruthy();
+    const parsed = JSON.parse(result.content[0].text);
+    const scene = parsed.results[0];
+    expect(scene.status).toBe('timed_out');
+  });
+});
