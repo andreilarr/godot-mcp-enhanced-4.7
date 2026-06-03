@@ -3,7 +3,7 @@ description: "game bridge game_query game_input game_write game_wait game_bridge
 alwaysApply: false
 ---
 
-> 适用于 godot-mcp-enhanced v0.14.0+
+> 适用于 godot-mcp-enhanced v0.16.0+
 
 ## 概述与架构
 
@@ -57,6 +57,29 @@ Game Bridge 是 MCP 服务端与**运行中的游戏**之间的 TCP 通信层。
 |--------|------|
 | `wait_for_node` | 等待节点出现（path） |
 | `wait_for_property` | 等待属性值变化（path + property + value） |
+
+### 监控 — monitor_start/stop/poll
+
+| action | 说明 |
+|--------|------|
+| `monitor_start` | 开始属性采样（node_path + properties + interval_frames） |
+| `monitor_stop` | 停止采样，返回完整时间线 |
+| `monitor_poll` | 获取当前采样数据（不停止） |
+
+### 信号监听 — watch_start/stop/poll
+
+| action | 说明 |
+|--------|------|
+| `watch_start` | 监听信号事件（node_path + signal_name + max_events） |
+| `watch_stop` | 停止监听，返回事件列表 |
+| `watch_poll` | 获取已记录事件（不停止） |
+
+### UI 发现 — find_ui_elements / click_button
+
+| action | 说明 |
+|--------|------|
+| `find_ui_elements` | 查找可见 Control 节点（pattern / type / visible_only / limit） |
+| `click_button` | 点击按钮（text 或 path） |
 
 ## 使用指南
 
@@ -122,6 +145,42 @@ game_write(method="set_node_property", params={ "path": "root/Player", "property
 game_write(method="call_method", params={ "path": "root/Player", "method": "take_damage", "args": [25] })
 ```
 
+### 属性监控
+
+```
+game(action="monitor_start", node_path="root/Player", properties=["position", "health"], interval_frames=5)
+// → { monitoring: true, node_path: "root/Player", properties: [...], interval_frames: 5 }
+
+game(action="monitor_poll")
+// → { monitoring: true, samples: [{frame: 100, time: 1.667, values: {position: {x:10,y:0}}}], sample_count: 1 }
+
+game(action="monitor_stop")
+// → { monitoring: false, samples: [...], sample_count: 30, duration_seconds: 2.5 }
+```
+
+### 信号监听
+
+```
+game(action="watch_start", node_path="root/Button", signal_name="pressed", max_events=100)
+// → { watching: true, node_path: "root/Button", signal_name: "pressed", max_events: 100 }
+
+game(action="watch_poll")
+// → { watching: true, events: [{frame: 150, time: 2.5, args: []}], event_count: 1 }
+
+game(action="watch_stop")
+// → { watching: false, events: [...], event_count: 5, duration_seconds: 8.2 }
+```
+
+### UI 元素发现
+
+```
+game(action="find_ui_elements", type="Button", visible_only=true)
+// → { elements: [{path: "root/Menu/StartBtn", type: "Button", text: "Start", ...}], count: 3 }
+
+game(action="click_button", text="Start")
+// → { clicked: true, button_path: "root/Menu/StartBtn", button_text: "Start" }
+```
+
 ### 错误：Bridge 未连接
 
 ```
@@ -140,3 +199,9 @@ game_query(method="ping")
 - **与录制系统**：recording_start 依赖 Bridge 连接。确保 Bridge 可用后再录制。
 - **端口 9081 冲突**：如果端口被占用，需要手动修改 autoload 脚本中的端口配置。
 - **密钥缓存**：5 分钟 TTL 后首次调用会重新读取密钥文件，可能有短暂延迟。
+- **monitor 最大属性数**：单次监控最多 20 个属性（MONITOR_MAX_PROPERTIES），超出会报错。
+- **monitor 自动停止**：采样达到 500 条（_monitor_max_samples）后自动停止。
+- **watch Lambda 适配器**：信号回调使用 0-4 参数的匹配 Callable，超过 4 参数的信号只记录前 4 个。
+- **watch 自动断开**：事件达到 max_events 后自动断开信号连接并停止。
+- **find_ui_elements 最大返回**：默认 200，上限 500 条结果。
+- **click_button**：通过 emit_signal("pressed") 触发，不模拟实际鼠标点击事件。

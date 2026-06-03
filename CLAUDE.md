@@ -15,7 +15,7 @@
 |--------|---------|---------|------|----------|
 | **模式选择** | — | Headless/Editor/Bridge 决策树 | — | core |
 | Editor | launch_editor | 实时场景树同步、undo | 编辑器运行中 | editor |
-| Bridge | game_bridge_install | 查询/输入/写入/等待 | 游戏运行中 | bridge |
+| Bridge | game_bridge_install | 查询/输入/写入/等待/监控/信号/UI发现 | 游戏运行中 | bridge |
 | UI 布局 | ui_build_layout | CSS Flexbox/Grid 翻译 | headless | ui |
 | 录制回放 | recording_start | 捕获→保存→回放 | Bridge 连接 | recording |
 | 粒子 | particles_create | GPU 粒子 + 6 种预设 | headless | particles |
