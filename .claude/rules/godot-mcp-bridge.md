@@ -205,3 +205,4 @@ game_query(method="ping")
 - **watch 自动断开**：事件达到 max_events 后自动断开信号连接并停止。
 - **find_ui_elements 最大返回**：默认 200，上限 500 条结果。
 - **click_button**：通过 emit_signal("pressed") 触发，不模拟实际鼠标点击事件。
+- **多用户环境不安全**：Bridge 使用 TCP 绑定 127.0.0.1 + 共享密钥认证。在单用户本地开发环境下足够安全，但在多用户共享系统（如远程开发服务器）上，localhost 通信可被同一机器上的其他用户嗅探。如需多用户隔离，考虑使用 Unix Domain Socket（仅文件权限控制访问）。
