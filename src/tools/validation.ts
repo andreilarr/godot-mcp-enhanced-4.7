@@ -8,7 +8,7 @@ import { promisify } from 'util';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { opsErrorResult } from './shared.js';
+import { opsErrorResult, validateTimeout } from './shared.js';
 import { requireProjectPath, resolveWithinRoot, parseMcpScriptOutput, normalizeUserProjectPath, checkVersionMismatch, buildSafeEnv, scanFiles } from '../helpers.js';
 import { analyzeOutput, type AnalysisResult } from '../error-analyzer.js';
 import { forceKillTree } from '../core/process-state.js';
@@ -505,7 +505,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
   switch (action) {
     case 'run_and_verify': {
       const projectPath = requireProjectPath(args);
-      const timeout = (args.timeout as number) || 20;
+      const timeout = validateTimeout(args.timeout, 5, 120, 20);
       const scene = args.scene as string | undefined;
       const captureTree = args.capture_tree === true;
 
@@ -758,7 +758,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
     case 'validate_scripts': {
       const p = requireProjectPath(args);
-      const perScriptTimeout = (args.timeout as number) || 10;
+      const perScriptTimeout = validateTimeout(args.timeout, 5, 60, 10);
       const godot = await ctx.findGodot();
 
       let scriptsToValidate: string[];

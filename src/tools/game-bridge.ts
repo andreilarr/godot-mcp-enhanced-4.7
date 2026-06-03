@@ -15,6 +15,14 @@ const BRIDGE_SCRIPT_NAME = 'mcp_bridge.gd';
 const AUTOLOAD_KEY = 'autoload/MCPBridge';
 const DEFAULT_TIMEOUT = 10000;
 
+/** Clamp a millisecond timeout value. Returns default on invalid/zero input. */
+function clampTimeoutMs(value: unknown, min = 1000, max = 60000, def = 10000): number {
+  if (value === undefined || value === null) return def;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return def;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
 // ─── TCP client for Bridge communication ────────────────────────────────────
 
 export interface BridgeResponse {
@@ -490,7 +498,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         const params = (rawParams && typeof rawParams === 'object' && !Array.isArray(rawParams))
           ? rawParams as Record<string, unknown>
           : {};
-        const rawTimeout = (args.timeout as number) || DEFAULT_TIMEOUT;
+        const rawTimeout = clampTimeoutMs(args.timeout);
         const timeout = Math.min(rawTimeout, 60000);
         const response = await sendToBridge(method, params, timeout);
         if (response.error) {
@@ -515,12 +523,12 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           node_path: args.node_path as string,
           properties: args.properties as string[],
           interval_frames: (args.interval_frames as number) ?? 10,
-        }, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
+        }, ctx, clampTimeoutMs(args.timeout));
       }
       case 'monitor_stop':
-        return await bridgeAction('monitor.stop', {}, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
+        return await bridgeAction('monitor.stop', {}, ctx, clampTimeoutMs(args.timeout));
       case 'monitor_poll':
-        return await bridgeAction('monitor.poll', {}, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
+        return await bridgeAction('monitor.poll', {}, ctx, clampTimeoutMs(args.timeout));
       case 'watch_start': {
         if (!args.node_path || typeof args.node_path !== 'string') {
           return opsErrorResult('INVALID_PARAMS', 'node_path is required for watch_start');
@@ -532,19 +540,19 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           node_path: args.node_path as string,
           signal_name: args.signal_name as string,
           max_events: (args.max_events as number) ?? 1000,
-        }, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
+        }, ctx, clampTimeoutMs(args.timeout));
       }
       case 'watch_stop':
-        return await bridgeAction('watch.stop', {}, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
+        return await bridgeAction('watch.stop', {}, ctx, clampTimeoutMs(args.timeout));
       case 'watch_poll':
-        return await bridgeAction('watch.poll', {}, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
+        return await bridgeAction('watch.poll', {}, ctx, clampTimeoutMs(args.timeout));
       case 'find_ui_elements':
         return await bridgeAction('find_ui_elements', {
           pattern: (args.pattern as string) ?? '',
           type: (args.type as string) ?? '',
           visible_only: args.visible_only !== false,
           limit: (args.limit as number) ?? 200,
-        }, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
+        }, ctx, clampTimeoutMs(args.timeout));
       case 'click_button': {
         const hasText = args.text && typeof args.text === 'string';
         const hasPath = args.path && typeof args.path === 'string';
@@ -554,7 +562,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         return await bridgeAction('click_button', {
           text: (args.text as string) ?? '',
           path: (args.path as string) ?? '',
-        }, ctx, (args.timeout as number) || DEFAULT_TIMEOUT);
+        }, ctx, clampTimeoutMs(args.timeout));
       }
 
       default:

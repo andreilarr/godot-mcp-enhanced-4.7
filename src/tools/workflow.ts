@@ -7,7 +7,7 @@ import { textResult } from '../types.js';
 import { requireProjectPath, resolveWithinRoot, buildSafeEnv } from '../helpers.js';
 import { forceKillTree } from '../core/process-state.js';
 import { executeGdscript } from '../gdscript-executor.js';
-import { SCENE_TREE_HEADER, parseGdscriptResult, wrapAssertionCode, opsErrorResult } from './shared.js';
+import { SCENE_TREE_HEADER, parseGdscriptResult, wrapAssertionCode, opsErrorResult, validateTimeout } from './shared.js';
 import { gdEscape } from './shared.js';
 import { batchValidateScripts } from './validation.js';
 import { sendToBridge, setBridgeProjectDir, BRIDGE_READ_ONLY_METHODS } from './game-bridge.js';
@@ -201,7 +201,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const projectPath = requireProjectPath(args);
       const code = args.code as string;
       const verify = args.verify === true;
-      const timeout = (args.timeout as number) || 30;
+      const timeout = validateTimeout(args.timeout, 5, 120, 30);
       const loadAutoloads = args.load_autoloads !== false;
 
       if (!code || typeof code !== 'string') {

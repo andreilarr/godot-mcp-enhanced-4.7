@@ -3,7 +3,7 @@ import { existsSync, writeFileSync, readFileSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { opsErrorResult } from './shared.js';
+import { opsErrorResult, validateTimeout } from './shared.js';
 import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath, ensureDir, buildSafeEnv } from '../helpers.js';
 import { analyzeOutput } from '../error-analyzer.js';
 import { batchValidateScripts } from './validation.js';
@@ -152,7 +152,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     case 'run_verify': {
       const projectPath = requireProjectPath(args);
       const scenes = args.scenes as string[];
-      const timeout = Math.min((args.timeout as number) || 10, 60);
+      const timeout = validateTimeout(args.timeout, 0.001, 60, 10);
       const captureTree = args.capture_tree === true;
 
       if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
