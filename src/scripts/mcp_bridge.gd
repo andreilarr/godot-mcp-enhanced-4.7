@@ -30,6 +30,16 @@ var _recording: bool = false
 var _recorded_events: Array = []
 var _record_start_time: int = 0
 
+# ─── Monitor state ─────────────────────────────────────────────────────
+var _monitor_active: bool = false
+var _monitor_node_path: String = ""
+var _monitor_properties: Array = []
+var _monitor_interval_frames: int = 10
+var _monitor_frame_counter: int = 0
+var _monitor_samples: Array = []
+var _monitor_max_samples: int = 500
+const MONITOR_MAX_PROPERTIES := 20
+
 const BLOCKED_PROPERTIES := [
 	"script", "owner", "process_mode", "process_priority", "process_input",
 	"process_unhandled_input", "process_unhandled_key_input", "process_internal",
@@ -120,6 +130,28 @@ func _process(_delta: float) -> void:
 		_peer_last_activity.erase(pid)
 		# Auth fail/lockout counts persist across reconnects (all connections are localhost)
 		_peers.remove_at(i)
+
+	# ─── Property monitor sampling ────────────────────────────────────────
+	if _monitor_active and _monitor_properties.size() > 0:
+		_monitor_frame_counter += 1
+		if _monitor_frame_counter >= _monitor_interval_frames:
+			_monitor_frame_counter = 0
+			var node := get_node_or_null(_monitor_node_path)
+			if node == null:
+				_monitor_active = false
+				_monitor_samples.append({"frame": Engine.get_process_frames(), "time": Time.get_ticks_msec() / 1000.0, "error": "node_lost"})
+			else:
+				var values: Dictionary = {}
+				for prop in _monitor_properties:
+					values[prop] = _jsonify(node.get(prop))
+				_monitor_samples.append({
+					"frame": Engine.get_process_frames(),
+					"time": Time.get_ticks_msec() / 1000.0,
+					"values": values
+				})
+				if _monitor_samples.size() >= _monitor_max_samples:
+					_monitor_samples[-1]["stopped_reason"] = "max_samples_reached"
+					_monitor_active = false
 
 
 # ─── Server management ─────────────────────────────────────────────────────
@@ -338,6 +370,12 @@ func _handle_message(raw: String) -> String:
 			result = _cmd_recording_start()
 		"recording.stop":
 			result = _cmd_recording_stop()
+		"monitor.start":
+			result = _cmd_monitor_start(params)
+		"monitor.stop":
+			result = _cmd_monitor_stop()
+		"monitor.poll":
+			result = _cmd_monitor_poll()
 		_:
 			error = {"code": -32601, "message": "Method not found: %s" % method}
 
@@ -734,6 +772,82 @@ func _cmd_recording_stop() -> Variant:
 	var events: Array = _recorded_events.duplicate()
 	_recorded_events = []
 	return {"version": 1, "duration_ms": duration_ms, "events": events, "event_count": events.size()}
+
+
+# ─── Monitor commands ───────────────────────────────────────────────────
+
+func _cmd_monitor_start(params: Dictionary) -> Variant:
+	var node_path: String = str(params.get("node_path", ""))
+	var properties = params.get("properties", [])
+	var interval: int = int(params.get("interval_frames", 10))
+
+	if node_path == "":
+		return {"error": {"code": -1, "message": "node_path is required"}}
+	if not properties is Array or properties.size() == 0:
+		return {"error": {"code": -2, "message": "properties must be a non-empty array"}}
+	if properties.size() > MONITOR_MAX_PROPERTIES:
+		return {"error": {"code": -6, "message": "Too many properties (%d, max %d)" % [properties.size(), MONITOR_MAX_PROPERTIES]}}
+	if interval < 1:
+		interval = 1
+	if interval > 300:
+		interval = 300
+
+	var node := get_node_or_null(node_path)
+	if node == null:
+		return {"error": {"code": -3, "message": "Node not found: %s" % node_path}}
+
+	var previous_samples: Array = []
+	if _monitor_active:
+		previous_samples = _monitor_samples.duplicate(true)
+
+	_monitor_active = true
+	_monitor_node_path = node_path
+	_monitor_properties = properties
+	_monitor_interval_frames = interval
+	_monitor_frame_counter = 0
+	_monitor_samples = []
+
+	var result_dict: Dictionary = {
+		"monitoring": true,
+		"node_path": node_path,
+		"properties": properties,
+		"interval_frames": interval,
+	}
+	if previous_samples.size() > 0:
+		result_dict["previous_samples"] = previous_samples
+	return result_dict
+
+
+func _cmd_monitor_stop() -> Variant:
+	if not _monitor_active:
+		return {"monitoring": false, "samples": [], "message": "No active monitor"}
+	_monitor_active = false
+	var samples := _monitor_samples.duplicate(true)
+	var duration := 0.0
+	if samples.size() > 0:
+		duration = samples[samples.size() - 1].get("time", 0.0) - samples[0].get("time", 0.0)
+	var result_dict: Dictionary = {
+		"monitoring": false,
+		"samples": samples,
+		"sample_count": samples.size(),
+		"total_frames": Engine.get_process_frames(),
+		"duration_seconds": duration,
+	}
+	_monitor_samples = []
+	_monitor_properties = []
+	return result_dict
+
+
+func _cmd_monitor_poll() -> Variant:
+	if not _monitor_active:
+		return {"monitoring": false, "samples": [], "message": "No active monitor"}
+	var samples := _monitor_samples.duplicate(true)
+	return {
+		"monitoring": true,
+		"node_path": _monitor_node_path,
+		"samples": samples,
+		"sample_count": samples.size(),
+	}
 
 
 func _input(event: InputEvent) -> void:

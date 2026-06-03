@@ -297,13 +297,16 @@ const ACTIONS = [
   'game_write',
   'game_input',
   'game_wait',
+  'monitor_start',
+  'monitor_stop',
+  'monitor_poll',
 ] as const;
 
 export function getToolDefinitions(): Tool[] {
   return [
     {
       name: 'game',
-      description: '游戏桥接操作。安装/卸载: game_bridge_install, game_bridge_uninstall。查询: game_query (ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info, take_screenshot)。写入: game_write (set_node_property, call_method)。输入: game_input (send_key, send_mouse_click, send_mouse_move, send_text)。等待: game_wait (wait_for_node, wait_for_property)。',
+      description: '游戏桥接操作。安装/卸载: game_bridge_install, game_bridge_uninstall。查询: game_query (ping, get_tree, find_nodes, get_node_properties, get_performance, get_viewport_info, take_screenshot)。写入: game_write (set_node_property, call_method)。输入: game_input (send_key, send_mouse_click, send_mouse_move, send_text)。等待: game_wait (wait_for_node, wait_for_property)。监控: monitor_start/stop/poll (属性时间线采样)。',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -323,6 +326,9 @@ export function getToolDefinitions(): Tool[] {
             description: '方法参数。game_query: 因方法而异。game_write: set_node_property {path, property, value}, call_method {path, method, args}。game_input: send_key {key, pressed}, send_mouse_click {x, y, button, pressed}, send_mouse_move {x, y}, send_text {text}。game_wait: wait_for_node {path}, wait_for_property {path, property, value}',
           },
           timeout: { type: 'number', description: 'game_query/game_write/game_input/game_wait: 超时时间（毫秒，默认 10000）' },
+          node_path: { type: 'string', description: 'monitor_start: 要监控的节点路径（如 root/Player）' },
+          properties: { type: 'array', items: { type: 'string' }, description: 'monitor_start: 要监控的属性名列表（如 ["position", "health"]）' },
+          interval_frames: { type: 'number', description: 'monitor_start: 采样间隔帧数（默认 10，最小 1，最大 300）' },
         },
         required: ['project_path', 'action'],
       },
@@ -476,6 +482,26 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           return textResult(`Bridge error (${response.error.code}): ${response.error.message}`);
         }
         return textResult(JSON.stringify(response.result, null, 2));
+      }
+
+      case 'monitor_start': {
+        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
+        const resp = await sendToBridge('monitor.start', {
+          node_path: args.node_path as string ?? '',
+          properties: args.properties as string[] ?? [],
+          interval_frames: (args.interval_frames as number) ?? 10,
+        }, (args.timeout as number) || DEFAULT_TIMEOUT);
+        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
+      }
+      case 'monitor_stop': {
+        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
+        const resp = await sendToBridge('monitor.stop', {}, (args.timeout as number) || DEFAULT_TIMEOUT);
+        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
+      }
+      case 'monitor_poll': {
+        if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
+        const resp = await sendToBridge('monitor.poll', {}, (args.timeout as number) || DEFAULT_TIMEOUT);
+        return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
       }
 
       default:

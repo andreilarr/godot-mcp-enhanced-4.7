@@ -14,7 +14,7 @@ describe('game-bridge tool definitions', () => {
     expect(tools[0].name).toBe('game');
   });
 
-  it('tool has action enum with 6 operations', () => {
+  it('tool has action enum with expected operations', () => {
     const actionEnum = tools[0].inputSchema.properties.action.enum;
     expect(actionEnum).toEqual([
       'game_bridge_install',
@@ -23,6 +23,9 @@ describe('game-bridge tool definitions', () => {
       'game_write',
       'game_input',
       'game_wait',
+      'monitor_start',
+      'monitor_stop',
+      'monitor_poll',
     ]);
   });
 
