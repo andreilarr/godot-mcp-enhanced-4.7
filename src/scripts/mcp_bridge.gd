@@ -849,7 +849,19 @@ func _cmd_monitor_start(params: Dictionary) -> Variant:
 
 func _cmd_monitor_stop() -> Variant:
 	if not _monitor_active:
-		return {"monitoring": false, "samples": [], "message": "No active monitor"}
+		# I-03: monitor may have auto-stopped (node_lost/max_samples); return reason + samples
+		var old_samples := _monitor_samples.duplicate(true)
+		var reason := ""
+		if old_samples.size() > 0:
+			var last: Dictionary = old_samples[-1]
+			if last.has("stopped_reason"):
+				reason = last["stopped_reason"]
+		var msg := "No active monitor"
+		if reason != "":
+			msg = "Monitor stopped: %s" % reason
+		_monitor_samples = []
+		_monitor_properties = []
+		return {"monitoring": false, "samples": old_samples, "sample_count": old_samples.size(), "stopped_reason": reason, "message": msg}
 	_monitor_active = false
 	var samples := _monitor_samples.duplicate(true)
 	var duration := 0.0
@@ -1139,16 +1151,17 @@ func _cmd_click_button(params: Dictionary) -> Variant:
 		var stack: Array = [get_tree().root]
 		while stack.size() > 0:
 			var node: Node = stack.pop_back()
+			# Traverse children first so disabled parents don't block child discovery
+			for child in node.get_children():
+				stack.append(child)
 			if node is BaseButton:
 				var btn: BaseButton = node as BaseButton
-					if btn.disabled:
-						continue  # I-02: skip disabled buttons
+				if btn.disabled:
+					continue  # I-02: skip disabled buttons
 				var btn_text := str(btn.get("text")) if btn.get("text") != null else ""
 				if btn_text == text and btn.visible:
 					target = btn
 					break
-			for child in node.get_children():
-				stack.append(child)
 		if target == null:
 			return {"error": {"code": -3, "message": "No visible Button with text \"%s\" found" % text}}
 	else:
