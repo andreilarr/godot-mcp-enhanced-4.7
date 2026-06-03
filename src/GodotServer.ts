@@ -67,6 +67,7 @@ import { EditorToolExecutor } from './core/EditorToolExecutor.js';
 import { findGodot, clearGodotPathCache, getCachedGodotPath } from './core/godot-finder.js';
 import * as ps from './core/process-state.js';
 import { killProcess } from './core/process-state.js';
+import { getLogger } from './core/logger.js';
 
 // Re-export for backward compatibility (tests import from GodotServer)
 export { clearGodotPathCache, getCachedGodotPath };
@@ -74,7 +75,7 @@ export { clearGodotPathCache, getCachedGodotPath };
 const DEBUG = process.env.DEBUG === 'true';
 
 function log(...args: unknown[]): void {
-  if (DEBUG) console.error('[godot-mcp]', ...args);
+  if (DEBUG) getLogger().debug('godot-mcp', args.map(a => String(a)).join(' '));
 }
 
 // ─── GodotServer class ───────────────────────────────────────────────────────
@@ -157,7 +158,7 @@ export class GodotServer {
     const envPath = process.env.GODOT_PROJECT_PATH;
     if (envPath) {
       if (existsSync(join(envPath, 'project.godot'))) return envPath;
-      console.error(`GODOT_PROJECT_PATH="${envPath}" does not contain project.godot, ignoring`);
+      getLogger().warn('godot-mcp', `GODOT_PROJECT_PATH="${envPath}" does not contain project.godot, ignoring`);
     }
     let dir = process.cwd();
     for (let i = 0; i < 15; i++) {
@@ -184,12 +185,12 @@ export class GodotServer {
         secret = (await waitForEditorSecret(projectPath, 5000)) ?? undefined;
       }
       if (!secret) {
-        console.error('[AUTH] No editor secret found — plugin may not be running');
+        getLogger().warn('auth', 'No editor secret found — plugin may not be running');
         if (this.noFallback) {
-          console.error('[FATAL] Editor auth required but no secret available. Install the editor plugin.');
+          getLogger().error('auth', 'Editor auth required but no secret available. Install the editor plugin.');
           process.exit(1);
         }
-        console.error('[FALLBACK] Running in Headless mode (no editor auth).');
+        getLogger().warn('godot-mcp', 'Running in Headless mode (no editor auth).');
         this.dispatcher?.markEditorFallback();
         this.connectionMode = 'headless';
         this.dispatcher?.setConnectionMode('headless');
@@ -202,7 +203,7 @@ export class GodotServer {
           // I-01: editor reconnect exhaustion → auto-degrade to headless
           this.editorConn.addOnDisconnectHandler(() => {
             if (!this.editorConn?.isConnected()) {
-              console.error('[FALLBACK] Editor reconnect attempts exhausted — degrading to headless mode.');
+              getLogger().warn('godot-mcp', 'Editor reconnect attempts exhausted — degrading to headless mode.');
               this.dispatcher?.markEditorFallback();
               this.connectionMode = 'headless';
               this.dispatcher?.setConnectionMode('headless');
@@ -214,12 +215,12 @@ export class GodotServer {
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           if (this.noFallback) {
-            console.error(`[FATAL] Editor mode required but connection failed: ${msg}`);
-            console.error('Set GODOT_MCP_NO_FALLBACK=false to allow fallback, or install the plugin.');
+            getLogger().error('auth', `Editor mode required but connection failed: ${msg}`);
+            getLogger().error('auth', 'Set GODOT_MCP_NO_FALLBACK=false to allow fallback, or install the plugin.');
             process.exit(1);
           }
-          console.error(`[FALLBACK] Editor connection failed: ${msg}.`);
-          console.error('[FALLBACK] Running in Headless mode. UndoRedo disabled, no scene state persistence.');
+          getLogger().warn('godot-mcp', `Editor connection failed: ${msg}.`);
+          getLogger().warn('godot-mcp', 'Running in Headless mode. UndoRedo disabled, no scene state persistence.');
           this.dispatcher?.markEditorFallback();
           this.connectionMode = 'headless';
           this.dispatcher?.setConnectionMode('headless');

@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
 import { GodotServer } from './GodotServer.js';
+import { getLogger } from './core/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -35,8 +36,10 @@ let shuttingDown = false;
 async function gracefulShutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.error(`[godot-mcp] Received ${signal}, shutting down...`);
+  const logger = getLogger();
+  logger.info('godot-mcp', `Received ${signal}, shutting down...`);
   try {
+    logger.close(); // flush 缓冲区 + 关闭文件句柄
     await server.close();
   } catch (err) {
     console.error('[godot-mcp] Error during shutdown:', err);
@@ -49,6 +52,6 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 server.run().catch((error: unknown) => {
   const msg = error instanceof Error ? error.message : 'Unknown error';
-  console.error('Failed to run server:', msg);
+  getLogger().error('godot-mcp', 'Failed to run server', { error: msg });
   process.exit(1);
 });
