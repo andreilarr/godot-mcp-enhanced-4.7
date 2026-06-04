@@ -329,8 +329,7 @@ export class ToolDispatcher {
       // 判断是否有错误（使用 MCP 标准的 isError 字段）
       const hasError = result.isError === true;
       logger.toolEnd(callId, toolName, duration, hasError ? 'tool_error' : undefined);
-      const duration2 = Date.now() - startTime;
-      return { ...result, content: [...result.content, { type: 'text' as const, text: `_duration_ms: ${duration2}` }] };
+      return { ...result, content: [...result.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] };
     }
     logger.toolEnd(callId, toolName, duration, 'handler_null');
     return opsErrorResult('HANDLER_NULL', `Tool "${toolName}" registered but handler returned null`);
