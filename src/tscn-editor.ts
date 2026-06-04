@@ -469,8 +469,9 @@ function parseExtResourceMap(lines: string[]): Map<string | number, string> {
     const trimmed = line.trim();
     if (!trimmed.startsWith('[ext_resource')) continue;
     // Match id="N" and path="res://..." — supports both numeric and string UIDs
-    const idMatch = trimmed.match(/id="([^"]+)"/);
-    const pathMatch = trimmed.match(/path="([^"]+)"/);
+    // Use \b to avoid matching "uid" as "id"
+    const idMatch = trimmed.match(/\bid="([^"]+)"/);
+    const pathMatch = trimmed.match(/\bpath="([^"]+)"/);
     if (idMatch && pathMatch) {
       const rawId = idMatch[1];
       const numericId = Number(rawId);
@@ -577,7 +578,7 @@ function findMaxExtResourceId(lines: string[]): number {
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('[ext_resource')) continue;
-    const m = trimmed.match(/id="([^"]+)"/);
+    const m = trimmed.match(/\bid="([^"]+)"/);
     if (m) {
       const id = Number(m[1]);
       // Only consider numeric IDs for max calculation; string UIDs are skipped
@@ -643,7 +644,7 @@ function remapExtResourceIds(
   let nextId = targetMaxId + 1;
 
   const remapped = sourceExtResources.map((line) => {
-    const idMatch = line.match(/id="([^"]+)"/);
+    const idMatch = line.match(/\bid="([^"]+)"/);
     if (!idMatch) return line;
     const rawId = Number(idMatch[1]);
     // Only remap numeric IDs; string UIDs are left as-is
@@ -679,7 +680,7 @@ function findMaxSubResourceId(lines: string[]): number {
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('[sub_resource')) continue;
-    const m = trimmed.match(/id="(\d+)"/);
+    const m = trimmed.match(/\bid="(\d+)"/);
     if (m) {
       const id = parseInt(m[1]);
       if (id > maxId) maxId = id;
@@ -704,7 +705,7 @@ function remapSubResourceIds(
     // Only header lines contain id="N"
     const trimmed = line.trim();
     if (trimmed.startsWith('[sub_resource')) {
-      const idMatch = trimmed.match(/id="(\d+)"/);
+      const idMatch = trimmed.match(/\bid="(\d+)"/);
       if (idMatch) {
         const oldId = parseInt(idMatch[1]);
         const newId = nextId++;
@@ -981,7 +982,7 @@ export function detachInstance(
   }
 
   if (otherRefs === 0) {
-    const extLinePattern = new RegExp(`^\\s*\\[ext_resource[^\\]]*id="${info.instanceId}"`);
+    const extLinePattern = new RegExp(`^\\s*\\[ext_resource[^\\]]*\\bid="${info.instanceId}"`);
     for (let i = cleanResult.length - 1; i >= 0; i--) {
       if (extLinePattern.test(cleanResult[i])) {
         cleanResult.splice(i, 1);
