@@ -1,4 +1,3 @@
-import { spawn } from 'child_process';
 import { join, dirname } from 'path';
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
@@ -11,8 +10,8 @@ import { textResult } from '../types.js';
 import { opsErrorResult, validateTimeout } from './shared.js';
 import { requireProjectPath, resolveWithinRoot, parseMcpScriptOutput, normalizeUserProjectPath, checkVersionMismatch, buildSafeEnv, scanFiles } from '../helpers.js';
 import { analyzeOutput, type AnalysisResult } from '../error-analyzer.js';
-import { forceKillTree } from '../core/process-state.js';
 import { lintGDScript } from './gdscript-lint.js';
+import { spawnGodot } from './spawn-helper.js';
 
 // ─── Known base class methods/properties whitelist ───────────────────────────
 // The Godot headless parser cannot resolve inherited methods from base classes
@@ -208,33 +207,13 @@ export async function batchValidateScripts(
 
   const results = new Map<string, string[]>();
 
-  const output = await new Promise<string>((resolve) => {
-    let stdout = '';
-    let stderr = '';
+  const spawnResult = await spawnGodot(effectiveGodotPath, [
+    '--headless', '--path', projectPath, '--script', validatorPath,
+  ], { timeoutMs: globalTimeoutMs });
 
-    const proc = spawn(
-      effectiveGodotPath,
-      ['--headless', '--path', projectPath, '--script', validatorPath],
-      { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() }
-    );
-
-    proc.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); });
-    proc.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
-
-    const timer = setTimeout(() => {
-      if (!proc.killed) forceKillTree(proc);
-    }, globalTimeoutMs);
-
-    proc.on('error', (err) => {
-      clearTimeout(timer);
-      resolve('SPAWN_ERROR: ' + err.message);
-    });
-
-    proc.on('close', () => {
-      clearTimeout(timer);
-      resolve(stdout + stderr);
-    });
-  });
+  const output = spawnResult.exitCode === -1 && !spawnResult.timedOut && spawnResult.stdout.startsWith('SPAWN_FAILED:')
+    ? 'SPAWN_ERROR: ' + spawnResult.stdout.replace('SPAWN_FAILED: ', '')
+    : spawnResult.stdout;
 
   if (output.startsWith('SPAWN_ERROR:')) {
     try { rmSync(listPath, { force: true }); } catch (e) { console.debug('[validation] cleanup list file:', e); }
@@ -538,19 +517,12 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             const scriptsDir = dirname(ctx.opsScript);
             const treeScript = join(scriptsDir, 'query_scene_tree.gd');
             if (existsSync(treeScript)) {
-              const treeResult = await new Promise<string>((resolve) => {
-                let settled = false;
-                let out = '';
-                const proc = spawn(godot, [
+              const treeSpawnResult = await spawnGodot(godot, [
                   '--headless', '--path', projectPath,
                   '--script', treeScript,
                   JSON.stringify({ scene_path: scene, max_depth: 3 }),
-                ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
-                proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
-                proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
-                proc.on('close', () => { if (!settled) { settled = true; resolve(out); } });
-                setTimeout(() => { if (!settled) { settled = true; if (!proc.killed) forceKillTree(proc); resolve(''); } }, 30000);
-              });
+                ], { timeoutMs: 30_000 });
+              const treeResult = treeSpawnResult.stdout;
               if (treeResult) {
                 (analysis as ExtendedAnalysisResult).scene_tree = parseMcpScriptOutput(treeResult, 0);
               }

@@ -1,15 +1,14 @@
-import { spawn } from 'child_process';
 import { existsSync, writeFileSync, readFileSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { opsErrorResult, validateTimeout } from './shared.js';
-import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath, ensureDir, buildSafeEnv } from '../helpers.js';
+import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath, ensureDir } from '../helpers.js';
 import { analyzeOutput } from '../error-analyzer.js';
 import { batchValidateScripts } from './validation.js';
 import { lintGDScript, formatLintResults } from './gdscript-lint.js';
-import { forceKillTree } from '../core/process-state.js';
 import { parseTscn } from '../tscn-parser.js';
+import { spawnGodot } from './spawn-helper.js';
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
@@ -278,61 +277,42 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function runSingleVerify(
+async function runSingleVerify(
   godot: string,
   projectPath: string,
   scene: string,
   timeoutSec: number,
   captureTree: boolean,
 ): Promise<Record<string, unknown>> {
-  return new Promise((resolve) => {
-    let out = '';
-    let settled = false;
-    const sceneArg = `res://${scene.replace(/\\/g, '/')}`;
-    const proc = spawn(godot, ['--headless', '--path', projectPath, sceneArg], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: buildSafeEnv(),
-    });
-
-    proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
-    proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
-
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      if (!proc.killed) forceKillTree(proc);
-      resolve({ scene, status: 'timed_out' });
-    }, timeoutSec * 1000);
-
-    proc.on('close', (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      const analysis = analyzeOutput(out.split('\n'));
-      const result: Record<string, unknown> = {
-        scene,
-        status: code === 0 && !analysis.hasErrors ? 'passed' : 'failed',
-        error_count: analysis.errors.length,
-        errors: analysis.errors.map(e => e.message).slice(0, 10),
-      };
-
-      if (captureTree) {
-        const treeMatch = out.match(/=== Scene Tree ===([\s\S]*?)===/);
-        if (treeMatch) {
-          result.tree = { raw: treeMatch[1].trim() };
-        }
-      }
-
-      resolve(result);
-    });
-
-    proc.on('error', (err) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve({ scene, status: 'error', errors: [err.message] });
-    });
+  const sceneArg = `res://${scene.replace(/\\/g, '/')}`;
+  const result = await spawnGodot(godot, ['--headless', '--path', projectPath, sceneArg], {
+    timeoutMs: timeoutSec * 1000,
   });
+
+  if (result.timedOut) {
+    return { scene, status: 'timed_out' };
+  }
+
+  if (result.exitCode === -1 && result.stdout.startsWith('SPAWN_FAILED:')) {
+    return { scene, status: 'error', errors: [result.stdout.replace('SPAWN_FAILED: ', '')] };
+  }
+
+  const analysis = analyzeOutput(result.stdout.split('\n'));
+  const entry: Record<string, unknown> = {
+    scene,
+    status: (result.exitCode === 0 && !analysis.hasErrors) ? 'passed' : 'failed',
+    error_count: analysis.errors.length,
+    errors: analysis.errors.map(e => e.message).slice(0, 10),
+  };
+
+  if (captureTree) {
+    const treeMatch = result.stdout.match(/=== Scene Tree ===([\s\S]*?)===/);
+    if (treeMatch) {
+      entry.tree = { raw: treeMatch[1].trim() };
+    }
+  }
+
+  return entry;
 }
 
 function filterProps(

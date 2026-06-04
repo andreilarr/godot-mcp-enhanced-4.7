@@ -1,16 +1,16 @@
-import { spawn, type ChildProcess } from 'child_process';
 import { join, dirname } from 'path';
 import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync, statSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult, errorResult } from '../types.js';
-import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath, ensureDir, parseMcpScriptOutput, buildSafeEnv } from '../helpers.js';
+import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath, ensureDir, parseMcpScriptOutput } from '../helpers.js';
 import { parseTscn, parseTscnSummary } from '../tscn-parser.js';
 import { findInstanceNode, detachInstance, nodePathToNameAndParent } from '../tscn-editor.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, opsErrorResult, parseGdscriptResult, sanitizeResPath } from './shared.js';
 import { normalizeNodePath, gdEscape, toSnakeCase, valueToGd } from './shared.js';
-import { forceKillTree, acquireShortRunningSlot, releaseShortRunningSlot } from '../core/process-state.js';
+import { acquireShortRunningSlot, releaseShortRunningSlot } from '../core/process-state.js';
+import { spawnGodot } from './spawn-helper.js';
 
 /** Validate that a value is a non-empty string; returns opsErrorResult if not. */
 function requireScenePath(value: unknown): ToolResult | null {
@@ -175,55 +175,22 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         params.node_path = args.node_path || 'root';
       }
 
-      return new Promise((resolve) => {
-        let proc: ChildProcess;
-        try {
-          proc = spawn(godot, [
-            '--headless', '--path', p,
-            '--script', ctx.opsScript,
-            action, JSON.stringify(params),
-          ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
-        } catch (spawnErr) {
-          releaseShortRunningSlot();
-          resolve(opsErrorResult('SPAWN_FAILED', `Failed to spawn Godot: ${(spawnErr as Error).message}`));
-          return;
-        }
-
-        let out = '';
-        let settled = false;
-        const MAX_OUTPUT = 100_000;
-        proc.stdout?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
-        proc.stderr?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
-
-        const timer = setTimeout(() => {
-          if (!settled && !proc.killed) {
-            settled = true;
-            forceKillTree(proc);
-            releaseShortRunningSlot();
-            resolve({ content: [{ type: 'text', text: `${action} timed out.` }] });
-          }
-        }, 60000);
-
-        proc.on('close', (code) => {
-          clearTimeout(timer);
-          if (settled) return;
-          settled = true;
-          releaseShortRunningSlot();
-          if (code !== 0) {
-            resolve({ content: [{ type: 'text', text: `${action} failed (exit code ${code}):\n${out}` }] });
-          } else {
-            resolve({ content: [{ type: 'text', text: out.trim() || `${action} completed successfully.` }] });
-          }
-        });
-
-        proc.on('error', (err) => {
-          clearTimeout(timer);
-          if (settled) return;
-          settled = true;
-          releaseShortRunningSlot();
-          resolve({ content: [{ type: 'text', text: `Error: ${err.message}` }] });
-        });
-      });
+      const result = await spawnGodot(godot, [
+        '--headless', '--path', p,
+        '--script', ctx.opsScript,
+        action, JSON.stringify(params),
+      ]);
+      releaseShortRunningSlot();
+      if (result.timedOut) {
+        return { content: [{ type: 'text', text: `${action} timed out.` }] };
+      }
+      if (result.exitCode === -1 && result.stdout.startsWith('SPAWN_FAILED:')) {
+        return opsErrorResult('SPAWN_FAILED', `Failed to spawn Godot: ${result.stdout.replace('SPAWN_FAILED: ', '')}`);
+      }
+      if (result.exitCode !== 0) {
+        return { content: [{ type: 'text', text: `${action} failed (exit code ${result.exitCode}):\n${result.stdout}` }] };
+      }
+      return { content: [{ type: 'text', text: result.stdout.trim() || `${action} completed successfully.` }] };
     }
 
     case 'quick_scene': {
@@ -328,52 +295,20 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         max_depth: (args.max_depth as number) || 5,
       };
 
-      return new Promise((resolve) => {
-        let out = '';
-        let settled = false;
-        let proc: ChildProcess;
-        try {
-          proc = spawn(godot, [
-            '--headless', '--path', p,
-            '--script', treeScript,
-            JSON.stringify(params),
-          ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
-        } catch (spawnErr) {
-          releaseShortRunningSlot();
-          resolve(textResult(`SPAWN_FAILED: ${(spawnErr as Error).message}`));
-          return;
-        }
-
-        const MAX_OUTPUT = 100_000;
-        proc.stdout?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
-        proc.stderr?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
-
-        const timer = setTimeout(() => {
-          if (!settled && !proc.killed) {
-            settled = true;
-            forceKillTree(proc);
-            releaseShortRunningSlot();
-            resolve(textResult('query_scene_tree timed out after 60s'));
-          }
-        }, 60000);
-
-        proc.on('close', (code) => {
-          clearTimeout(timer);
-          if (settled) return;
-          settled = true;
-          releaseShortRunningSlot();
-          const result = parseMcpScriptOutput(out, code);
-          resolve(textResult(JSON.stringify(result, null, 2)));
-        });
-
-        proc.on('error', (err) => {
-          clearTimeout(timer);
-          if (settled) return;
-          settled = true;
-          releaseShortRunningSlot();
-          resolve(textResult(`Error: ${err.message}`));
-        });
-      });
+      const result = await spawnGodot(godot, [
+        '--headless', '--path', p,
+        '--script', treeScript,
+        JSON.stringify(params),
+      ]);
+      releaseShortRunningSlot();
+      if (result.timedOut) {
+        return textResult('query_scene_tree timed out after 60s');
+      }
+      if (result.exitCode === -1 && result.stdout.startsWith('SPAWN_FAILED:')) {
+        return textResult(result.stdout);
+      }
+      const parsed = parseMcpScriptOutput(result.stdout, result.exitCode ?? 0);
+      return textResult(JSON.stringify(parsed, null, 2));
     }
 
     case 'inspect_node': {
@@ -402,52 +337,20 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         include_properties: args.include_properties !== false,
       };
 
-      return new Promise((resolve) => {
-        let out = '';
-        let settled = false;
-        let proc: ChildProcess;
-        try {
-          proc = spawn(godot, [
-            '--headless', '--path', p,
-            '--script', inspectScript,
-            JSON.stringify(params),
-          ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
-        } catch (spawnErr) {
-          releaseShortRunningSlot();
-          resolve(textResult(`SPAWN_FAILED: ${(spawnErr as Error).message}`));
-          return;
-        }
-
-        const MAX_OUTPUT = 100_000;
-        proc.stdout?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
-        proc.stderr?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
-
-        const timer = setTimeout(() => {
-          if (!settled && !proc.killed) {
-            settled = true;
-            forceKillTree(proc);
-            releaseShortRunningSlot();
-            resolve(textResult('inspect_node timed out after 60s'));
-          }
-        }, 60000);
-
-        proc.on('close', (code) => {
-          clearTimeout(timer);
-          if (settled) return;
-          settled = true;
-          releaseShortRunningSlot();
-          const result = parseMcpScriptOutput(out, code);
-          resolve(textResult(JSON.stringify(result, null, 2)));
-        });
-
-        proc.on('error', (err) => {
-          clearTimeout(timer);
-          if (settled) return;
-          settled = true;
-          releaseShortRunningSlot();
-          resolve(textResult(`Error: ${err.message}`));
-        });
-      });
+      const result = await spawnGodot(godot, [
+        '--headless', '--path', p,
+        '--script', inspectScript,
+        JSON.stringify(params),
+      ]);
+      releaseShortRunningSlot();
+      if (result.timedOut) {
+        return textResult('inspect_node timed out after 60s');
+      }
+      if (result.exitCode === -1 && result.stdout.startsWith('SPAWN_FAILED:')) {
+        return textResult(result.stdout);
+      }
+      const parsed = parseMcpScriptOutput(result.stdout, result.exitCode ?? 0);
+      return textResult(JSON.stringify(parsed, null, 2));
     }
 
     case 'batch_add_nodes': {
@@ -494,58 +397,25 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         throw e;
       }
 
-      return new Promise((resolve) => {
-        let proc: ChildProcess;
-        try {
-          proc = spawn(godot, [
-            '--headless', '--path', p,
-            '--script', ctx.opsScript,
-            'batch_add_nodes', JSON.stringify({
-              scene_path: scenePath,
-              nodes: nodes,
-            }),
-          ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
-        } catch (spawnErr) {
-          releaseShortRunningSlot();
-          resolve(errorResult(`SPAWN_FAILED: ${(spawnErr as Error).message}`));
-          return;
-        }
-
-        let out = '';
-        let settled = false;
-        const MAX_OUTPUT = 100_000;
-        proc.stdout?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
-        proc.stderr?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
-
-        const timer = setTimeout(() => {
-          if (!settled && !proc.killed) {
-            settled = true;
-            forceKillTree(proc);
-            releaseShortRunningSlot();
-            resolve(errorResult('batch_add_nodes timed out after 60s.'));
-          }
-        }, 60000);
-
-        proc.on('close', (code) => {
-          clearTimeout(timer);
-          if (settled) return;
-          settled = true;
-          releaseShortRunningSlot();
-          if (code !== 0) {
-            resolve(errorResult(`batch_add_nodes failed (exit code ${code}):\n${out}`));
-          } else {
-            resolve({ content: [{ type: 'text', text: out.trim() || `batch_add_nodes completed: ${nodes.length} nodes added.` }] });
-          }
-        });
-
-        proc.on('error', (err) => {
-          clearTimeout(timer);
-          if (settled) return;
-          settled = true;
-          releaseShortRunningSlot();
-          resolve(errorResult(`Error: ${err.message}`));
-        });
-      });
+      const result = await spawnGodot(godot, [
+        '--headless', '--path', p,
+        '--script', ctx.opsScript,
+        'batch_add_nodes', JSON.stringify({
+          scene_path: scenePath,
+          nodes: nodes,
+        }),
+      ]);
+      releaseShortRunningSlot();
+      if (result.timedOut) {
+        return errorResult('batch_add_nodes timed out after 60s.');
+      }
+      if (result.exitCode === -1 && result.stdout.startsWith('SPAWN_FAILED:')) {
+        return errorResult(result.stdout);
+      }
+      if (result.exitCode !== 0) {
+        return errorResult(`batch_add_nodes failed (exit code ${result.exitCode}):\n${result.stdout}`);
+      }
+      return { content: [{ type: 'text', text: result.stdout.trim() || `batch_add_nodes completed: ${nodes.length} nodes added.` }] };
     }
 
     case 'edit_node': {

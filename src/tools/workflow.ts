@@ -1,16 +1,15 @@
-import { spawn } from 'child_process';
 import { join, dirname } from 'path';
 import { existsSync, writeFileSync, mkdirSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { requireProjectPath, resolveWithinRoot, buildSafeEnv } from '../helpers.js';
-import { forceKillTree } from '../core/process-state.js';
+import { requireProjectPath, resolveWithinRoot } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, parseGdscriptResult, wrapAssertionCode, opsErrorResult, validateTimeout } from './shared.js';
 import { gdEscape } from './shared.js';
 import { batchValidateScripts } from './validation.js';
 import { sendToBridge, setBridgeProjectDir, BRIDGE_READ_ONLY_METHODS } from './game-bridge.js';
+import { spawnGodot } from './spawn-helper.js';
 
 // ─── Session State helpers (file-as-memory pattern) ──────────────────────────
 
@@ -549,38 +548,26 @@ func _snap(node: Node, max_depth: int, depth: int) -> Dictionary:
 
 // --- Helpers -------------------------------------------------------------------
 
-function runVerification(godot: string, projectPath: string): Promise<Record<string, unknown>> {
-  return new Promise((resolve) => {
-    let out = '';
-    const proc = spawn(godot, ['--headless', '--path', projectPath, '-e', '--quit'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: buildSafeEnv(),
-    });
-
-    proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
-    proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
-
-    const timer = setTimeout(() => {
-      if (!proc.killed) forceKillTree(proc);
-      resolve({ status: 'timeout', output: out.slice(-2000) });
-    }, 20000);
-
-    proc.on('close', (code) => {
-      clearTimeout(timer);
-      const errors = out.split('\n').filter(l => l.includes('ERROR') || l.includes('SCRIPT ERROR'));
-      resolve({
-        status: code === 0 ? 'passed' : 'failed',
-        exit_code: code,
-        error_count: errors.length,
-        errors: errors.slice(0, 10),
-      });
-    });
-
-    proc.on('error', (err) => {
-      clearTimeout(timer);
-      resolve({ status: 'error', message: err.message });
-    });
+async function runVerification(godot: string, projectPath: string): Promise<Record<string, unknown>> {
+  const result = await spawnGodot(godot, ['--headless', '--path', projectPath, '-e', '--quit'], {
+    timeoutMs: 20_000,
   });
+
+  if (result.timedOut) {
+    return { status: 'timeout', output: result.stdout.slice(-2000) };
+  }
+
+  if (result.exitCode === -1 && result.stdout.includes('Error:')) {
+    return { status: 'error', message: result.stdout.split('\n').pop()!.replace('Error: ', '') };
+  }
+
+  const errors = result.stdout.split('\n').filter(l => l.includes('ERROR') || l.includes('SCRIPT ERROR'));
+  return {
+    status: result.exitCode === 0 ? 'passed' : 'failed',
+    exit_code: result.exitCode,
+    error_count: errors.length,
+    errors: errors.slice(0, 10),
+  };
 }
 
 
