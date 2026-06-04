@@ -8,7 +8,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { opsErrorResult, validateTimeout } from './shared.js';
-import { requireProjectPath, resolveWithinRoot, parseMcpScriptOutput, normalizeUserProjectPath, checkVersionMismatch, buildSafeEnv, scanFiles } from '../helpers.js';
+import { requireProjectPath, resolveWithinRoot, parseMcpScriptOutput, normalizeUserProjectPath, checkVersionMismatch, scanFiles } from '../helpers.js';
 import { analyzeOutput, type AnalysisResult } from '../error-analyzer.js';
 import { lintGDScript } from './gdscript-lint.js';
 import { spawnGodot } from './spawn-helper.js';
