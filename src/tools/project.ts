@@ -13,6 +13,7 @@ import {
 import { DETAILED_RULE_TEMPLATES } from './rule-templates.js';
 import { validatePath, requireString, requireProjectPath, resolveWithinRoot, type GodotConfig } from '../helpers.js';
 import { getScaffoldFiles, PROJECT_TEMPLATES } from './code-templates.js';
+import { getLogger } from '../core/logger.js';
 
 const ACTIONS = [
   'list_projects',
@@ -84,7 +85,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
               scan(join(dir, entry.name), depth + 1);
             }
           }
-        } catch (err) { console.debug('[project] scan directory:', err); }
+        } catch (err) { getLogger().debug('project', `scan directory: ${err instanceof Error ? err.message : err}`); }
       }
 
       scan(searchDir, 0);
@@ -112,7 +113,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
               stats[ext] = (stats[ext] || 0) + 1;
             }
           }
-        } catch (err) { console.debug('[project] count files:', err); }
+        } catch (err) { getLogger().debug('project', `count files: ${err instanceof Error ? err.message : err}`); }
       }
       countFiles(p, 0);
 
@@ -144,7 +145,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
               }
             }
           }
-        } catch (err) { console.debug('[project] list files scan:', err); }
+        } catch (err) { getLogger().debug('project', `list files scan: ${err instanceof Error ? err.message : err}`); }
       }
       scan(target);
 
@@ -577,7 +578,7 @@ function writeAtomic(filePath: string, content: string): void {
   try {
     renameSync(tmp, filePath);
   } catch (e) {
-    try { unlinkSync(tmp); } catch (err) { console.debug('[project] cleanup temp file:', err); }
+    try { unlinkSync(tmp); } catch (err) { getLogger().debug('project', `cleanup temp file: ${err instanceof Error ? err.message : err}`); }
     throw e;
   }
 }

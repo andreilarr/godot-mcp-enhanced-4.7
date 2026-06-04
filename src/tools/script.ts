@@ -10,6 +10,7 @@ import { lintGDScript, formatLintResults } from './gdscript-lint.js';
 import { getTemplateSuggestion } from './code-templates.js';
 import { gdEscape, opsErrorResult } from './shared.js';
 import { validateTimeout } from './shared.js';
+import { getLogger } from '../core/logger.js';
 
 function detectDuplicateLines(lines: string[]): string[] {
   const warnings: string[] = [];
@@ -773,7 +774,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             }
           }
         } catch (err) {
-          console.debug('[script] scan dir for files:', err);
+          getLogger().debug('script', `scan dir for files: ${err instanceof Error ? err.message : err}`);
           skippedDirs.push(dir.slice(p.length + 1) || dir);
         }
       }
@@ -800,7 +801,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             skippedLarge.push(relOf(filePath));
             continue;
           }
-        } catch (e) { console.debug(`[script] stat failed for ${filePath}:`, e); continue; }
+        } catch (e) { getLogger().debug('script', `stat failed for ${filePath}: ${e instanceof Error ? e.message : e}`); continue; }
         const content = readFileSync(filePath, 'utf-8');
         const hasCRLF = content.includes('\r\n');
         const normalized = content.replace(/\r\n/g, '\n');

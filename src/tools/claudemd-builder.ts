@@ -2,6 +2,7 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
 import type { GodotConfig } from '../helpers.js';
+import { getLogger } from '../core/logger.js';
 
 // MCP 管理的章节标识（含旧格式，用于识别并替换）
 export const SECTION_IDS = new Set([
@@ -161,7 +162,7 @@ export function buildKeyPaths(projectDir: string): string | null {
       if (existsSync(join(projectDir, name))) {
         existing.push(`├── ${name}/ — ${label}`);
       }
-    } catch (err) { console.debug('[claudemd] checking known dirs:', err); }
+    } catch (err) { getLogger().debug('claudemd', `checking known dirs: ${err instanceof Error ? err.message : err}`); }
   }
   if (existing.length === 0) return null;
   // Fix last prefix: ├── → └──

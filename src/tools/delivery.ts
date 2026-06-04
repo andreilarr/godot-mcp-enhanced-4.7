@@ -3,6 +3,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { requireProjectPath, resolveWithinRoot } from '../helpers.js';
+import { getLogger } from '../core/logger.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { batchValidateScripts } from './validation.js';
 import { SCENE_TREE_HEADER, wrapAssertionCode, opsErrorResult } from './shared.js';
@@ -166,7 +167,7 @@ function buildSceneContentCache(projectPath: string, cache: Map<string, string>)
           }
         }
       }
-    } catch (err) { console.debug('[delivery] scan scene cache:', err); }
+    } catch (err) { getLogger().debug('delivery', `scan scene cache: ${err instanceof Error ? err.message : err}`); }
   })(projectPath, '');
   return cache;
 }
@@ -263,7 +264,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
               result.push(`${prefix}${e.name}`);
             }
           }
-        } catch (err) { console.debug('[delivery] collect scenes:', err); }
+        } catch (err) { getLogger().debug('delivery', `collect scenes: ${err instanceof Error ? err.message : err}`); }
         return result;
       }
       scenePaths = collectScenes(projectPath, '');
@@ -313,7 +314,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
               result.push(`${prefix}${e.name}`);
             }
           }
-        } catch (err) { console.debug('[delivery] collect scripts:', err); }
+        } catch (err) { getLogger().debug('delivery', `collect scripts: ${err instanceof Error ? err.message : err}`); }
         return result;
       }
       scriptPaths = collectScripts(projectPath, '');
@@ -493,7 +494,7 @@ func _initialize():
               result.push(`${prefix}${e.name}`);
             }
           }
-        } catch (err) { console.debug('[delivery] collect GDD files:', err); }
+        } catch (err) { getLogger().debug('delivery', `collect GDD files: ${err instanceof Error ? err.message : err}`); }
         return result;
       }
 

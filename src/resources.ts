@@ -7,6 +7,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { resolve, join, extname, sep } from 'path';
 import { parseTscnSummary } from './tscn-parser.js';
 import { parseConfigValue, safeRealPath } from './helpers.js';
+import { getLogger } from './core/logger.js';
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB — reject files larger than this
 
@@ -425,7 +426,7 @@ function scanForResources(projectPath: string, relativeDir: string, resources: M
   let entries;
   try {
     entries = readdirSync(dir, { withFileTypes: true });
-  } catch (err) { console.debug('[resources] scanDirectory failed for', dir, err); return; }
+  } catch (err) { getLogger().debug('resources', `scanDirectory failed for ${dir}: ${err instanceof Error ? err.message : err}`); return; }
 
   for (const entry of entries) {
     if (resources.length >= MAX_RESOURCES) return;
@@ -566,7 +567,7 @@ function countFiles(projectPath: string): Record<string, number> {
           if (ext) counts[ext] = (counts[ext] || 0) + 1;
         }
       }
-    } catch (err) { console.debug('[resources] scanning directory:', err); }
+    } catch (err) { getLogger().debug('resources', `scanning directory: ${err instanceof Error ? err.message : err}`); }
   }
   scan(projectPath, 0);
   return counts;

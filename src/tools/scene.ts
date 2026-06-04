@@ -11,6 +11,7 @@ import { SCENE_TREE_HEADER, opsErrorResult, parseGdscriptResult, sanitizeResPath
 import { normalizeNodePath, gdEscape, toSnakeCase, valueToGd } from './shared.js';
 import { acquireShortRunningSlot, releaseShortRunningSlot } from '../core/process-state.js';
 import { spawnGodot } from './spawn-helper.js';
+import { getLogger } from '../core/logger.js';
 
 /** Validate that a value is a non-empty string; returns opsErrorResult if not. */
 function requireScenePath(value: unknown): ToolResult | null {
@@ -887,7 +888,7 @@ function handleDetachInstance(args: Record<string, unknown>): ToolResult {
     renameSync(tmpPath, sceneAbsPath);
   } catch (e: unknown) {
     // Cleanup temp file on failure
-    try { unlinkSync(tmpPath); } catch (e) { console.debug('[scene] cleanup temp file:', e); }
+    try { unlinkSync(tmpPath); } catch (e) { getLogger().debug('scene', `cleanup temp file: ${e instanceof Error ? e.message : e}`); }
     return textResult(`Error writing scene: ${(e as Error).message}`);
   }
 
@@ -903,7 +904,7 @@ function writeAtomic(filePath: string, content: string): void {
   try {
     renameSync(tmp, filePath);
   } catch (e) {
-    try { unlinkSync(tmp); } catch (cleanupErr) { console.debug("[scene] writeAtomic temp cleanup failed:", cleanupErr); }
+    try { unlinkSync(tmp); } catch (cleanupErr) { getLogger().debug('scene', `writeAtomic temp cleanup failed: ${cleanupErr instanceof Error ? cleanupErr.message : cleanupErr}`); }
     throw e;
   }
 }

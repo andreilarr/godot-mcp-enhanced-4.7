@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { getLogger } from './logger.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -52,7 +53,7 @@ async function validateGodotBinary(candidatePath: string): Promise<boolean> {
     const { stdout } = await execFileAsync(candidatePath, ['--version'], { encoding: 'utf-8', timeout: 5000 });
     return stdout.trim().toLowerCase().includes('godot') || /^\d+\.\d+/.test(stdout.trim());
   } catch (err) {
-    console.debug('[godot-finder] validateGodotBinary failed for', candidatePath, err);
+    getLogger().debug('godot-finder', `validateGodotBinary failed for ${candidatePath}: ${err instanceof Error ? err.message : err}`);
     return false;
   }
 }
@@ -65,7 +66,7 @@ function findInDirectory(dir: string): string | null {
         return join(dir, entry);
       }
     }
-  } catch (err) { console.debug('[godot-finder] scanning directory:', err); }
+  } catch (err) { getLogger().debug('godot-finder', `scanning directory: ${err instanceof Error ? err.message : err}`); }
   return null;
 }
 
@@ -98,7 +99,7 @@ export async function findGodot(): Promise<string> {
       godotPath = 'godot';
       return godotPath;
     }
-  } catch (err) { console.debug('[godot-finder] PATH godot failed:', err); tried.push('godot (PATH)'); }
+  } catch (err) { getLogger().debug('godot-finder', `PATH godot failed: ${err instanceof Error ? err.message : err}`); tried.push('godot (PATH)'); }
 
   // 3. Platform-specific search
   if (process.platform === 'win32') {

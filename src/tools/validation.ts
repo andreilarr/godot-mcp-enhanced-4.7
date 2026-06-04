@@ -12,6 +12,7 @@ import { requireProjectPath, resolveWithinRoot, parseMcpScriptOutput, normalizeU
 import { analyzeOutput, type AnalysisResult } from '../error-analyzer.js';
 import { lintGDScript } from './gdscript-lint.js';
 import { spawnGodot } from './spawn-helper.js';
+import { getLogger } from '../core/logger.js';
 
 // ─── Known base class methods/properties whitelist ───────────────────────────
 // The Godot headless parser cannot resolve inherited methods from base classes
@@ -216,8 +217,8 @@ export async function batchValidateScripts(
     : spawnResult.stdout;
 
   if (output.startsWith('SPAWN_ERROR:')) {
-    try { rmSync(listPath, { force: true }); } catch (e) { console.debug('[validation] cleanup list file:', e); }
-    try { rmSync(validatorPath, { force: true }); } catch (e) { console.debug('[validation] cleanup validator file:', e); }
+    try { rmSync(listPath, { force: true }); } catch (e) { getLogger().debug('validation', `cleanup list file: ${e instanceof Error ? e.message : e}`); }
+    try { rmSync(validatorPath, { force: true }); } catch (e) { getLogger().debug('validation', `cleanup validator file: ${e instanceof Error ? e.message : e}`); }
     return [{ file: '<validator:spawn>', errors: [output] }];
   }
 
@@ -262,8 +263,8 @@ export async function batchValidateScripts(
       }
     }
   } finally {
-    try { rmSync(listPath, { force: true }); } catch (e) { console.debug('[validation] cleanup list file (finally):', e); }
-    try { rmSync(validatorPath, { force: true }); } catch (e) { console.debug('[validation] cleanup validator file (finally):', e); }
+    try { rmSync(listPath, { force: true }); } catch (e) { getLogger().debug('validation', `cleanup list file (finally): ${e instanceof Error ? e.message : e}`); }
+    try { rmSync(validatorPath, { force: true }); } catch (e) { getLogger().debug('validation', `cleanup validator file (finally): ${e instanceof Error ? e.message : e}`); }
   }
 
   const finalResults: Array<{ file: string; errors: string[]; filtered_count?: number }> =
@@ -502,7 +503,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           const batchResults = await batchValidateScripts(godot, projectPath, scriptsToCheck, 15000);
           precheckErrors.push(...batchResults);
         }
-      } catch (err) { console.debug('[validation] precheck scripts:', err); }
+      } catch (err) { getLogger().debug('validation', `precheck scripts: ${err instanceof Error ? err.message : err}`); }
 
       try {
         const { stdout, stderr } = await execFileAsync(godot, cmdArgs, { timeout: timeout * 1000 });
@@ -527,7 +528,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
                 (analysis as ExtendedAnalysisResult).scene_tree = parseMcpScriptOutput(treeResult, 0);
               }
             }
-          } catch (err) { console.debug('[validation] capture scene tree:', err); }
+          } catch (err) { getLogger().debug('validation', `capture scene tree: ${err instanceof Error ? err.message : err}`); }
         }
 
         return textResult(JSON.stringify(analysis, null, 2));
@@ -586,7 +587,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
               if (exts.includes(ext)) result.push(full);
             }
           }
-        } catch (err) { console.debug('[validation] collect files:', err); }
+        } catch (err) { getLogger().debug('validation', `collect files: ${err instanceof Error ? err.message : err}`); }
         return result;
       }
 
@@ -789,7 +790,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             }
             totalWarnings += lintOutput.warnings.length;
           }
-        } catch (err) { console.debug('[validation] scan for pitfalls:', err); }
+        } catch (err) { getLogger().debug('validation', `scan for pitfalls: ${err instanceof Error ? err.message : err}`); }
 
         results.push({ file: rel, has_errors: errs.length > 0 || hasLintErrors, errors: errs, warnings: warnings.length > 0 ? warnings : undefined });
       }
@@ -977,7 +978,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
               importedFiles.push(fullPath.replace(p + (process.platform === 'win32' ? '\\' : '/'), ''));
             }
           }
-        } catch (err) { console.debug('[validation] import resources scan:', err); }
+        } catch (err) { getLogger().debug('validation', `import resources scan: ${err instanceof Error ? err.message : err}`); }
       }
 
       scanDir(targetDir, 0);

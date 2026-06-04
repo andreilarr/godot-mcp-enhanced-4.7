@@ -80,6 +80,7 @@ function createStateStream(
 
   reader.on('error', (err: Error) => {
     // I-04: 输出错误信息到 stderr，让用户知道发生了什么
+    // NOTE: 保留 console.error — dashboard 是独立 CLI 进程，logger 未初始化，需直接输出到终端
     console.error('[dashboard] Log read error:', err.message);
   });
 

@@ -42,7 +42,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
     logger.close(); // flush 缓冲区 + 关闭文件句柄
     await server.close();
   } catch (err) {
-    console.error('[godot-mcp] Error during shutdown:', err);
+    logger.error('godot-mcp', `Error during shutdown: ${err instanceof Error ? err.message : err}`);
   }
   process.exit(0);
 }
