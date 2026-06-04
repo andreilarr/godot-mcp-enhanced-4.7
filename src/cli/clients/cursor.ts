@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { randomUUID } from 'crypto';
 import type { ClientAdapter } from './types.js';
 
 export class CursorAdapter implements ClientAdapter {
@@ -33,6 +34,9 @@ export class CursorAdapter implements ClientAdapter {
       ...(mcpArgs.length > 0 ? { args: mcpArgs } : {}),
       env: { GODOT_PATH: godotPath },
     };
-    writeFileSync(mcpPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+    // 原子写入：先写临时文件再 rename，防止并发竞态
+    const tmpPath = join(cursorDir, `.mcp.${randomUUID()}.tmp`);
+    writeFileSync(tmpPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+    renameSync(tmpPath, mcpPath);
   }
 }

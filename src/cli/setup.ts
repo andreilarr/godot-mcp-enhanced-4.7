@@ -5,13 +5,14 @@ import { ALL_ADAPTERS } from './clients/index.js';
 
 /** 检测 MCP command/args — 本地开发用 node 绝对路径，否则用 npx */
 function detectMcpCommand(): { command: string; args: string[] } {
-  // 检查是否是 npm 全局安装的路径
-  const isNpmGlobal = (import.meta.url ?? '').includes('node_modules');
+  // 检查当前运行的入口是否在 node_modules 中（npm 全局安装）
+  const entryPath = process.argv[1] ?? '';
+  const isNpmGlobal = entryPath.includes('node_modules') || entryPath.includes('godot-mcp-enhanced');
   if (isNpmGlobal) {
     return { command: 'npx', args: ['godot-mcp-enhanced'] };
   }
   // 本地开发：用 node + 绝对路径
-  const devEntry = join(import.meta.dirname ?? '.', 'index.js');
+  const devEntry = join(import.meta.dirname ?? '.', '..', 'index.js');
   return { command: 'node', args: [devEntry] };
 }
 

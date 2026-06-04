@@ -31,15 +31,16 @@ export function launchDashboardOnce(): void {
   try {
     if (platform === 'win32') {
       // Windows: 使用 start 命令在新窗口中启动
-      spawn('cmd', ['/c', 'start', 'godot-mcp-dashboard'], {
+      // start 语法: start "title" command [args...]
+      spawn('cmd', ['/c', 'start', '"godot-mcp-dashboard"', 'node', `"${dashboardPath}"`], {
         detached: true,
         stdio: 'ignore',
         windowsHide: false,
       }).unref();
     } else if (platform === 'darwin') {
       // macOS: 使用 osascript 让 Terminal.app 执行
-      const cmd = `node "${dashboardPath}"`;
-      spawn('osascript', ['-e', `tell application "Terminal"\ndo script "${cmd}"\nactivate\nend tell`], {
+      // 用 quoted form of 防止路径中的特殊字符导致注入
+      spawn('osascript', ['-e', `tell application "Terminal"\ndo script "node " & quoted form of "${dashboardPath}"\nactivate\nend tell`], {
         detached: true,
         stdio: 'ignore',
       }).unref();
@@ -53,10 +54,13 @@ export function launchDashboardOnce(): void {
       ];
       for (const [bin, args] of terminals) {
         try {
-          spawn(bin, args, { detached: true, stdio: 'ignore' }).unref();
+          const child = spawn(bin, args, { detached: true, stdio: 'ignore' });
+          // spawn 是异步的，通过 error 事件检测可执行文件不存在
+          child.on('error', () => { /* 终端不可用，尝试下一个 */ });
+          child.unref();
           break;
         } catch {
-          // 终端不可用，尝试下一个
+          // 同步错误（极少见），尝试下一个
         }
       }
     }
