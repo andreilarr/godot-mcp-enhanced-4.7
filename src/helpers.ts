@@ -49,7 +49,7 @@ export function safeRealPath(p: string, base?: string): string {
     }
     let resolvedAncestor: string;
     try { resolvedAncestor = realpathSync(current); } catch (err) {
-      throw new Error(`Cannot resolve real path for "${current}" (component of "${p}"): ${err instanceof Error ? err.message : err}`);
+      throw new Error(`Cannot resolve real path for "${current}" (component of "${p}"): ${err instanceof Error ? err.message : err}`, { cause: err });
     }
     const resolved = trailing.length > 0 ? join(resolvedAncestor, ...trailing) : resolvedAncestor;
     // If a base is provided, verify the resolved path doesn't escape it
