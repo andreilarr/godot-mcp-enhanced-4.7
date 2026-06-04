@@ -13,7 +13,7 @@ describe('GDScript Lint', () => {
 
   it('returns meta information', () => {
     const result = lintGDScript('');
-    expect(result.meta.rules_count >= 16).toBeTruthy();
+    expect(result.meta.rules_count >= 19).toBeTruthy();
     expect(result.meta.last_reviewed).toBeTruthy();
   });
 
@@ -252,6 +252,112 @@ describe('GDScript Lint', () => {
     it('friction 清理后不崩溃', () => {
       const r = lintGDScript('var rb := RigidBody3D.new()\nrb.friction = 0.3');
       expect(r.meta.rules_count > 0).toBeTruthy();
+    });
+  });
+
+  // L017
+  describe('L017 _unhandled_input mouse_filter warning', () => {
+    it('命中: 使用 _unhandled_input', () => {
+      expect(lintGDScript('func _unhandled_input(event):\n\tpass').warnings.some(w => w.rule === 'L017')).toBeTruthy();
+    });
+    it('忽略: 使用 _input 而非 _unhandled_input', () => {
+      expect(!lintGDScript('func _input(event):\n\tpass').warnings.some(w => w.rule === 'L017')).toBeTruthy();
+    });
+    it('忽略: 注释中提到 _unhandled_input', () => {
+      expect(!lintGDScript('# use _unhandled_input for gameplay\nfunc _ready():\n\tpass').warnings.some(w => w.rule === 'L017')).toBeTruthy();
+    });
+  });
+
+  // L018
+  describe('L018 TileSet add_source before TileData', () => {
+    it('命中: get_tile_data 在 add_source 之前', () => {
+      const code = 'func setup():\n\tvar td = atlas.get_tile_data(Vector2i(0, 0), 0)\n\ttileset.add_source(atlas)';
+      expect(lintGDScript(code).errors.some(e => e.rule === 'L018')).toBeTruthy();
+    });
+    it('忽略: add_source 在 get_tile_data 之前（正确顺序）', () => {
+      const code = 'func setup():\n\ttileset.add_source(atlas)\n\tvar td = atlas.get_tile_data(Vector2i(0, 0), 0)';
+      expect(!lintGDScript(code).errors.some(e => e.rule === 'L018')).toBeTruthy();
+    });
+    it('边界: 无 add_source 调用', () => {
+      const code = 'func setup():\n\tvar td = atlas.get_tile_data(Vector2i(0, 0), 0)';
+      expect(!lintGDScript(code).errors.some(e => e.rule === 'L018')).toBeTruthy();
+    });
+  });
+
+  // L019
+  describe('L019 class_name cross-file headless warning', () => {
+    it('命中: 声明 class_name', () => {
+      expect(lintGDScript('class_name Player\nextends CharacterBody3D').warnings.some(w => w.rule === 'L019')).toBeTruthy();
+    });
+    it('忽略: 注释中的 class_name', () => {
+      expect(!lintGDScript('# class_name is used here\nextends Node').warnings.some(w => w.rule === 'L019')).toBeTruthy();
+    });
+    it('忽略: 无 class_name', () => {
+      expect(!lintGDScript('extends Node2D\nfunc _ready():\n\tpass').warnings.some(w => w.rule === 'L019')).toBeTruthy();
+    });
+  });
+
+  // L020
+  describe('L020 AnimationPlayer.add_animation() removed', () => {
+    it('命中: AnimationPlayer 上下文调用 add_animation', () => {
+      const code = 'var player := AnimationPlayer.new()\nplayer.add_animation("walk", anim)';
+      expect(lintGDScript(code).errors.some(e => e.rule === 'L020')).toBeTruthy();
+    });
+    it('命中: animation_player 变量名', () => {
+      const code = 'var animation_player = $AnimPlayer\nanimation_player.add_animation("idle", anim)';
+      expect(lintGDScript(code).errors.some(e => e.rule === 'L020')).toBeTruthy();
+    });
+    it('忽略: AnimationLibrary.add_animation 合法', () => {
+      const code = 'var lib := AnimationLibrary.new()\nlib.add_animation("walk", anim)';
+      expect(!lintGDScript(code).errors.some(e => e.rule === 'L020')).toBeTruthy();
+    });
+    it('忽略: 注释中不触发', () => {
+      expect(!lintGDScript('# player.add_animation()').errors.some(e => e.rule === 'L020')).toBeTruthy();
+    });
+  });
+
+  // L021
+  describe('L021 Member variable shadows parent', () => {
+    it('命中: CharacterBody3D 中声明 velocity', () => {
+      const code = 'extends CharacterBody3D\nvar velocity = Vector3.ZERO';
+      expect(lintGDScript(code).warnings.some(w => w.rule === 'L021')).toBeTruthy();
+    });
+    it('命中: Node2D 中声明 current_state', () => {
+      const code = 'extends Node2D\nvar current_state = "idle"';
+      expect(lintGDScript(code).warnings.some(w => w.rule === 'L021')).toBeTruthy();
+    });
+    it('忽略: 不冲突的变量名', () => {
+      const code = 'extends CharacterBody3D\nvar move_speed = 200.0';
+      expect(!lintGDScript(code).warnings.some(w => w.rule === 'L021')).toBeTruthy();
+    });
+    it('忽略: 非检测基类', () => {
+      const code = 'extends RefCounted\nvar velocity = Vector3.ZERO';
+      expect(!lintGDScript(code).warnings.some(w => w.rule === 'L021')).toBeTruthy();
+    });
+    it('忽略: 注释中不触发', () => {
+      expect(!lintGDScript('# var velocity = Vector3.ZERO').warnings.some(w => w.rule === 'L021')).toBeTruthy();
+    });
+  });
+
+  // L022
+  describe('L022 Polling pattern in _process', () => {
+    it('命中: _process 内 get_node', () => {
+      const code = 'func _process(delta):\n\tvar node = get_node("Label")\n\tnode.text = "hello"';
+      expect(lintGDScript(code).warnings.some(w => w.rule === 'L022')).toBeTruthy();
+    });
+    it('命中: _physics_process 内 get_node', () => {
+      const code = 'func _physics_process(delta):\n\tvar target = get_node("../Player")';
+      expect(lintGDScript(code).warnings.some(w => w.rule === 'L022')).toBeTruthy();
+    });
+    it('忽略: _ready 内 get_node（推荐用法）', () => {
+      const code = 'func _ready():\n\tvar label = get_node("Label")';
+      expect(!lintGDScript(code).warnings.some(w => w.rule === 'L022')).toBeTruthy();
+    });
+    it('忽略: onready var 缓存', () => {
+      expect(!lintGDScript('onready var label = get_node("Label")').warnings.some(w => w.rule === 'L022')).toBeTruthy();
+    });
+    it('忽略: 注释中不触发', () => {
+      expect(!lintGDScript('# var node = get_node("Label")').warnings.some(w => w.rule === 'L022')).toBeTruthy();
     });
   });
 });

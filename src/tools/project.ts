@@ -1,13 +1,14 @@
-import { join, basename } from 'path';
+import { join, basename, dirname } from 'path';
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, renameSync, unlinkSync } from 'fs';
 import { randomUUID } from 'crypto';
+import { fileURLToPath } from 'url';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import {
   buildEngineVersion, buildRenderer, buildKeyPaths, buildMainScene,
   buildAutoloads, buildInputMap, buildPhysics, buildLayerNames, buildMcpMapping,
-  buildTypeGuide, mergeSections, SECTION_ORDER, GODOT_MCP_RULES,
+  buildTypeGuide, buildBestPractices, mergeSections, SECTION_ORDER, GODOT_MCP_RULES,
 } from './claudemd-builder.js';
 import { DETAILED_RULE_TEMPLATES } from './rule-templates.js';
 import { validatePath, requireString, requireProjectPath, resolveWithinRoot, type GodotConfig } from '../helpers.js';
@@ -388,6 +389,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           ['## 层级名称', () => buildLayerNames(config)],
           ['## MCP 规则映射', () => buildMcpMapping()],
           ['## GDScript 类型规范', () => buildTypeGuide()],
+          ['## 代码最佳实践', () => buildBestPractices()],
         ];
 
         for (const [header, builder] of builders) {
@@ -439,11 +441,17 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         }
 
         // Detailed subsystem rules: godot-mcp-core.md, godot-mcp-bridge.md, etc.
+        // Read MCP version from package.json for template substitution
+        const mcpPkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json');
+        let mcpVersion = '0.16.0';
+        try { mcpVersion = JSON.parse(readFileSync(mcpPkgPath, 'utf-8')).version || mcpVersion; } catch { /* fallback */ }
+
         const detailEntries = Object.entries(DETAILED_RULE_TEMPLATES).sort(([a], [b]) => a.localeCompare(b));
         for (const [filename, content] of detailEntries) {
           const detailPath = join(rulesDir, filename);
+          const resolved = content.replace(/\{\{MCP_VERSION\}\}/g, mcpVersion);
           if (!existsSync(detailPath)) {
-            writeAtomic(detailPath, content);
+            writeAtomic(detailPath, resolved);
             actions.push(`rules: created .claude/rules/${filename}`);
           } else if (force) {
             actions.push(`rules: preserved ${filename} (user modifications protected)`);

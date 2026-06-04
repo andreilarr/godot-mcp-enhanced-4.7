@@ -8,13 +8,14 @@ export const SECTION_IDS = new Set([
   '## 引擎版本', '## 渲染器', '## 项目关键路径', '## 主场景',
   '## Autoload', '## Input Map', '## 物理设置', '## 层级名称',
   '## MCP 规则映射', '## Godot MCP Rules', '## GDScript 类型规范',
+  '## 代码最佳实践',
 ]);
 
 // MCP 章节的固定顺序（仅新格式，用于幂等性检测和输出顺序）
 export const SECTION_ORDER: string[] = [
   '## 引擎版本', '## 渲染器', '## 项目关键路径', '## 主场景',
   '## Autoload', '## Input Map', '## 物理设置', '## 层级名称',
-  '## MCP 规则映射', '## GDScript 类型规范',
+  '## MCP 规则映射', '## GDScript 类型规范', '## 代码最佳实践',
 ];
 
 // godot-mcp.md 固定模板内容
@@ -295,6 +296,34 @@ export function buildTypeGuide(): string {
     '- **class_name 注册可复用类**: `class_name Player extends CharacterBody3D`',
     '',
     '> 为什么重要：动态类型是 MCP 工具调用失败的首要原因（DEV.to 2026-05-20 横评确认）。',
+  ].join('\n');
+}
+
+export function buildBestPractices(): string {
+  return [
+    '### 信号代替轮询',
+    '- **用信号驱动状态变化**，而非在 `_process` 中轮询检查',
+    '  ```gdscript',
+    '  # ❌ 每帧检查',
+    '  func _process(delta):',
+    '      if enemy.dead: queue_free()',
+    '',
+    '  # ✅ 信号驱动',
+    '  func _ready():',
+    '      enemy.died.connect(queue_free)',
+    '  ```',
+    '- **缓存节点引用**：在 `_ready()` 中用 `@onready` 获取，不要在 `_process` 内 `get_node()`',
+    '',
+    '### 分离关注点',
+    '- **管理器类只管逻辑**，UI 类只管显示，数据类只管状态',
+    '- 典型拆分：`BuildManager`（逻辑）+ `BuildUI`（界面）+ `BuildingData`（数据）',
+    '- 单个脚本超过 300 行时考虑拆分',
+    '',
+    '### 避免常见陷阱',
+    '- **检查父类成员**：`velocity`、`position`、`state` 等常见名在 `extends CharacterBody3D` 时会覆盖基类属性',
+    '- **Godot 4 API 变更**：`AnimationPlayer.add_animation()` 已移除，用 `get_animation_library("").add_animation()`',
+    '- **默认动画库可能不存在**：首次添加动画前检查 `has_animation_library("")` 或创建 `AnimationLibrary`',
+    '- **减少每帧计算**：避免 `_process` 内的字符串拼接、数组创建、复杂数学运算',
   ].join('\n');
 }
 

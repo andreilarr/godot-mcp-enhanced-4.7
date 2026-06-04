@@ -148,11 +148,10 @@ export function checkSceneIntegrity(projectPath: string, scenePath: string): { p
 }
 
 // Cache: scene path → file content (avoids O(n*m) re-reading)
-let _sceneContentCache: Map<string, string> | null = null;
+// Lifecycle is bound to a single handleTool call — no module-level state.
 
-function getSceneContentCache(projectPath: string): Map<string, string> {
-  if (_sceneContentCache !== null) return _sceneContentCache;
-  _sceneContentCache = new Map();
+function buildSceneContentCache(projectPath: string, cache: Map<string, string>): Map<string, string> {
+  if (cache.size > 0) return cache;
   (function scanDir(dir: string, relPrefix: string): void {
     try {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -163,24 +162,26 @@ function getSceneContentCache(projectPath: string): Map<string, string> {
         } else if (entry.name.endsWith('.tscn')) {
           const content = safeReadFile(join(dir, entry.name));
           if (content) {
-            _sceneContentCache!.set(`${relPrefix}${entry.name}`, content);
+            cache.set(`${relPrefix}${entry.name}`, content);
           }
         }
       }
     } catch (err) { console.debug('[delivery] scan scene cache:', err); }
   })(projectPath, '');
-  return _sceneContentCache;
+  return cache;
 }
 
+/** @deprecated No-op — cache lifecycle is now bound to handleTool calls. */
 export function resetSceneCache(): void {
-  _sceneContentCache = null;
+  // Intentionally empty: kept for backward compatibility with tests.
 }
 
-export function findAssociatedScenes(projectPath: string, scriptPath: string): string[] {
+export function findAssociatedScenes(projectPath: string, scriptPath: string, cache?: Map<string, string>): string[] {
   const scenes: string[] = [];
   const scriptResPath = `res://${scriptPath}`;
-  const cache = getSceneContentCache(projectPath);
-  for (const [sceneRelPath, content] of cache) {
+  const sceneCache = cache ?? new Map<string, string>();
+  const filled = buildSceneContentCache(projectPath, sceneCache);
+  for (const [sceneRelPath, content] of filled) {
     if (content.includes(`"${scriptResPath}"`)) {
       scenes.push(sceneRelPath);
     }
@@ -204,8 +205,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
   if (!existsSync(join(projectPath, 'project.godot'))) {
     return opsErrorResult('INVALID_PARAMS', `Not a valid Godot project (missing project.godot): ${projectPath}`);
   }
-  // Invalidate scene cache for fresh verification
-  resetSceneCache();
+  // Scene content cache — lifecycle bound to this single handleTool call
+  const sceneCache = new Map<string, string>();
   const scope = args.scope;
   const checks = (args.checks as Record<string, unknown>) ?? {};
 
@@ -248,7 +249,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       if (!resolvedScriptPath) {
         report.scene_tree = { passed: false, issues: [{ severity: 'error', location: '', message: 'script_path required for scope=script' }] };
       } else {
-        scenePaths = findAssociatedScenes(projectPath, resolvedScriptPath);
+        scenePaths = findAssociatedScenes(projectPath, resolvedScriptPath, sceneCache);
       }
     } else {
       // scope=full: collect all .tscn

@@ -177,36 +177,34 @@ describe('GodotServer', () => {
     });
   });
 
-  // ── Editor reconnect fallback (I-01) ───────────────────────────────────────
+  // ── Editor reconnect fallback (I-04) ───────────────────────────────────────
 
   describe('editor reconnect exhaustion fallback', () => {
-    it('degrades to headless when editor disconnect handler fires', async () => {
-      const disconnectHandlers = [];
+    it('degrades to headless when reconnect exhaustion handler fires', async () => {
+      const exhaustedHandlers = [];
       const mockEditorConn = {
         connect: vi.fn().mockResolvedValue(undefined),
         disconnect: vi.fn(),
         isConnected: vi.fn().mockReturnValue(true),
-        addOnDisconnectHandler: vi.fn((handler) => {
-          disconnectHandlers.push(handler);
+        addOnReconnectExhaustedHandler: vi.fn((handler) => {
+          exhaustedHandlers.push(handler);
         }),
       };
 
       vi.mocked(EditorConnection).mockImplementation(function() { return mockEditorConn; });
       mockWaitForEditorSecret.mockResolvedValue('test-secret');
-      // Make detectProjectPath return a valid path
       mockExistsSync.mockReturnValue(true);
 
       const server = new GodotServer('/fake/ops.gd', { connectionMode: 'editor' });
       await server.run();
 
-      // Verify: editor connected, handler registered
+      // Verify: editor connected, exhaustion handler registered
       expect(mockEditorConn.connect).toHaveBeenCalled();
-      expect(mockEditorConn.addOnDisconnectHandler).toHaveBeenCalled();
+      expect(mockEditorConn.addOnReconnectExhaustedHandler).toHaveBeenCalled();
       expect(server.connectionMode).toBe('editor');
 
-      // Simulate reconnect exhaustion: fire disconnect, mark not connected
-      mockEditorConn.isConnected.mockReturnValue(false);
-      for (const handler of disconnectHandlers) {
+      // Simulate reconnect exhaustion
+      for (const handler of exhaustedHandlers) {
         handler();
       }
 
@@ -217,15 +215,16 @@ describe('GodotServer', () => {
       await server.close();
     });
 
-    it('does NOT degrade if editor is still connected when handler fires', async () => {
+    it('does NOT degrade on normal disconnect (only on reconnect exhaustion)', async () => {
       const disconnectHandlers = [];
       const mockEditorConn = {
         connect: vi.fn().mockResolvedValue(undefined),
         disconnect: vi.fn(),
-        isConnected: vi.fn().mockReturnValue(true),
+        isConnected: vi.fn().mockReturnValue(false),
         addOnDisconnectHandler: vi.fn((handler) => {
           disconnectHandlers.push(handler);
         }),
+        addOnReconnectExhaustedHandler: vi.fn(),
       };
 
       vi.mocked(EditorConnection).mockImplementation(function() { return mockEditorConn; });
@@ -235,15 +234,13 @@ describe('GodotServer', () => {
       const server = new GodotServer('/fake/ops.gd', { connectionMode: 'editor' });
       await server.run();
 
-      // Fire disconnect handler BUT editor still reports connected
-      // (e.g., this was a stale/duplicate fireDisconnect call)
+      // Fire disconnect handler (e.g., ws.on('close') between reconnect attempts)
       for (const handler of disconnectHandlers) {
         handler();
       }
 
-      // Should NOT have degraded — guard checks isConnected()
+      // Should NOT have degraded — only reconnect exhaustion triggers degradation
       expect(server.connectionMode).toBe('editor');
-      expect(server.editorConn).toBeTruthy();
 
       await server.close();
     });

@@ -38,6 +38,8 @@ export class EditorConnection {
 
   private disconnectHandlers = new Set<() => void>();
   private reconnectHandlers = new Set<() => void>();
+  /** I-04: Handlers called specifically when reconnect attempts are exhausted (not on normal disconnect). */
+  private reconnectExhaustedHandlers = new Set<() => void>();
 
   /** Track dropped notify() calls so callers can detect stale scene-tree state */
   private _droppedNotifications = 0;
@@ -83,6 +85,14 @@ export class EditorConnection {
   /** Remove a previously added reconnect handler. */
   removeOnReconnectHandler(handler: () => void): void {
     this.reconnectHandlers.delete(handler);
+  }
+
+  /** I-04: Add a handler invoked when reconnect attempts are exhausted (distinct from normal disconnect). */
+  addOnReconnectExhaustedHandler(handler: () => void): void {
+    this.reconnectExhaustedHandlers.add(handler);
+  }
+  removeOnReconnectExhaustedHandler(handler: () => void): void {
+    this.reconnectExhaustedHandlers.delete(handler);
   }
 
   private fireDisconnect(): void {
@@ -417,7 +427,10 @@ export class EditorConnection {
     if (this.reconnectAttempt >= this.maxReconnectAttempts) {
       getLogger().error('editor', `Max reconnect attempts (${this.maxReconnectAttempts}) reached, giving up`);
       this.reconnectEnabled = false;
-      this.fireDisconnect();
+      // I-04: Fire dedicated exhaustion handlers instead of relying on fireDisconnect dedup.
+      // This ensures consumers (e.g. GodotServer) always get notified when reconnect is exhausted,
+      // regardless of whether fireDisconnect was already called by ws.on('close').
+      for (const handler of this.reconnectExhaustedHandlers) handler();
       return;
     }
     const delay = Math.min(

@@ -156,7 +156,7 @@ export function setRunningProcess(proc: ChildProcess | null): void {
   // Clearing the process always clears busy state
   if (proc === null) {
     if (_processBusy) {
-      getLogger().warn('process-state', `setRunningProcess(null) called while process is busy (owner: ${_busyOwner || '(unknown)'}). This bypasses acquire/release semantics. Consider using releaseShortRunningSlot() or setProcessBusy(false) instead.`);
+      getLogger().debug('process-state', `setRunningProcess(null) called while process is busy (owner: ${_busyOwner || '(unknown)'}). This bypasses acquire/release semantics.`);
     }
     _processBusy = false;
     _busyOwner = '';

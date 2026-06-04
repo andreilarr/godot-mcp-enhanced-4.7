@@ -12,6 +12,7 @@ interface PendingToken {
 const TOKEN_TTL_MS = 180_000; // 3 minutes
 const MAX_TOKENS = 100;
 const TOKEN_RATE_LIMIT = 5; // max new tokens per second
+const MAX_ARGS_JSON_SIZE = 10_000; // I-02: Truncate args JSON to prevent memory bloat from large GDScript code blocks
 const pendingTokens = new Map<string, PendingToken>();
 let _recentCreations: number[] = []; // timestamps of recent createPendingToken calls
 
@@ -85,7 +86,9 @@ export function createPendingToken(toolName: string, args: Record<string, unknow
     if (oldestKey) pendingTokens.delete(oldestKey);
   }
   const token = randomBytes(18).toString('base64url');
-  pendingTokens.set(token, { token, toolName, args, createdAt: now });
+  // I-02: Truncate large args to prevent memory bloat (e.g. GDScript code blocks in execute_gdscript)
+  const truncatedArgs = truncateArgs(args);
+  pendingTokens.set(token, { token, toolName, args: truncatedArgs, createdAt: now });
   return token;
 }
 
@@ -138,4 +141,17 @@ export function cleanup(): void {
 /** @internal Exposed for testing — check whether the cleanup timer is active. */
 export function isCleanupTimerRunning(): boolean {
   return _cleanupTimer !== null;
+}
+
+/** I-02: Truncate large string values in args to cap memory usage per token. */
+function truncateArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (typeof value === 'string' && value.length > MAX_ARGS_JSON_SIZE) {
+      out[key] = value.substring(0, MAX_ARGS_JSON_SIZE) + `...[truncated ${value.length - MAX_ARGS_JSON_SIZE} chars]`;
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
 }

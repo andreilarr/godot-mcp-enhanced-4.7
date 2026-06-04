@@ -14,7 +14,7 @@ description: "godot-mcp 核心指南 模式选择 Headless Editor Bridge execute
 alwaysApply: true
 ---
 
-> 适用于 godot-mcp-enhanced v0.14.0+
+> 适用于 godot-mcp-enhanced {{MCP_VERSION}}+
 
 ## 概述与架构
 
@@ -96,7 +96,7 @@ description: "game bridge game_query game_input game_write game_wait game_bridge
 alwaysApply: false
 ---
 
-> 适用于 godot-mcp-enhanced v0.14.0+
+> 适用于 godot-mcp-enhanced {{MCP_VERSION}}+
 
 ## 概述与架构
 
@@ -240,7 +240,7 @@ description: "editor websocket editor_sync_start editor_sync_stop editor_get_sce
 alwaysApply: false
 ---
 
-> 适用于 godot-mcp-enhanced v0.14.0+
+> 适用于 godot-mcp-enhanced {{MCP_VERSION}}+
 
 ## 概述与架构
 
@@ -336,7 +336,7 @@ description: "ui ui_create_control ui_build_layout ui_set_layout ui_get_layout u
 alwaysApply: false
 ---
 
-> 适用于 godot-mcp-enhanced v0.14.0+
+> 适用于 godot-mcp-enhanced {{MCP_VERSION}}+
 
 ## 概述与架构
 
@@ -484,7 +484,7 @@ description: "recording recording_start recording_stop recording_save recording_
 alwaysApply: false
 ---
 
-> 适用于 godot-mcp-enhanced v0.14.0+
+> 适用于 godot-mcp-enhanced {{MCP_VERSION}}+
 
 ## 概述与架构
 

@@ -413,6 +413,9 @@ let instance: Logger | null = null;
 export function getLogger(opts?: LoggerOptions): Logger {
   if (!instance) {
     instance = createLogger(opts);
+  } else if (opts && Object.keys(opts).length > 0) {
+    // 单例已存在，配置被忽略 — 输出 warn 提醒
+    instance.warn('logger', 'getLogger() called with options but singleton already exists — options ignored');
   }
   return instance;
 }

@@ -106,12 +106,13 @@ export async function findGodot(): Promise<string> {
     for (const dir of allDirs) {
       tried.push(`${dir}/Godot_v4*.exe`);
       const found = findInDirectory(dir);
-      if (found) { godotPath = found; return found; }
+      if (found && await validateGodotBinary(found)) { godotPath = found; return found; }
+      if (found) tried.push(`${found} (failed --version validation)`);
     }
   } else {
     for (const candidate of POSIX_CANDIDATES) {
       tried.push(candidate);
-      if (existsSync(candidate)) { godotPath = candidate; return candidate; }
+      if (existsSync(candidate) && await validateGodotBinary(candidate)) { godotPath = candidate; return candidate; }
     }
   }
 

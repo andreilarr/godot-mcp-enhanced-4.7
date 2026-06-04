@@ -1,10 +1,13 @@
-import { expect, describe, it, beforeEach, afterAll } from 'vitest';
+import { expect, describe, it, beforeEach, afterEach, afterAll } from 'vitest';
 import { resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 
 import { validatePath, resolveWithinRoot, ensureDir, normalizeUserProjectPath, allowOutsideProjectPaths, parseConfigValue, isPathInAllowedRoots, _resetPathAllowWarned } from '../src/helpers.js';
-import { getLogger } from '../src/core/logger.js';
+import { getLogger, resetLogger } from '../src/core/logger.js';
+
+// I-01: Reset logger singleton between tests to prevent state leakage
+afterEach(() => { resetLogger(); });
 
 describe('validatePath', () => {
   it('resolves relative paths to absolute', () => {

@@ -73,6 +73,7 @@ import { getLogger } from './core/logger.js';
 export { clearGodotPathCache, getCachedGodotPath };
 
 const DEBUG = process.env.DEBUG === 'true';
+const EDITOR_SECRET_TIMEOUT_MS = 5000;
 
 function log(...args: unknown[]): void {
   if (DEBUG) getLogger().debug('godot-mcp', args.map(a => String(a)).join(' '));
@@ -182,7 +183,7 @@ export class GodotServer {
       const projectPath = this.detectProjectPath();
       let secret: string | undefined;
       if (projectPath) {
-        secret = (await waitForEditorSecret(projectPath, 5000)) ?? undefined;
+        secret = (await waitForEditorSecret(projectPath, EDITOR_SECRET_TIMEOUT_MS)) ?? undefined;
       }
       if (!secret) {
         getLogger().warn('auth', 'No editor secret found — plugin may not be running');
@@ -200,16 +201,16 @@ export class GodotServer {
           await this.editorConn.connect();
           this.editorExecutor = new EditorToolExecutor(this.editorConn);
           this.dispatcher?.setEditorExecutor(this.editorExecutor);
-          // I-01: editor reconnect exhaustion → auto-degrade to headless
-          this.editorConn.addOnDisconnectHandler(() => {
-            if (!this.editorConn?.isConnected()) {
-              getLogger().warn('godot-mcp', 'Editor reconnect attempts exhausted — degrading to headless mode.');
-              this.dispatcher?.markEditorFallback();
-              this.connectionMode = 'headless';
-              this.dispatcher?.setConnectionMode('headless');
-              this.dispatcher?.setEditorExecutor(null);
-              this.editorConn = null;
-            }
+          // I-04: Use dedicated reconnect-exhausted handler instead of disconnect handler.
+          // The disconnect handler fires on every ws.close (including between reconnect attempts),
+          // which would prematurely degrade to headless. This handler only fires when all retries fail.
+          this.editorConn.addOnReconnectExhaustedHandler(() => {
+            getLogger().warn('godot-mcp', 'Editor reconnect attempts exhausted — degrading to headless mode.');
+            this.dispatcher?.markEditorFallback();
+            this.connectionMode = 'headless';
+            this.dispatcher?.setConnectionMode('headless');
+            this.dispatcher?.setEditorExecutor(null);
+            this.editorConn = null;
           });
           log('Editor: Connected to Godot plugin on port %d', port);
         } catch (err) {

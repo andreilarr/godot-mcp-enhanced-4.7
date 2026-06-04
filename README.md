@@ -106,6 +106,7 @@ read_scene/read_script → 理解结构 → write_script → run_and_verify
 本工具在受信任的本地开发环境中运行，具有以下安全特性：
 
 - **GDScript 动态执行**：`execute_gdscript` 等工具会在本地 Godot 进程中执行任意 GDScript 代码。GDScript 拥有完整的系统访问权限（文件读写、网络请求、进程创建）。**仅用于受信任的本地开发环境，不可暴露到不可信的远程连接。**
+- **⚠️ GDScript 沙箱仅为防误操作层**：内置的正则扫描器可检测常见的危险模式（如 `OS.execute`、`FileAccess.open(... WRITE)`），但**可通过字符串拼接等间接方式绕过**。沙箱**不是安全边界**，仅用于防止 AI 意外调用危险 API。如需真正的沙箱隔离，请使用容器/VM。可通过 `GODOT_MCP_SANDBOX=disabled` 关闭扫描，或通过 `GODOT_MCP_ALLOW_UNSAFE=true` 允许被阻止的操作。
 - **路径白名单**：通过 `ALLOWED_PROJECT_PATHS` 环境变量限制可访问的项目路径（分号分隔多个路径）。未配置时允许所有路径并打印一次性警告，零配置即可使用。
 - **确认令牌**：对危险操作（如删除节点）要求显式确认，防止 AI 误操作。
 - **输出标记防伪造**：每次执行使用随机生成的标记字符串，防止 GDScript 代码伪造 MCP 输出。
@@ -210,6 +211,9 @@ setup_project_rules(project_path="你的项目路径")
       ]
     }
   }
+```
+
+> ⚠️ **安全提示 (A-07):** `execute_gdscript`、`write_script`、`edit_script`、`project_replace` 等高风险工具在 `autoApprove` 列表中意味着 AI 可不经确认执行任意 GDScript 代码和文件修改。在安全敏感项目中，建议将这些工具从 `autoApprove` 中移除，改为手动确认。
 }
 ```
 

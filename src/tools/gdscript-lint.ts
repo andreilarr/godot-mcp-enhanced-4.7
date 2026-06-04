@@ -152,8 +152,8 @@ function hasTypeContext(precedingLines: string[], typeNames: string[]): boolean 
 
 const LINT_VERSION = {
   godot_target: "4.6",
-  last_reviewed: "2026-05-18",
-  rules_count: 16,
+  last_reviewed: "2026-05-31",
+  rules_count: 22,
 };
 
 // ─── RULES (populated in Tasks 2-4) ────────────────────────────────────────
@@ -284,6 +284,68 @@ const RULES: LintRule[] = [
   { id: "L016", severity: "warning", pattern: /^$/m, isCallOrder: true,
     message: "add_child() 后同函数内立即访问子节点方法，可能因 _ready 未触发而失败",
     suggestion: "使用 await get_tree().process_frame 等待一帧后再访问" },
+  // L017: _unhandled_input with full-rect Control risk
+  { id: "L017", severity: "warning", pattern: /_unhandled_input/,
+    message: "使用了 _unhandled_input — 如果场景中有全屏 Control（默认 mouse_filter=STOP），输入事件可能被拦截",
+    suggestion: "在覆盖视口的 Control 上显式设置 mouse_filter = Control.MOUSE_FILTER_IGNORE，或改用 _input()" },
+  // L018: TileSet add_source must precede TileData operations
+  { id: "L018", severity: "error", pattern: /^$/m, isCallOrder: true,
+    message: "TileData 操作在 add_source() 之前调用，source_id 尚未注册",
+    suggestion: "先调用 tileset.add_source(atlas_source) 获取 source_id，再操作 TileData" },
+  // L019: class_name cross-file resolution in headless
+  { id: "L019", severity: "warning", pattern: /\bclass_name\s+\w+/,
+    message: "class_name 在 headless/MCP 环境中跨文件不可解析，其他文件无法通过类型名引用此类",
+    suggestion: "替代方案：\n  1. 使用方文件添加 const MyClass := preload('res://my_class.gd') 并用 MyClass 作类型注解\n  2. 导出函数用基类类型：func spawn() -> Node:（而非自定义类名）\n  3. 如需全局类型注册，可在 _ready 中用 Engine.register_script_class()（Godot 4.4+）" },
+  // L020: AnimationPlayer.add_animation() removed in Godot 4
+  {
+    id: "L020",
+    severity: "error",
+    pattern: /\.add_animation\s*\(/,
+    message: "AnimationPlayer.add_animation() 在 Godot 4 中已移除，不能直接向 AnimationPlayer 添加动画",
+    suggestion: "使用 get_animation_library(\"\").add_animation(name, anim) 或创建 AnimationLibrary:\n  var lib := AnimationLibrary.new()\n  lib.add_animation(name, anim)\n  player.add_animation_library(\"\", lib)",
+    requiresSemanticValidation: true,
+    contextFilter: (_match, context): boolean => {
+      return hasTypeContext(context.precedingLines, ['AnimationPlayer', 'animation_player', 'anim_player', 'player']);
+    },
+  },
+  // L021: Member variable shadows parent class member
+  {
+    id: "L021",
+    severity: "warning",
+    pattern: /^(\s*)var\s+(\w+)\s*[:=]/m,
+    message: "成员变量可能与父类成员同名，导致意外覆盖",
+    suggestion: "检查 extends 的基类是否有同名成员，如有请重命名此变量",
+    requiresSemanticValidation: true,
+    contextFilter: (match, context): boolean => {
+      const varName = match[2];
+      const SHADOW_PRONE = [
+        'velocity', 'position', 'rotation', 'scale', 'modulate', 'visible',
+        'speed', 'health', 'damage', 'direction', 'state', 'current_state',
+        'target', 'target_position', 'input', 'audio', 'animation',
+        'collision_mask', 'collision_layer', 'mass', 'gravity',
+        'process_mode', 'process_priority', 'script',
+      ];
+      if (!SHADOW_PRONE.includes(varName)) return false;
+      return hasTypeContext(context.precedingLines, [
+        'extends CharacterBody', 'extends RigidBody', 'extends StaticBody',
+        'extends Node2D', 'extends Node3D', 'extends Control',
+        'extends Area2D', 'extends Area3D', 'extends KinematicBody',
+      ]);
+    },
+  },
+  // L022: Polling pattern in _process/_physics_process
+  {
+    id: "L022",
+    severity: "warning",
+    pattern: /^(\s*)var\s+\w+\s*=\s*get_node\s*\(/m,
+    message: "_process 内使用 get_node() 轮询节点引用，每帧重复查找效率低",
+    suggestion: "在 _ready() 中缓存节点引用：onready var node = %NodeName 或 onready var node = $Path",
+    requiresSemanticValidation: true,
+    contextFilter: (_match, context): boolean => {
+      const recent = context.precedingLines.slice(-5).join('\n');
+      return recent.includes('_process') || recent.includes('_physics_process');
+    },
+  },
 ];
 
 // ─── Main Lint Function ────────────────────────────────────────────────────
@@ -388,6 +450,18 @@ function lintCallOrder(
         }
         break;
       }
+      case "L018": {
+        // L018: TileData operations must come after add_source
+        const addSourceMatch = body.match(/\.add_source\s*\(/);
+        const tileDataMatch = body.match(/\.get_tile_data\s*\(|\.set_tile_data\s*\(/);
+        if (addSourceMatch && tileDataMatch) {
+          if (body.indexOf(tileDataMatch[0]) < body.indexOf(addSourceMatch[0])) {
+            errors.push({ rule: rule.id, severity: rule.severity, line: func.startLine,
+              message: rule.message, suggestion: rule.suggestion, confirmed: true });
+          }
+        }
+        break;
+      }
     }
   }
 }
@@ -406,7 +480,7 @@ function lintRegex(
   }
   const globalPattern = rule.pattern.global
     ? rule.pattern
-    : new RegExp(rule.pattern.source, 'g');
+    : new RegExp(rule.pattern.source, rule.pattern.flags ? rule.pattern.flags + 'g' : 'g');
 
   let match: RegExpMatchArray | null;
   while ((match = globalPattern.exec(code)) !== null) {
