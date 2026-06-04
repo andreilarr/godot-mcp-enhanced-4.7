@@ -2,7 +2,7 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { validatePath, resolveWithinRoot } from '../helpers.js';
+import { requireProjectPath, resolveWithinRoot } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { batchValidateScripts } from './validation.js';
 import { SCENE_TREE_HEADER, wrapAssertionCode, opsErrorResult } from './shared.js';
@@ -200,7 +200,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     return opsErrorResult('INVALID_PARAMS', 'scope must be one of: scene, script, full');
   }
 
-  const projectPath = validatePath(args.project_path);
+  const projectPath = requireProjectPath(args);
   if (!existsSync(join(projectPath, 'project.godot'))) {
     return opsErrorResult('INVALID_PARAMS', `Not a valid Godot project (missing project.godot): ${projectPath}`);
   }
