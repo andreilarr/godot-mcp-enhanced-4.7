@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
 import { join, dirname } from 'path';
 import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync, statSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
@@ -176,11 +176,18 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
 
       return new Promise((resolve) => {
-        const proc = spawn(godot, [
-          '--headless', '--path', p,
-          '--script', ctx.opsScript,
-          action, JSON.stringify(params),
-        ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
+        let proc: ChildProcess;
+        try {
+          proc = spawn(godot, [
+            '--headless', '--path', p,
+            '--script', ctx.opsScript,
+            action, JSON.stringify(params),
+          ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
+        } catch (spawnErr) {
+          releaseShortRunningSlot();
+          resolve(opsErrorResult('SPAWN_FAILED', `Failed to spawn Godot: ${(spawnErr as Error).message}`));
+          return;
+        }
 
         let out = '';
         let settled = false;
@@ -324,11 +331,18 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       return new Promise((resolve) => {
         let out = '';
         let settled = false;
-        const proc = spawn(godot, [
-          '--headless', '--path', p,
-          '--script', treeScript,
-          JSON.stringify(params),
-        ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
+        let proc: ChildProcess;
+        try {
+          proc = spawn(godot, [
+            '--headless', '--path', p,
+            '--script', treeScript,
+            JSON.stringify(params),
+          ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
+        } catch (spawnErr) {
+          releaseShortRunningSlot();
+          resolve(textResult(`SPAWN_FAILED: ${(spawnErr as Error).message}`));
+          return;
+        }
 
         const MAX_OUTPUT = 100_000;
         proc.stdout?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
@@ -391,11 +405,18 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       return new Promise((resolve) => {
         let out = '';
         let settled = false;
-        const proc = spawn(godot, [
-          '--headless', '--path', p,
-          '--script', inspectScript,
-          JSON.stringify(params),
-        ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
+        let proc: ChildProcess;
+        try {
+          proc = spawn(godot, [
+            '--headless', '--path', p,
+            '--script', inspectScript,
+            JSON.stringify(params),
+          ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
+        } catch (spawnErr) {
+          releaseShortRunningSlot();
+          resolve(textResult(`SPAWN_FAILED: ${(spawnErr as Error).message}`));
+          return;
+        }
 
         const MAX_OUTPUT = 100_000;
         proc.stdout?.on('data', (d: Buffer) => { if (out.length < MAX_OUTPUT) out += d.toString(); });
@@ -474,14 +495,21 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
 
       return new Promise((resolve) => {
-        const proc = spawn(godot, [
-          '--headless', '--path', p,
-          '--script', ctx.opsScript,
-          'batch_add_nodes', JSON.stringify({
-            scene_path: scenePath,
-            nodes: nodes,
-          }),
-        ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
+        let proc: ChildProcess;
+        try {
+          proc = spawn(godot, [
+            '--headless', '--path', p,
+            '--script', ctx.opsScript,
+            'batch_add_nodes', JSON.stringify({
+              scene_path: scenePath,
+              nodes: nodes,
+            }),
+          ], { stdio: ['pipe', 'pipe', 'pipe'], env: buildSafeEnv() });
+        } catch (spawnErr) {
+          releaseShortRunningSlot();
+          resolve(errorResult(`SPAWN_FAILED: ${(spawnErr as Error).message}`));
+          return;
+        }
 
         let out = '';
         let settled = false;
