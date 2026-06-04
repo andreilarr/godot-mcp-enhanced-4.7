@@ -101,6 +101,17 @@ export async function findGodot(): Promise<string> {
     }
   } catch (err) { getLogger().debug('godot-finder', `PATH godot failed: ${err instanceof Error ? err.message : err}`); tried.push('godot (PATH)'); }
 
+  // 2.5 Windows-specific: Registry + Scoop
+  if (process.platform === 'win32') {
+    const registryResult = await findViaRegistry();
+    if (registryResult) { godotPath = registryResult; return registryResult; }
+    tried.push('Windows Registry');
+
+    const scoopResult = await findViaScoop();
+    if (scoopResult) { godotPath = scoopResult; return scoopResult; }
+    tried.push('Scoop');
+  }
+
   // 3. Platform-specific search
   if (process.platform === 'win32') {
     const allDirs = [...WINDOWS_SEARCH_DIRS, ...getUserSearchDirs(), ...getExtraSearchDirs()];
@@ -120,4 +131,35 @@ export async function findGodot(): Promise<string> {
   throw new Error(
     `Godot binary not found. Tried:\n${tried.map(t => `  - ${t}`).join('\n')}\nSet GODOT_PATH or add godot to PATH.`
   );
+}
+
+/** Windows: 查找注册表中的 Godot 安装路径 */
+async function findViaRegistry(): Promise<string | null> {
+  if (process.platform !== 'win32') return null;
+  try {
+    // 查询 HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall 下的 Godot 条目
+    const { stdout } = await execFileAsync('reg', [
+      'query', 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+      '/s', '/f', 'Godot',
+    ], { encoding: 'utf-8', timeout: 5000 });
+    // 从输出中提取 DisplayIcon 或 InstallLocation 路径
+    const match = stdout.match(/DisplayIcon\s+REG_SZ\s+(.+)/m);
+    if (match?.[1]) {
+      const candidate = match[1].trim();
+      if (existsSync(candidate) && await validateGodotBinary(candidate)) return candidate;
+    }
+  } catch { /* registry not available or no entries */ }
+  return null;
+}
+
+/** Windows: 查找 Scoop 安装的 Godot */
+async function findViaScoop(): Promise<string | null> {
+  if (process.platform !== 'win32') return null;
+  try {
+    const home = process.env.USERPROFILE || process.env.HOME;
+    if (!home) return null;
+    const scoopShim = join(home, 'scoop', 'shims', 'godot.exe');
+    if (existsSync(scoopShim) && await validateGodotBinary(scoopShim)) return scoopShim;
+  } catch { /* ignore */ }
+  return null;
 }
