@@ -11,8 +11,15 @@ function parseInitArgs(args: string[]): { name: string; template: string } {
   return { name, template };
 }
 
+/** 项目名称合法性校验：只允许字母、数字、连字符、下划线 */
+const VALID_NAME = /^[a-zA-Z0-9_-]+$/;
+
 export async function runInit(args: string[]): Promise<void> {
   const { name, template } = parseInitArgs(args);
+  if (!VALID_NAME.test(name)) {
+    console.error(`Invalid project name: "${name}". Use only letters, numbers, hyphens, and underscores.`);
+    process.exit(1);
+  }
   const projectDir = join(process.cwd(), name);
 
   if (existsSync(projectDir)) {

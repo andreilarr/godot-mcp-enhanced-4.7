@@ -22,9 +22,11 @@ export class CodexAdapter implements ClientAdapter {
   }
 
   async configure(_projectDir: string, godotPath: string, mcpCommand: string, mcpArgs: string[]): Promise<void> {
-    const fullCommand = mcpArgs.length > 0 ? `${mcpCommand} ${mcpArgs.join(' ')}` : mcpCommand;
+    // 分别传递 command 和 args，避免字符串拼接注入风险
     await execFileAsync('codex', [
-      'mcp', 'add', 'godot', fullCommand,
+      'mcp', 'add', 'godot',
+      '--command', mcpCommand,
+      ...(mcpArgs.length > 0 ? ['--args', ...mcpArgs] : []),
       '--env', `GODOT_PATH=${godotPath}`,
     ], { timeout: 10000 });
   }

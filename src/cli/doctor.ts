@@ -2,18 +2,7 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { findGodot } from '../core/godot-finder.js';
-import { ClaudeCodeAdapter } from './clients/claude-code.js';
-import { CursorAdapter } from './clients/cursor.js';
-import { OpenCodeAdapter } from './clients/opencode.js';
-import { CodexAdapter } from './clients/codex.js';
-import type { ClientAdapter } from './clients/types.js';
-
-const ALL_ADAPTERS: ClientAdapter[] = [
-  new ClaudeCodeAdapter(),
-  new CursorAdapter(),
-  new OpenCodeAdapter(),
-  new CodexAdapter(),
-];
+import { ALL_ADAPTERS } from './clients/index.js';
 
 function status(ok: boolean, msg: string): string {
   return ok ? `  ✓ ${msg}` : `  ✗ ${msg}`;

@@ -1,18 +1,7 @@
 /** setup 命令 — 一键配置 AI 客户端 */
 import { join } from 'path';
 import { findGodot } from '../core/godot-finder.js';
-import { ClaudeCodeAdapter } from './clients/claude-code.js';
-import { CursorAdapter } from './clients/cursor.js';
-import { OpenCodeAdapter } from './clients/opencode.js';
-import { CodexAdapter } from './clients/codex.js';
-import type { ClientAdapter } from './clients/types.js';
-
-const ALL_ADAPTERS: ClientAdapter[] = [
-  new ClaudeCodeAdapter(),
-  new CursorAdapter(),
-  new OpenCodeAdapter(),
-  new CodexAdapter(),
-];
+import { ALL_ADAPTERS } from './clients/index.js';
 
 /** 检测 MCP command/args — 本地开发用 node 绝对路径，否则用 npx */
 function detectMcpCommand(): { command: string; args: string[] } {

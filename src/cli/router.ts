@@ -1,4 +1,10 @@
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import type { ClientAdapter } from './clients/types.js';
+
+const __cliDir = dirname(fileURLToPath(import.meta.url));
+const __rootDir = join(__cliDir, '..', '..');
 
 const SUBCOMMANDS = ['setup', 'doctor', 'init', 'dashboard'] as const;
 export type Subcommand = typeof SUBCOMMANDS[number];
@@ -79,11 +85,10 @@ MCP 参数:
 }
 
 export async function showVersion(): Promise<void> {
-  const { readFileSync } = await import('fs');
-  const { join, dirname } = await import('path');
-  const { fileURLToPath } = await import('url');
-  const thisDir = dirname(fileURLToPath(import.meta.url));
-  const rootDir = join(thisDir, '..', '..');
-  const pkg = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-8'));
-  console.log(`godot-mcp-enhanced v${pkg.version}`);
+  try {
+    const pkg = JSON.parse(readFileSync(join(__rootDir, 'package.json'), 'utf-8'));
+    console.log(`godot-mcp-enhanced v${pkg.version}`);
+  } catch {
+    console.log('godot-mcp-enhanced (version unknown)');
+  }
 }

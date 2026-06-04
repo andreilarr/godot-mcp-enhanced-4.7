@@ -401,7 +401,7 @@ async function bridgeAction(method: string, params: Record<string, unknown>, ctx
     setBridgeProjectDir(ctx.projectDir);
   } else if (!_projectDir) {
     // 回退：手动运行游戏时 ctx.projectDir 为空，尝试从参数提取
-    try { if (params.project_path) setBridgeProjectDir(requireProjectPath({ project_path: params.project_path })); } catch { /* ignore */ }
+    try { if (params.project_path) setBridgeProjectDir(requireProjectPath({ project_path: params.project_path })); } catch (e) { getLogger().debug('bridge', `project_path fallback failed: ${e instanceof Error ? e.message : e}`); }
   }
   const resp = await sendToBridge(method, params, timeout);
   return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
@@ -502,7 +502,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           setBridgeProjectDir(ctx.projectDir);
         } else if (!_projectDir) {
           // 回退：手动运行游戏时 ctx.projectDir 为空，从参数提取
-          try { if (args.project_path) setBridgeProjectDir(requireProjectPath({ project_path: args.project_path })); } catch { /* ignore */ }
+          try { if (args.project_path) setBridgeProjectDir(requireProjectPath({ project_path: args.project_path })); } catch (e) { getLogger().debug('bridge', `project_path fallback failed: ${e instanceof Error ? e.message : e}`); }
         }
         const methodSets: Record<string, Set<string>> = {
           game_query: QUERY_METHODS,
