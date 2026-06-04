@@ -182,11 +182,11 @@ export function isFullClass(code: string): boolean {
 }
 
 /**
- * Wrap a snippet into a valid `extends SceneTree` script with helper functions.
- * Splits user code into declarations (class-level) and statements (inside _initialize).
- * This allows func/var/const definitions to work correctly at class scope.
+ * Classify GDScript code lines into declarations (class-level) and statements.
+ * Declarations include func, var, const, signal, enum, class_name, and annotations.
+ * Statements go into _initialize() body.
  */
-export function wrapSnippet(code: string, resultMarker = MARKER_RESULT_SHARED): string {
+function classifyLines(code: string): { declarationLines: string[]; statementLines: string[] } {
   const lines = code.split('\n');
   const declarationLines: string[] = [];
   const statementLines: string[] = [];
@@ -238,6 +238,17 @@ export function wrapSnippet(code: string, resultMarker = MARKER_RESULT_SHARED): 
     statementLines.push(line);
   }
 
+  return { declarationLines, statementLines };
+}
+
+/**
+ * Wrap a snippet into a valid `extends SceneTree` script with helper functions.
+ * Splits user code into declarations (class-level) and statements (inside _initialize).
+ * This allows func/var/const definitions to work correctly at class scope.
+ */
+export function wrapSnippet(code: string, resultMarker = MARKER_RESULT_SHARED): string {
+  const { declarationLines, statementLines } = classifyLines(code);
+
   // Build via array join — prevents JS template interpolation of user code
   const scriptLines: string[] = [
     'extends SceneTree',
@@ -287,45 +298,7 @@ export function wrapSnippet(code: string, resultMarker = MARKER_RESULT_SHARED): 
  * The loader scene instantiates this via .new(), so it must be a Node subclass.
  */
 export function wrapSnippetAsNode(code: string, resultMarker = MARKER_RESULT_SHARED): string {
-  const lines = code.split('\n');
-  const declarationLines: string[] = [];
-  const statementLines: string[] = [];
-
-  let inFuncBody = false;
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    if (trimmed === '') {
-      if (inFuncBody) {
-        declarationLines.push(line);
-      }
-      continue;
-    }
-
-    if (trimmed.startsWith('#') && !inFuncBody) {
-      declarationLines.push(line);
-      continue;
-    }
-
-    if (/^[^\t ]/.test(line) && /^(func |static func |var |const |signal |enum |class_name |@export|@onready|@icon|@warning)/.test(trimmed)) {
-      declarationLines.push(line);
-      if (/^(static )?func /.test(trimmed)) {
-        inFuncBody = true;
-      }
-      continue;
-    }
-
-    if (inFuncBody) {
-      if (/^[^\t ]/.test(line) && !trimmed.startsWith('#')) {
-        inFuncBody = false;
-      } else {
-        declarationLines.push(line);
-        continue;
-      }
-    }
-
-    statementLines.push(line);
-  }
+  const { declarationLines, statementLines } = classifyLines(code);
 
   // Rename user's _initialize to _mcp_user_init to avoid collision with our _initialize
   for (let i = 0; i < declarationLines.length; i++) {
