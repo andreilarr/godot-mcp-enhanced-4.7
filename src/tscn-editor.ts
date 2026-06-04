@@ -454,7 +454,7 @@ export function changeNodeType(
 // ── Detach instance (inline subtree) ─────────────────────────────────────────
 
 export interface InstanceNodeInfo {
-  instanceId: number;
+  instanceId: string | number;
   sourcePath: string;
   lineIndex: number;
   propertyOverrides: string[];
@@ -463,16 +463,18 @@ export interface InstanceNodeInfo {
 /**
  * Parse all [ext_resource ...] lines from .tscn text, returning id → path map.
  */
-function parseExtResourceMap(lines: string[]): Map<number, string> {
-  const map = new Map<number, string>();
+function parseExtResourceMap(lines: string[]): Map<string | number, string> {
+  const map = new Map<string | number, string>();
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('[ext_resource')) continue;
-    // Match id="N" and path="res://..."
-    const idMatch = trimmed.match(/id="(\d+)"/);
+    // Match id="N" and path="res://..." — supports both numeric and string UIDs
+    const idMatch = trimmed.match(/id="([^"]+)"/);
     const pathMatch = trimmed.match(/path="([^"]+)"/);
     if (idMatch && pathMatch) {
-      map.set(parseInt(idMatch[1]), pathMatch[1]);
+      const rawId = idMatch[1];
+      const numericId = Number(rawId);
+      map.set(!isNaN(numericId) && rawId !== '' ? numericId : rawId, pathMatch[1]);
     }
   }
   return map;
@@ -542,10 +544,12 @@ export function findInstanceNode(
     const lineParent = parentMatch ? parentMatch[1] : '.';
     if (lineParent !== tscnParent) continue;
 
-    const instanceMatch = line.match(/instance=ExtResource\("(\d+)"\)/);
+    const instanceMatch = line.match(/instance=ExtResource\("([^"]+)"\)/);
     if (!instanceMatch) continue;
 
-    const instanceId = parseInt(instanceMatch[1]);
+    const rawInstId = instanceMatch[1];
+    const numericInstId = Number(rawInstId);
+    const instanceId: string | number = !isNaN(numericInstId) && rawInstId !== '' ? numericInstId : rawInstId;
     const sourcePath = extMap.get(instanceId);
     if (!sourcePath) return null;
 
@@ -573,10 +577,11 @@ function findMaxExtResourceId(lines: string[]): number {
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('[ext_resource')) continue;
-    const m = trimmed.match(/id="(\d+)"/);
+    const m = trimmed.match(/id="([^"]+)"/);
     if (m) {
-      const id = parseInt(m[1]);
-      if (id > maxId) maxId = id;
+      const id = Number(m[1]);
+      // Only consider numeric IDs for max calculation; string UIDs are skipped
+      if (!isNaN(id) && m[1] !== '' && id > maxId) maxId = id;
     }
   }
   return maxId;
@@ -638,9 +643,12 @@ function remapExtResourceIds(
   let nextId = targetMaxId + 1;
 
   const remapped = sourceExtResources.map((line) => {
-    const idMatch = line.match(/id="(\d+)"/);
+    const idMatch = line.match(/id="([^"]+)"/);
     if (!idMatch) return line;
-    const oldId = parseInt(idMatch[1]);
+    const rawId = Number(idMatch[1]);
+    // Only remap numeric IDs; string UIDs are left as-is
+    if (isNaN(rawId) || idMatch[1] === '') return line;
+    const oldId = rawId;
     const newId = nextId++;
     idMap.set(oldId, newId);
     return line.replace(`id="${oldId}"`, `id="${newId}"`);
@@ -653,9 +661,11 @@ function remapExtResourceIds(
  * Apply ID remapping to a line's ExtResource("N") references.
  */
 function remapNodeLineRefs(line: string, idMap: Map<number, number>): string {
-  return line.replace(/ExtResource\("(\d+)"\)/g, (_match, idStr) => {
-    const oldId = parseInt(idStr);
-    const newId = idMap.get(oldId);
+  return line.replace(/ExtResource\("([^"]+)"\)/g, (_match, idStr) => {
+    const numericId = Number(idStr);
+    // Only remap numeric IDs; string UIDs are left as-is
+    if (isNaN(numericId) || idStr === '') return _match;
+    const newId = idMap.get(numericId);
     return newId !== undefined ? `ExtResource("${newId}")` : _match;
   });
 }
@@ -805,7 +815,7 @@ export function detachInstance(
   let rootHeader = rootGroup.header;
 
   // Remove instance=ExtResource("N") if present (source might itself be instanced)
-  rootHeader = rootHeader.replace(/\s*instance=ExtResource\("\d+"\)/, '');
+  rootHeader = rootHeader.replace(/\s*instance=ExtResource\("[^"]+"\)/, '');
 
   // Determine the target parent attribute for this node
   const tscnParent = parentToTscnParent(parent);

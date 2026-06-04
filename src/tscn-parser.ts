@@ -1,7 +1,7 @@
 // src/tscn-parser.ts — Godot .tscn scene file parser
 
 export interface ExtResource {
-  id: number;
+  id: string | number;
   type: string;
   path: string;
   [key: string]: string | number;
@@ -23,7 +23,7 @@ export interface ParsedNode {
   name: string;
   type: string;
   parent: string;
-  instance?: number; // ExtResource id
+  instance?: string | number; // ExtResource id
   instance_of?: string; // resolved path from ext_resources
   properties: NodeProperty[];
   children: ParsedNode[];
@@ -93,9 +93,13 @@ function parseValue(raw: string, maxDepth: number = 50): unknown {
   // Null
   if (trimmed === 'null' || trimmed === 'None') return null;
 
-  // ExtResource(N)
-  const extMatch = trimmed.match(/^ExtResource\("(\d+)"\)$/);
-  if (extMatch) return { __type: 'ExtResource', id: parseInt(extMatch[1]) };
+  // ExtResource("N") — supports both numeric and string UIDs (Godot 4.x)
+  const extMatch = trimmed.match(/^ExtResource\("([^"]+)"\)$/);
+  if (extMatch) {
+    const rawId = extMatch[1];
+    const numericId = Number(rawId);
+    return { __type: 'ExtResource', id: !isNaN(numericId) && rawId !== '' ? numericId : rawId };
+  }
 
   // SubResource("N")
   const subMatch = trimmed.match(/^SubResource\("([^"]+)"\)$/);
@@ -314,7 +318,10 @@ export function parseTscn(content: string): ParsedScene {
             const eq = pair.indexOf('=');
             const key = pair.slice(0, eq);
             const val = pair.slice(eq + 1).replace(/^"|"$/g, '');
-            if (key === 'id') currentExt!.id = parseInt(val);
+            if (key === 'id') {
+              const numericId = Number(val);
+              currentExt!.id = !isNaN(numericId) && val !== '' ? numericId : val;
+            }
             else if (key === 'type') currentExt!.type = val;
             else if (key === 'path') currentExt!.path = val;
             else currentExt![key] = val;
@@ -369,9 +376,11 @@ export function parseTscn(content: string): ParsedScene {
             else if (key === 'type') currentNode!.type = val;
             else if (key === 'parent') currentNode!.parent = val;
             else if (key === 'instance') {
-              const erMatch = val.match(/ExtResource\(["']?(\d+)["']?\)/);
+              const erMatch = val.match(/ExtResource\(["']?([^"']+)["']?\)/);
               if (erMatch) {
-                currentNode!.instance = parseInt(erMatch[1]);
+                const rawId = erMatch[1];
+                const numericId = Number(rawId);
+                currentNode!.instance = !isNaN(numericId) && rawId !== '' ? numericId : rawId;
               }
             }
           }
@@ -455,7 +464,7 @@ export function parseTscn(content: string): ParsedScene {
   const nodeMap = new Map<string, ParsedNode>();
 
   // Resolve instance_of paths from ext_resources
-  const extMap = new Map<number, string>();
+  const extMap = new Map<string | number, string>();
   for (const ext of result.extResources) {
     if (ext.path) extMap.set(ext.id, ext.path as string);
   }
