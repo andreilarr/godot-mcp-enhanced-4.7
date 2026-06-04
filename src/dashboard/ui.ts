@@ -2,7 +2,6 @@
 // 纯 ANSI 终端渲染引擎 — 零依赖，不使用 ink/React
 // 替代原 ui.tsx（ink+React），导出签名保持不变
 
-import type { LogEntry } from '../core/logger.js';
 import type { DashboardState, ToolStats } from './aggregator.js';
 import { sparkline } from './sparkline.js';
 import {
@@ -52,6 +51,7 @@ interface UIState {
 // C-01 修复：直接扫描原始字符串，跳过 ANSI 转义序列
 
 /** ANSI 转义序列正则（CSI 序列） */
+// eslint-disable-next-line no-control-regex
 const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]/g;
 
 /** 计算字符串去掉 ANSI 转义后的显示宽度（正确处理 surrogate pair + CJK） */
