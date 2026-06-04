@@ -347,7 +347,7 @@ export const SCENE_TREE_HEADER = [
   '			elif _p == _mcp_scene_instance.name:',
   '				_p = ""',
   '		if _p == "":',
-  '		return _mcp_scene_instance',
+  '			return _mcp_scene_instance',
   '		var _node: Node = _mcp_scene_instance.get_node_or_null(_p)',
   '		if _node != null:',
   '			return _node',
