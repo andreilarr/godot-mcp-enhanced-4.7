@@ -68,7 +68,7 @@ const args = process.argv.slice(2);
     process.exit(0);
   }
   if (args.includes('--version') || args.includes('-v')) {
-    showVersion();
+    await showVersion();
     process.exit(0);
   }
   if (isCliInvocation(args)) {

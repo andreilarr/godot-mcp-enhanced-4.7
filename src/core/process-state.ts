@@ -74,6 +74,7 @@ let _projectDir = '';
 // Long-running lock: run_project only (game process that persists for seconds/minutes)
 let _processBusy = false;
 let _busyOwner = '';
+let _busySince = 0;
 
 // Short-running counter: query_scene_tree / inspect_node (seconds-level operations)
 let _shortRunningCount = 0;
@@ -86,15 +87,28 @@ export function isProcessBusy(): boolean {
 
 /** Atomically acquire the long-running process slot. Returns true if acquired, false if busy. */
 export function acquireProcessSlot(owner: string = ''): boolean {
-  if (_processBusy) return false;
+  if (_processBusy) {
+    // 自动清理：如果占用超过 5 分钟，可能是残留死锁
+    if (_busySince > 0 && Date.now() - _busySince > 300_000) {
+      getLogger().warn('process-state', `Process slot held by "${_busyOwner}" for >5min, auto-releasing`);
+      _processBusy = false;
+      _busyOwner = '';
+      _busySince = 0;
+    }
+    if (_processBusy) return false;
+  }
   _processBusy = true;
   _busyOwner = owner;
+  _busySince = Date.now();
   return true;
 }
 
 export function setProcessBusy(busy: boolean): void {
   _processBusy = busy;
-  if (!busy) _busyOwner = '';
+  if (!busy) {
+    _busyOwner = '';
+    _busySince = 0;
+  }
 }
 
 /** Get info about what is currently holding the long-running lock. */
@@ -160,6 +174,7 @@ export function setRunningProcess(proc: ChildProcess | null): void {
     }
     _processBusy = false;
     _busyOwner = '';
+    _busySince = 0;
   }
   if (_runningProcess && !_runningProcess.killed && proc !== _runningProcess) {
     forceKillTree(_runningProcess);
@@ -214,5 +229,6 @@ export function resetState(): void {
   _projectDir = '';
   _processBusy = false;
   _busyOwner = '';
+  _busySince = 0;
   _shortRunningCount = 0;
 }

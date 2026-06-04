@@ -8,6 +8,7 @@ import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { opsErrorResult } from './shared.js';
 import { requireProjectPath } from '../helpers.js';
+import { launchDashboardOnce } from '../dashboard/launcher.js';
 import { getLogger } from '../core/logger.js';
 
 const BRIDGE_PORT = 9081;
@@ -119,7 +120,16 @@ async function _doConnect(timeout: number): Promise<Socket> {
 
   const secret = readBridgeSecret();
   if (!secret) {
-    throw new Error('Bridge secret not found. Ensure the game is running with the MCP Bridge autoload.');
+    if (!_projectDir) {
+      throw new Error(
+        'Bridge project directory not set. Use run_project to start the game, or pass project_path parameter. ' +
+        'Manual F5 launch requires project_path to locate the Bridge secret.'
+      );
+    }
+    throw new Error(
+      `Bridge secret not found at ${findBridgeSecretPath()}. ` +
+      'Ensure the game is running with the MCP Bridge autoload installed.'
+    );
   }
 
   return new Promise((resolve, reject) => {
@@ -154,6 +164,8 @@ async function _doConnect(timeout: number): Promise<Socket> {
             // Register persistent monitors so a dead/lost connection is detected automatically
             sock.on('close', () => { _invalidateSocket(); });
             sock.on('error', () => { _invalidateSocket(); });
+            // 首次 Bridge 连接成功时自动在新终端启动 Dashboard TUI
+            launchDashboardOnce();
             resolve(sock);
             return;
           }
@@ -385,7 +397,12 @@ const WAIT_METHODS = new Set([
 
 /** Shared helper: set project dir, send to bridge, format response. */
 async function bridgeAction(method: string, params: Record<string, unknown>, ctx: ToolContext, timeout: number): Promise<ToolResult> {
-  if (ctx.projectDir) setBridgeProjectDir(ctx.projectDir);
+  if (ctx.projectDir) {
+    setBridgeProjectDir(ctx.projectDir);
+  } else if (!_projectDir) {
+    // 回退：手动运行游戏时 ctx.projectDir 为空，尝试从参数提取
+    try { if (params.project_path) setBridgeProjectDir(requireProjectPath({ project_path: params.project_path })); } catch { /* ignore */ }
+  }
   const resp = await sendToBridge(method, params, timeout);
   return textResult(JSON.stringify(resp.result ?? resp.error, null, 2));
 }
@@ -483,6 +500,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         // Always update project dir so switching projects between calls works
         if (ctx.projectDir) {
           setBridgeProjectDir(ctx.projectDir);
+        } else if (!_projectDir) {
+          // 回退：手动运行游戏时 ctx.projectDir 为空，从参数提取
+          try { if (args.project_path) setBridgeProjectDir(requireProjectPath({ project_path: args.project_path })); } catch { /* ignore */ }
         }
         const methodSets: Record<string, Set<string>> = {
           game_query: QUERY_METHODS,

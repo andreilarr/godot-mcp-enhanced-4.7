@@ -103,7 +103,7 @@ func _process(_delta: float) -> void:
 		# Idle timeout check
 		var pid_act := p.get_instance_id()
 		if _peer_last_activity.has(pid_act):
-			var elapsed := Time.get_ticks_msec() / 1000.0 - _peer_last_activity[pid_act]
+			var elapsed: float = Time.get_ticks_msec() / 1000.0 - float(_peer_last_activity[pid_act])
 			if elapsed > INACTIVITY_TIMEOUT:
 				push_warning("[MCP Bridge] Peer %d idle for %.0fs, disconnecting" % [pid_act, elapsed])
 				p.disconnect_from_host()
@@ -517,8 +517,9 @@ func _cmd_set_node_property(params: Dictionary) -> Variant:
 		return {"error": {"code": -1, "message": "Node not found: %s" % path}}
 	if _is_blocked_property(prop):
 		return {"error": {"code": -2, "message": "Blocked property: %s" % prop}}
-	if not SafeValues.is_safe(value):
-		return {"error": {"code": -3, "message": "Value type not allowed: %s" % value.get_class()}}
+	if not _is_safe_value(value):
+		var type_info := "null" if value == null else value.get_class()
+		return {"error": {"code": -3, "message": "Value type not allowed: %s" % type_info}}
 	node.set(prop, value)
 	return {"success": true, "node": path, "property": prop}
 
@@ -1159,3 +1160,27 @@ func _input(event: InputEvent) -> void:
 		_recorded_events.append({"type": "mouse_click", "position": [event.position.x, event.position.y], "button": event.button_index, "pressed": event.pressed, "time_ms": time_ms})
 	elif event is InputEventMouseMotion:
 		_recorded_events.append({"type": "mouse_move", "position": [event.position.x, event.position.y], "time_ms": time_ms})
+
+
+## 内联安全类型检查（替代 SafeValues 类引用，autoload 环境无法引用 safe_values.gd）
+## 覆盖 JSON 反序列化可产生的类型 + StringName（GDScript 内部调用）
+const _MAX_SAFE_DEPTH := 10
+
+func _is_safe_value(value: Variant, depth: int = 0) -> bool:
+	if value == null:
+		return true
+	if value is bool or value is int or value is float or value is String or value is StringName:
+		return true
+	if depth >= _MAX_SAFE_DEPTH:
+		return false
+	if value is Array:
+		for item in value:
+			if not _is_safe_value(item, depth + 1):
+				return false
+		return true
+	if value is Dictionary:
+		for key in value:
+			if not _is_safe_value(key, depth + 1) or not _is_safe_value(value[key], depth + 1):
+				return false
+		return true
+	return false

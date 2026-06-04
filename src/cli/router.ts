@@ -78,8 +78,12 @@ MCP 参数:
 `);
 }
 
-export function showVersion(): void {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pkg = require('../../package.json');
+export async function showVersion(): Promise<void> {
+  const { readFileSync } = await import('fs');
+  const { join, dirname } = await import('path');
+  const { fileURLToPath } = await import('url');
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const rootDir = join(thisDir, '..', '..');
+  const pkg = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-8'));
   console.log(`godot-mcp-enhanced v${pkg.version}`);
 }
