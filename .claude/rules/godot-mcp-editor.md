@@ -3,7 +3,7 @@ description: "editor websocket editor_sync_start editor_sync_stop editor_get_sce
 alwaysApply: false
 ---
 
-> 适用于 godot-mcp-enhanced v0.14.0+
+> 适用于 godot-mcp-enhanced v0.16.0+
 
 ## 概述与架构
 

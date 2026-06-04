@@ -72,7 +72,12 @@ export function readEditorSecret(projectPath: string): string | null {
       return null;
     }
     return content;
-  } catch {
+  } catch (err: unknown) {
+    // ENOENT is expected (plugin not started yet) — silent.
+    // Other errors (EACCES, EISDIR, etc.) should be surfaced for diagnosis.
+    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      getLogger().error('auth', `Failed to read editor secret: ${(err as NodeJS.ErrnoException).code} — ${(err as Error).message}`);
+    }
     return null;
   }
 }

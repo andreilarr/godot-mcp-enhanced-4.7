@@ -9,29 +9,6 @@ import type { LogReader } from './log-reader.js';
 import type { Aggregator } from './aggregator.js';
 import type { DashboardState } from './aggregator.js';
 
-async function checkInk(): Promise<void> {
-  try {
-    await import('ink');
-  } catch {
-    console.error(
-      'Error: ink is required for the dashboard.\n' +
-      'Install it with: npm install ink\n' +
-      'Or reinstall the package with optional dependencies.'
-    );
-    process.exit(1);
-  }
-  try {
-    await import('react');
-  } catch {
-    console.error(
-      'Error: react is required for the dashboard (ink peer dependency).\n' +
-      'Install it with: npm install react\n' +
-      'Or reinstall the package with optional dependencies.'
-    );
-    process.exit(1);
-  }
-}
-
 function parseArgs(args: string[]): { filter?: string; help: boolean } {
   let help = false;
   let filter: string | undefined;
@@ -148,8 +125,6 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  await checkInk();
-
   const logDir = resolveLogDir();
 
   if (!existsSync(logDir)) {
@@ -179,7 +154,7 @@ async function main(): Promise<void> {
   try {
     await waitUntilExit();
   } catch {
-    // ink 退出时可能抛出
+    // 渲染退出时可能抛出
   } finally {
     abortController.abort();
     process.removeListener('SIGINT', onSigint);

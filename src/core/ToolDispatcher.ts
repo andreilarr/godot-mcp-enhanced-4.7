@@ -53,6 +53,10 @@ export class ToolDispatcher {
   private _editorFallback = false;
   private _editorFallbackWarned = false;
 
+  /** Deferred mode switch — applied at the start of the next handleCall. Prevents
+   *  editor disconnect callbacks from switching mode mid-request (C-01). */
+  private _pendingModeSwitch: { mode: 'headless' | 'editor'; executor: EditorToolExecutor | null } | null = null;
+
   constructor(options: DispatcherOptions) {
     this.options = options;
     this.readOnlyGuard = options.readOnlyGuard;
@@ -122,9 +126,16 @@ export class ToolDispatcher {
   }
 
   async handleCall(request: { params: { name: string; arguments?: Record<string, unknown> } }): Promise<ToolResult> {
+    // Apply deferred mode switch before processing (C-01: prevents mid-request mode changes)
+    this._applyPendingModeSwitch();
+
     const { name, arguments: rawArgs } = request.params;
     const startTime = Date.now();
     const args = this.normalizeArgs(rawArgs);
+
+    // Snapshot current mode + executor for consistent routing throughout this call
+    const currentMode = this.connectionMode;
+    const currentExecutor = this.editorExecutor;
 
     try {
       // ── 0. Common arg type validation ──
@@ -164,10 +175,10 @@ export class ToolDispatcher {
 
         // 复用同一 editor/headless 分支逻辑
         log('[CONFIRM] Executing confirmed tool: %s', pending.toolName);
-        if (this.connectionMode === 'editor' && this.editorExecutor) {
+        if (currentMode === 'editor' && currentExecutor) {
           const logger = getLogger();
           const confirmCallId = logger.toolStart(pending.toolName, pending.args);
-          const editorResult = await this.editorExecutor.execute(pending.toolName, pending.args);
+          const editorResult = await currentExecutor.execute(pending.toolName, pending.args);
           const duration = Date.now() - startTime;
           logger.toolEnd(confirmCallId, pending.toolName, duration);
           return this.attachFallbackWarning({ ...editorResult, content: [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] });
@@ -193,10 +204,10 @@ export class ToolDispatcher {
       }
 
       // ── 4. editor 模式 dispatch ──
-      if (this.connectionMode === 'editor' && this.editorExecutor) {
+      if (currentMode === 'editor' && currentExecutor) {
         const logger = getLogger();
         const callId = logger.toolStart(name, args);
-        const editorResult = await this.editorExecutor.execute(name, args);
+        const editorResult = await currentExecutor.execute(name, args);
         const duration = Date.now() - startTime;
         logger.toolEnd(callId, name, duration);
         return this.attachFallbackWarning({ ...editorResult, content: [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] });
@@ -211,15 +222,37 @@ export class ToolDispatcher {
     }
   }
 
+  /** Schedule a connection mode change. Applied at the start of the next handleCall
+   *  to prevent mid-request mode switches from editor disconnect callbacks (C-01). */
   setConnectionMode(mode: 'headless' | 'editor'): void {
-    this.connectionMode = mode;
+    this._pendingModeSwitch = { mode, executor: this._resolvePendingExecutor() };
   }
 
+  /** Schedule an executor change. Destroys the old executor immediately to release
+   *  resources (WebSocket listeners, etc.), but defers the instance assignment to the
+   *  next handleCall entry (C-01). This ensures a running handleCall keeps its snapshot
+   *  executor reference stable throughout the async operation. */
   setEditorExecutor(executor: EditorToolExecutor | null): void {
-    if (this.editorExecutor) {
-      this.editorExecutor.destroy();
+    // Destroy old executor immediately — no point keeping dead listeners around
+    const currentExec = this._resolvePendingExecutor();
+    if (currentExec) {
+      currentExec.destroy();
     }
-    this.editorExecutor = executor;
+    this._pendingModeSwitch = { mode: this.connectionMode, executor };
+  }
+
+  /** Get the effective executor: pending switch takes precedence over current instance. */
+  private _resolvePendingExecutor(): EditorToolExecutor | null {
+    return this._pendingModeSwitch?.executor ?? this.editorExecutor;
+  }
+
+  /** Apply any deferred mode switch. Called at the top of handleCall, outside of any await. */
+  private _applyPendingModeSwitch(): void {
+    if (this._pendingModeSwitch) {
+      this.connectionMode = this._pendingModeSwitch.mode;
+      this.editorExecutor = this._pendingModeSwitch.executor;
+      this._pendingModeSwitch = null;
+    }
   }
 
   /** 标记 editor fallback 状态（由 GodotServer.run() 调用） */
@@ -293,8 +326,8 @@ export class ToolDispatcher {
     const duration = Date.now() - startTime;
 
     if (result !== null) {
-      // 判断是否有错误（检查 content 中是否有 error 字段）
-      const hasError = result.content?.some(c => c.type === 'text' && c.text?.includes('"error"')) ?? false;
+      // 判断是否有错误（使用 MCP 标准的 isError 字段）
+      const hasError = result.isError === true;
       logger.toolEnd(callId, toolName, duration, hasError ? 'tool_error' : undefined);
       const duration2 = Date.now() - startTime;
       return { ...result, content: [...result.content, { type: 'text' as const, text: `_duration_ms: ${duration2}` }] };

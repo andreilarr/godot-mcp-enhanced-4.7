@@ -3,7 +3,7 @@ import { join, dirname } from 'path';
 import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync, statSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
-import { textResult } from '../types.js';
+import { textResult, errorResult } from '../types.js';
 import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath, ensureDir, parseMcpScriptOutput, buildSafeEnv } from '../helpers.js';
 import { parseTscn, parseTscnSummary } from '../tscn-parser.js';
 import { findInstanceNode, detachInstance, nodePathToNameAndParent } from '../tscn-editor.js';
@@ -494,7 +494,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             settled = true;
             forceKillTree(proc);
             releaseShortRunningSlot();
-            resolve({ content: [{ type: 'text', text: `batch_add_nodes timed out after 60s.` }] });
+            resolve(errorResult('batch_add_nodes timed out after 60s.'));
           }
         }, 60000);
 
@@ -504,7 +504,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           settled = true;
           releaseShortRunningSlot();
           if (code !== 0) {
-            resolve({ content: [{ type: 'text', text: `batch_add_nodes failed (exit code ${code}):\n${out}` }] });
+            resolve(errorResult(`batch_add_nodes failed (exit code ${code}):\n${out}`));
           } else {
             resolve({ content: [{ type: 'text', text: out.trim() || `batch_add_nodes completed: ${nodes.length} nodes added.` }] });
           }
@@ -515,7 +515,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           if (settled) return;
           settled = true;
           releaseShortRunningSlot();
-          resolve({ content: [{ type: 'text', text: `Error: ${err.message}` }] });
+          resolve(errorResult(`Error: ${err.message}`));
         });
       });
     }

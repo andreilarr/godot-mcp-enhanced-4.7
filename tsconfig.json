@@ -6,13 +6,15 @@
     "outDir": "./build",
     "rootDir": "./src",
     "strict": true,
+    // TODO (A-01): Enable noUncheckedIndexedAccess for full strict null-safety on index access.
+    // Currently blocked by 64+ indexed access sites that would need undefined checks.
+    // "noUncheckedIndexedAccess": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "declaration": true,
-    "sourceMap": true,
-    "jsx": "react-jsx"
+    "sourceMap": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "build"]

@@ -3,7 +3,7 @@ description: "recording recording_start recording_stop recording_save recording_
 alwaysApply: false
 ---
 
-> 适用于 godot-mcp-enhanced v0.14.0+
+> 适用于 godot-mcp-enhanced v0.16.0+
 
 ## 概述与架构
 

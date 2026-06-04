@@ -3,7 +3,7 @@ description: "ui ui_create_control ui_build_layout ui_set_layout ui_get_layout u
 alwaysApply: false
 ---
 
-> 适用于 godot-mcp-enhanced v0.14.0+
+> 适用于 godot-mcp-enhanced v0.16.0+
 
 ## 概述与架构
 

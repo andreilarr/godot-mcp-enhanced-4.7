@@ -48,7 +48,9 @@ export function safeRealPath(p: string, base?: string): string {
       current = parent;
     }
     let resolvedAncestor: string;
-    try { resolvedAncestor = realpathSync(current); } catch { return resolvePath(p); }
+    try { resolvedAncestor = realpathSync(current); } catch (err) {
+      throw new Error(`Cannot resolve real path for "${current}" (component of "${p}"): ${err instanceof Error ? err.message : err}`);
+    }
     const resolved = trailing.length > 0 ? join(resolvedAncestor, ...trailing) : resolvedAncestor;
     // If a base is provided, verify the resolved path doesn't escape it
     if (base) {
@@ -219,6 +221,13 @@ export function buildSafeEnv(): NodeJS.ProcessEnv {
     COMSPEC: process.env.COMSPEC ?? '',
     OS: process.env.OS ?? '',
     PATHEXT: process.env.PATHEXT ?? '',
+    // Linux/GUI variables required for Godot to access display and GPU drivers (A-04)
+    DISPLAY: process.env.DISPLAY ?? '',
+    WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY ?? '',
+    XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR ?? '',
+    XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME ?? '',
+    XDG_DATA_HOME: process.env.XDG_DATA_HOME ?? '',
+    LD_LIBRARY_PATH: process.env.LD_LIBRARY_PATH ?? '',
   };
 }
 

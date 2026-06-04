@@ -108,7 +108,15 @@ export function executeGdscriptTrusted(options: Omit<ExecuteGdscriptOptions, '_s
 /** Re-export markers from shared.ts for consumers that import from this module */
 export { MARKER_RESULT_SHARED as MARKER_RESULT, MARKER_ERROR_SHARED as MARKER_ERROR };
 
-/** Generate a random per-execution marker prefix to prevent forgery. */
+/** Generate a random per-execution marker prefix to prevent output forgery.
+ *
+ *  SECURITY CONTRACT (I-05): This function MUST use a cryptographically secure random source.
+ *  The current implementation uses Node.js `randomUUID()` (backed by crypto.randomUUID),
+ *  which provides 122 bits of entropy — sufficient to prevent marker prediction.
+ *
+ *  DO NOT replace with Math.random(), timestamp-based, or any deterministic generator.
+ *  If this contract is violated, GDScript code could forge MCP output markers and
+ *  inject false results into tool responses. */
 function generateMarker(): string {
   return `__MCP_${randomUUID().replace(/-/g, '').substring(0, 16)}__`;
 }
@@ -558,7 +566,7 @@ export async function executeGdscript(
   }
 
   // Spawn Godot process
-  return new Promise<ExecuteGdscriptResult>((resolve) => {
+  return new Promise<ExecuteGdscriptResult>((resolve, reject) => {
     let stdout = '';
     let stderr = '';
 
@@ -665,17 +673,8 @@ export async function executeGdscript(
       releaseShortRunningSlot();
       try { rmSync(sessionDir, { recursive: true, force: true }); } catch (e) { getLogger().debug('gdscript', `cleanup session on proc error: ${e}`); }
 
-      resolve({
-        success: false,
-        compile_success: false,
-        compile_error: `Failed to spawn Godot: ${err.message}`,
-        errors: [],
-        run_success: false,
-        run_error: '',
-        outputs: [],
-        raw_output: '',
-        duration_ms: Date.now() - startTime,
-      });
+      // Spawn failure is fatal — reject so callers can catch and report
+      reject(new Error(`Failed to spawn Godot process: ${err.message}`));
     });
   });
 }

@@ -8,6 +8,7 @@
 import { writeSync, closeSync, openSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 
 // ---------------------------------------------------------------------------
 // 类型定义
@@ -63,14 +64,9 @@ const SENSITIVE_RE = /password|secret|token|key|auth/i;
 // 内部工具函数
 // ---------------------------------------------------------------------------
 
-/** 简易 nanoid（8 字符） */
+/** 8 字符 ID — crypto 随机源，与项目安全惯例一致 */
 function nanoid8(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let id = '';
-  for (let i = 0; i < 8; i++) {
-    id += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return id;
+  return randomUUID().replace(/-/g, '').substring(0, 8);
 }
 
 /** 确定日志目录 — XDG 标准路径 */
