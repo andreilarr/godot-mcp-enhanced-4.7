@@ -7,6 +7,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export async function startMcpServer(args: string[]): Promise<void> {
+  // I-05: Warn loudly when security bypass flags are active in production
+  const securityBypassFlags = [
+    'GODOT_MCP_UNRESTRICTED',
+    'GODOT_MCP_SANDBOX',
+    'GODOT_MCP_ALLOW_UNSAFE',
+    'GODOT_MCP_DISABLE_SAFETY',
+  ];
+  for (const flag of securityBypassFlags) {
+    const val = process.env[flag];
+    if (val !== undefined) {
+      const logger = getLogger();
+      logger.error('security', `Security bypass flag ${flag}=${val} is ACTIVE — this disables safety checks`);
+    }
+  }
+
   // --profile=<name> or GODOT_MCP_PROFILE for fine-grained tool selection
   const profileArg = args.find(a => a.startsWith('--profile='));
   const profileFromArg = profileArg ? profileArg.split('=')[1] : null;

@@ -12,6 +12,22 @@ const execFileAsync = promisify(execFile);
 const MAX_DECODE_ITERATIONS = 20;
 const GODOT_VERSION_CHECK_TIMEOUT_MS = 5000;
 
+// ─── Shared: iterative URL decode ─────────────────────────────────────────────
+
+/** A-15: 提取共享的迭代 URL 解码函数，供 resolveWithinRoot 和 resources.ts 共用。
+ *  迭代解码直到稳定或达到上限，防止多层编码绕过。 */
+export function iterativeDecode(raw: string, maxIterations = MAX_DECODE_ITERATIONS): string {
+  let decoded = raw;
+  let prev = '';
+  let iterations = 0;
+  while (decoded !== prev && iterations < maxIterations) {
+    prev = decoded;
+    decoded = decodeURIComponent(decoded);
+    iterations++;
+  }
+  return decoded;
+}
+
 /** Windows device names that must never be used as file names (CON, PRN, AUX, NUL, COM1-9, LPT1-9) */
 const WINDOWS_DEVICE_RE = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)/i;
 
@@ -82,17 +98,11 @@ export function resolveWithinRoot(root: string, userPath: string): string {
   }
 
   // Decode iteratively to defeat multi-layer encoding (generous cap for safety)
-  let decoded = userPath;
-  let prev = '';
-  let iterations = 0;
-  while (decoded !== prev && iterations < MAX_DECODE_ITERATIONS) {
-    prev = decoded;
-    try {
-      decoded = decodeURIComponent(decoded);
-    } catch {
-      throw new Error(`Path traversal detected: ${userPath}`);
-    }
-    iterations++;
+  let decoded: string;
+  try {
+    decoded = iterativeDecode(userPath);
+  } catch {
+    throw new Error(`Path traversal detected: ${userPath}`);
   }
 
   // Reject paths containing ".." before resolution
@@ -207,6 +217,15 @@ export function isPathInAllowedRoots(requestedPath: string): boolean {
 export function _resetPathAllowWarned(): void { _pathAllowWarned = false; }
 
 /** Build a safe environment for child processes, only passing necessary variables. */
+/**
+ * Build a sanitized environment for Godot child processes.
+ *
+ * ⚠️ SECURITY NOTE (I-04): The following user-directory variables are passed
+ * because Godot needs them for config/cache paths, font discovery, etc.
+ * GDScript code running in the child process can read these via OS.get_environment().
+ * In sandbox mode, this means GDScript can learn user paths (HOME, APPDATA, etc.).
+ * If stricter isolation is needed, use container/VM-level sandboxing.
+ */
 export function buildSafeEnv(): NodeJS.ProcessEnv {
   return {
     PATH: process.env.PATH ?? '',
@@ -289,12 +308,28 @@ export function parseConfigValue(raw: string, depth = 0): unknown {
   if (raw === 'true') return true;
   if (raw === 'false') return false;
   if (raw === 'null') return null;
+  // A-06: 使用 isFinite 排除 Infinity/NaN，Godot 配置中不应出现无穷大
   const num = Number(raw);
-  if (!isNaN(num) && raw.trim() !== '') return num;
+  if (Number.isFinite(num) && raw.trim() !== '') return num;
   if (raw.startsWith('[') && raw.endsWith(']')) {
     const inner = raw.slice(1, -1).trim();
     if (!inner) return [];
     return splitRespectingQuotes(inner).map(s => parseConfigValue(s, depth + 1)).filter(s => s !== '');
+  }
+  // I-06: Parse Godot dictionary type {key = value, ...}
+  if (raw.startsWith('{') && raw.endsWith('}')) {
+    const inner = raw.slice(1, -1).trim();
+    if (!inner) return {};
+    const result: Record<string, unknown> = {};
+    const entries = splitRespectingQuotes(inner);
+    for (const entry of entries) {
+      const eqIdx = entry.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = entry.slice(0, eqIdx).trim();
+      const val = entry.slice(eqIdx + 1).trim();
+      result[key] = parseConfigValue(val, depth + 1);
+    }
+    return result;
   }
   return raw;
 }
@@ -316,7 +351,7 @@ export function parseGodotConfig(content: string): GodotConfig {
 
     const sectionMatch = trimmed.match(/^\[(.+)\]$/);
     if (sectionMatch) {
-      currentSection = sectionMatch[1];
+      currentSection = sectionMatch[1]!;
       if (!sectioned[currentSection]) sectioned[currentSection] = {};
       continue;
     }
@@ -328,7 +363,7 @@ export function parseGodotConfig(content: string): GodotConfig {
         : sectioned;
       // I-03: Ensure container is actually an object before writing properties
       if (container && typeof container === 'object' && !Array.isArray(container)) {
-        container[kvMatch[1]] = parseConfigValue(kvMatch[2].trim());
+        container[kvMatch[1]!] = parseConfigValue(kvMatch[2]!.trim());
       }
     }
   }
@@ -399,7 +434,7 @@ export function scanFiles(
         const full = join(dir, entry.name);
         if (entry.isDirectory()) {
           scan(full, depth + 1);
-        } else if (extensions.some(ext => entry.name.endsWith(ext))) {
+        } else if (extensions.length === 0 || extensions.some(ext => entry.name.endsWith(ext))) {
           results.push(full);
         }
       }

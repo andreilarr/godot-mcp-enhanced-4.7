@@ -14,7 +14,15 @@ describe('CursorAdapter', () => {
   });
 
   afterEach(() => {
-    rmSync(testDir, { recursive: true, force: true });
+    // Windows ENOTEMPTY retry — file locks from concurrent processes may delay deletion
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        rmSync(testDir, { recursive: true, force: true });
+        break;
+      } catch {
+        if (attempt < 2) { /* wait briefly before retry */ }
+      }
+    }
   });
 
   it('has correct name', () => {

@@ -6,7 +6,7 @@ function parseInitArgs(args: string[]): { name: string; template: string } {
   const name = args[0] || 'my-game';
   let template = 'empty';
   for (let i = 1; i < args.length; i++) {
-    if (args[i].startsWith('--template=')) template = args[i].split('=')[1];
+    if (args[i]!.startsWith('--template=')) template = args[i]!.split('=')[1]!;
   }
   return { name, template };
 }
@@ -32,7 +32,7 @@ export async function runInit(args: string[]): Promise<void> {
   // 创建项目目录
   mkdirSync(projectDir, { recursive: true });
 
-  // 写入最小 project.godot
+  // I-07: 写入 Godot 4.x 兼容的 project.godot，包含 config/features 声明
   writeFileSync(join(projectDir, 'project.godot'), [
     '; Engine configuration file.',
     "; It's best edited using the editor UI and not directly.",
@@ -40,6 +40,7 @@ export async function runInit(args: string[]): Promise<void> {
     '[application]',
     '',
     `config/name="${name}"`,
+    'config/features=PackedStringArray("4.2", "GL Compatibility")',
     '',
     '[display]',
     '',

@@ -400,7 +400,7 @@ export async function handleTool(
           if (!PRESETS.includes(preset as typeof PRESETS[number])) {
             return opsErrorResult(ERROR_CODES.PRESET_NOT_FOUND, `Unknown preset "${preset}". Available: ${PRESETS.join(', ')}`);
           }
-          const cfg = PRESET_CONFIGS[preset];
+          const cfg = PRESET_CONFIGS[preset]!;
           let lines = '';
           lines += `\n\tnode.amount = ${cfg.amount}`;
           lines += `\n\tnode.lifetime = ${cfg.lifetime}`;

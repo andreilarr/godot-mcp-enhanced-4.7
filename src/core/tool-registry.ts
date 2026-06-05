@@ -2,7 +2,6 @@
 
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolResult, ToolContext } from '../types.js';
-import { getLogger } from './logger.js';
 
 // ─── Tool metadata ──────────────────────────────────────────────────────────
 
@@ -40,9 +39,15 @@ export function registerModule(mod: ToolModule): void {
       moduleRegistry.set(name, mod);
     }
   } else {
+    // A-10: Auto-register default TOOL_META from getToolDefinitions() when
+    // the module doesn't provide one. This eliminates the manual sync burden
+    // (tool name written 3 times: definitions, TOOL_META, handleTool).
+    // Default: readonly=false, long_running=false.
     const toolNames = mod.getToolDefinitions().map(t => t.name);
-    if (toolNames.length > 0) {
-      getLogger().warn('tool-registry', `Module defines ${toolNames.length} tool(s) but has no TOOL_META — dispatch will fail: ${toolNames.join(', ')}`);
+    for (const name of toolNames) {
+      const entry: ToolMeta = { name, readonly: false, long_running: false };
+      metaRegistry.set(name, entry);
+      moduleRegistry.set(name, mod);
     }
   }
 }
@@ -178,14 +183,3 @@ export function resolveProfile(profile: string): Set<string> {
 export const LITE_TOOLS: Set<string> = resolveProfile('lite');
 
 export const MINIMAL_TOOLS: Set<string> = resolveProfile('minimal');
-
-// Tools eligible for quick verification (run_and_verify).
-// After consolidation, these merged tools may contain actions without a quickVerify handler —
-// those will return 'not_implemented' gracefully.
-export const VERIFY_ELIGIBLE_TOOLS = new Set([
-  'scene', 'script', 'ui',
-]);
-
-export function isVerifyEligible(name: string): boolean {
-  return VERIFY_ELIGIBLE_TOOLS.has(name);
-}

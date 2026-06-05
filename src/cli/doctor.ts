@@ -8,12 +8,22 @@ function status(ok: boolean, msg: string): string {
   return ok ? `  ✓ ${msg}` : `  ✗ ${msg}`;
 }
 
+// A-09: 区分"未配置"和"配置损坏"两种状态
+async function checkClientConfig(adapter: { name: string; isConfigured(projectDir: string): Promise<boolean> }, projectDir: string): Promise<{ ok: boolean; detail: string }> {
+  try {
+    const ok = await adapter.isConfigured(projectDir);
+    return { ok, detail: ok ? 'configured' : 'not configured' };
+  } catch {
+    return { ok: false, detail: 'config parse error (file may be corrupted)' };
+  }
+}
+
 export async function runDoctor(_args: string[]): Promise<void> {
   let hasError = false;
 
   // 1. Node.js 版本
   const nodeVersion = process.version;
-  const nodeMajor = parseInt(nodeVersion.slice(1).split('.')[0], 10);
+  const nodeMajor = parseInt(nodeVersion.slice(1).split('.')[0]!, 10);
   console.log(status(nodeMajor >= 18, `Node.js ${nodeVersion}${nodeMajor >= 18 ? '' : ' (requires >= 18)'}`));
   if (nodeMajor < 18) hasError = true;
 
@@ -35,8 +45,9 @@ export async function runDoctor(_args: string[]): Promise<void> {
       console.log(status(false, `${adapter.name}: not installed`));
       continue;
     }
-    const configured = await adapter.isConfigured(projectDir);
-    console.log(status(configured, `${adapter.name}: ${configured ? 'configured' : 'not configured'}`));
+    // A-09: 区分配置状态
+    const { ok, detail } = await checkClientConfig(adapter, projectDir);
+    console.log(status(ok, `${adapter.name}: ${detail}`));
   }
 
   // 4. 项目结构

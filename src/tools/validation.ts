@@ -122,7 +122,7 @@ export function isErrorFalsePositive(line: string): boolean {
         const pattern = method + '(';
             let pi = trimmedLine.indexOf(pattern);
             while (pi !== -1) {
-              if (pi === 0 || !/[\w]/.test(trimmedLine[pi - 1])) return true;
+              if (pi === 0 || !/[\w]/.test(trimmedLine[pi - 1]!)) return true;
               pi = trimmedLine.indexOf(pattern, pi + 1);
             }
       } else if (trimmedLine.includes(method + '(')) {
@@ -143,6 +143,16 @@ export function isErrorFalsePositive(line: string): boolean {
 
 function collectFilesByExt(projectPath: string, extensions: string[], excludeDirs: string[] = ['.godot', '.import', 'addons', 'tools']): string[] {
   return scanFiles(projectPath, extensions, { skipDirs: excludeDirs });
+}
+
+/** Collect files with custom exclude paths + .gdignore awareness. */
+function collectFilesWithExcludes(projectPath: string, extensions: string[], excludePaths: string[]): string[] {
+  const files = scanFiles(projectPath, extensions, { skipDirs: [...excludePaths, '.godot', '.import'] });
+  // Filter out files in directories containing .gdignore
+  return files.filter(f => {
+    const dir = dirname(f);
+    return !existsSync(join(dir, '.gdignore'));
+  });
 }
 
 // ─── Batch script validation ────────────────────────────────────────────────
@@ -271,7 +281,7 @@ export async function batchValidateScripts(
     Array.from(results.entries()).map(([file, errors]) => ({ file, errors }));
   if (filteredCount > 0) {
     if (finalResults.length > 0) {
-      finalResults[0].filtered_count = filteredCount;
+      finalResults[0]!.filtered_count = filteredCount;
     } else {
       finalResults.push({ file: '<filtered>', errors: [], filtered_count: filteredCount });
     }
@@ -358,7 +368,7 @@ function validateShaderFile(filePath: string, relPath: string): { errors: string
   // Check for common syntax issues
   const varyings: string[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
+    const line = lines[i]!.trim();
     const lineNum = i + 1;
 
     // uniform without type (just "uniform name;")
@@ -369,10 +379,10 @@ function validateShaderFile(filePath: string, relPath: string): { errors: string
     // duplicate varying declarations
     const vm = line.match(/^varying\s+\w+\s+(\w+)/);
     if (vm) {
-      if (varyings.includes(vm[1])) {
-        errors.push(`Line ${lineNum}: Duplicate varying declaration: ${vm[1]}`);
+      if (varyings.includes(vm[1]!)) {
+        errors.push(`Line ${lineNum}: Duplicate varying declaration: ${vm[1]!}`);
       }
-      varyings.push(vm[1]);
+      varyings.push(vm[1]!);
     }
   }
 
@@ -403,7 +413,7 @@ export function validateSceneFile(
   const extRegex = /\[ext_resource[^[]*id="([^"]+)"/g;
   let match: RegExpExecArray | null;
   while ((match = extRegex.exec(content)) !== null) {
-    const id = match[1];
+    const id = match[1]!;
     if (extIds.has(id)) {
       errors.push(`Duplicate ext_resource id: ${id} in ${relPath}`);
     } else {
@@ -415,7 +425,7 @@ export function validateSceneFile(
   const subIds = new Set<string>();
   const subRegex = /\[sub_resource[^[]*id="([^"]+)"/g;
   while ((match = subRegex.exec(content)) !== null) {
-    const id = match[1];
+    const id = match[1]!;
     if (subIds.has(id)) {
       errors.push(`Duplicate sub_resource id: ${id} in ${relPath}`);
     } else {
@@ -566,30 +576,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       const issues: Array<{ severity: string; category: string; message: string; file?: string }> = [];
 
-      function shouldSkipDir(dirName: string, dirPath: string): boolean {
-        if (excludePaths.includes(dirName)) return true;
-        if (existsSync(join(dirPath, '.gdignore'))) return true;
-        return false;
-      }
-
-      function collectFiles(dir: string, exts: string[], maxDepth: number = 10, depth: number = 0): string[] {
-        if (depth > maxDepth) return [];
-        const result: string[] = [];
-        try {
-          for (const entry of readdirSync(dir, { withFileTypes: true })) {
-            if (entry.name.startsWith('.')) continue;
-            const full = join(dir, entry.name);
-            if (entry.isDirectory()) {
-              if (shouldSkipDir(entry.name, full)) continue;
-              result.push(...collectFiles(full, exts, maxDepth, depth + 1));
-            } else {
-              const ext = '.' + entry.name.split('.').pop()!.toLowerCase();
-              if (exts.includes(ext)) result.push(full);
-            }
-          }
-        } catch (err) { getLogger().debug('validation', `collect files: ${err instanceof Error ? err.message : err}`); }
-        return result;
-      }
+      // A-11: Replaced inline collectFiles/shouldSkipDir with shared collectFilesWithExcludes
+      const collectProjectFiles = (exts: string[]) => collectFilesWithExcludes(p, exts, excludePaths);
 
       if (!existsSync(join(p, 'project.godot'))) {
         issues.push({ severity: 'critical', category: 'project', message: 'project.godot not found' });
@@ -597,7 +585,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
 
       if (checkScenes) {
-        const sceneFiles = collectFiles(p, ['.tscn']);
+        const sceneFiles = collectProjectFiles(['.tscn']);
         for (const sceneFile of sceneFiles) {
           const rel = sceneFile.replace(p + (process.platform === 'win32' ? '\\' : '/'), '');
           try {
@@ -605,7 +593,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             const extResRegex = /\[ext_resource[^[]*path="([^"]+)"/g;
             let match;
             while ((match = extResRegex.exec(content)) !== null) {
-              const resPath = match[1];
+              const resPath = match[1]!;
               if (!resPath.startsWith('res://')) continue;
               const absPath = resolveWithinRoot(p, resPath.replace('res://', ''));
               if (!existsSync(absPath)) {
@@ -621,7 +609,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             // Shader 引用检查：shader = "res://xxx.gdshader" (A-09: skip comment lines)
             const shaderRegex = /^[^;]*shader\s*=\s*"([^"]+\.gdshader)"/gm;
             while ((match = shaderRegex.exec(content)) !== null) {
-              const shaderPath = match[1];
+              const shaderPath = match[1]!;
               if (!shaderPath.startsWith('res://')) continue;
               const absPath = resolveWithinRoot(p, shaderPath.replace('res://', ''));
               if (!existsSync(absPath)) {
@@ -660,7 +648,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
 
       if (checkScripts) {
-        const scriptFiles = collectFiles(p, ['.gd']);
+        const scriptFiles = collectProjectFiles(['.gd']);
         for (const scriptFile of scriptFiles) {
           const rel = scriptFile.replace(p + (process.platform === 'win32' ? '\\' : '/'), '');
           try {
@@ -668,7 +656,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             const preloadRegex = /preload\(["']([^"']+)["']\)/g;
             let match;
             while ((match = preloadRegex.exec(content)) !== null) {
-              const resPath = match[1];
+              const resPath = match[1]!;
               if (!resPath.startsWith('res://')) continue;
               const absPath = resolveWithinRoot(p, resPath.replace('res://', ''));
               if (!existsSync(absPath)) {
@@ -682,7 +670,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             }
             const loadRegex = /(?:^|\s)load\(["']([^"']+)["']\)/g;
             while ((match = loadRegex.exec(content)) !== null) {
-              const resPath = match[1];
+              const resPath = match[1]!;
               if (!resPath.startsWith('res://')) continue;
               const absPath = resolveWithinRoot(p, resPath.replace('res://', ''));
               if (!existsSync(absPath)) {
@@ -701,7 +689,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
 
       if (checkResources) {
-        const importFiles = collectFiles(p, ['.import']);
+        const importFiles = collectProjectFiles(['.import']);
         for (const importFile of importFiles) {
           const sourceFile = importFile.replace('.import', '');
           if (!existsSync(sourceFile)) {

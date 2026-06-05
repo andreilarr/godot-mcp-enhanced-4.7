@@ -5,9 +5,17 @@
  * relies on Node.js single-threaded event loop for serialization. This is safe because MCP
  * communicates over stdio, which is inherently sequential (one tool call at a time).
  *
- * FUTURE: If MCP clients introduce parallel tool calls, this module will need either:
- * (a) a mutex/queue wrapping each state-mutating operation, or
- * (b) refactoring to per-request state objects instead of module singletons.
+ * ⚠️ I-03: Known concurrency risk — if MCP clients introduce parallel tool calls (e.g.,
+ * Claude Code's parallel agent mode), these shared states WILL have race conditions:
+ *   - _runningProcess: two calls to run_project() could race
+ *   - _shortRunningCount: acquireShortRunningSlot()/releaseShortRunningSlot() are not atomic
+ *     across await points
+ *   - _outputBuffer: concurrent writes could interleave
+ *
+ * MITIGATION PLAN (when parallel calls are introduced):
+ *   (a) Add a mutex/queue wrapping each state-mutating operation
+ *   (b) Refactor to per-request state objects instead of module singletons
+ *   (c) Use AsyncLocalStorage for request-scoped state isolation
  */
 
 import type { ChildProcess } from 'child_process';
@@ -88,12 +96,18 @@ export function isProcessBusy(): boolean {
 /** Atomically acquire the long-running process slot. Returns true if acquired, false if busy. */
 export function acquireProcessSlot(owner: string = ''): boolean {
   if (_processBusy) {
-    // 自动清理：如果占用超过 5 分钟，可能是残留死锁
+    // I-03: 自动清理 — 仅在进程已死亡时才释放（检查 killed 标志）
+    // 避免中断合法长时间运行的进程（如 GUT 测试套件）
     if (_busySince > 0 && Date.now() - _busySince > 300_000) {
-      getLogger().warn('process-state', `Process slot held by "${_busyOwner}" for >5min, auto-releasing`);
-      _processBusy = false;
-      _busyOwner = '';
-      _busySince = 0;
+      const processDead = !_runningProcess || _runningProcess.killed || _runningProcess.exitCode !== null;
+      if (processDead) {
+        getLogger().warn('process-state', `Process slot held by "${_busyOwner}" for >5min, process dead — auto-releasing`);
+        _processBusy = false;
+        _busyOwner = '';
+        _busySince = 0;
+      } else {
+        getLogger().warn('process-state', `Process slot held by "${_busyOwner}" for >5min, process still alive — not releasing`);
+      }
     }
     if (_processBusy) return false;
   }

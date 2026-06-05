@@ -3,14 +3,26 @@ import { join } from 'path';
 import { findGodot } from '../core/godot-finder.js';
 import { ALL_ADAPTERS } from './clients/index.js';
 
-/** 检测 MCP command/args — 本地开发用 node 绝对路径，否则用 npx */
+/** I-08: 检测 MCP command/args — 改进安装方式判断 */
 function detectMcpCommand(): { command: string; args: string[] } {
-  // 检查当前运行的入口是否在 node_modules 中（npm 全局安装）
   const entryPath = process.argv[1] ?? '';
-  const isNpmGlobal = entryPath.includes('node_modules') || entryPath.includes('godot-mcp-enhanced');
-  if (isNpmGlobal) {
+
+  // 优先检查 npm_lifecycle_event 判断运行上下文
+  const lifecycle = process.env.npm_lifecycle_event;
+  if (lifecycle === 'postinstall' || lifecycle === 'preinstall') {
     return { command: 'npx', args: ['godot-mcp-enhanced'] };
   }
+
+  // 检查是否在全局 node_modules 中（npm -g install）
+  // 使用路径分段匹配而非子串包含，避免 npm link 误判
+  const pathSegments = entryPath.replace(/\\/g, '/').split('/');
+  const inGlobalNodeModules = pathSegments.includes('node_modules') &&
+    pathSegments.includes('godot-mcp-enhanced');
+
+  if (inGlobalNodeModules) {
+    return { command: 'npx', args: ['godot-mcp-enhanced'] };
+  }
+
   // 本地开发：用 node + 绝对路径
   const devEntry = join(import.meta.dirname ?? '.', '..', 'index.js');
   return { command: 'node', args: [devEntry] };

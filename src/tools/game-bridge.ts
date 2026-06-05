@@ -509,7 +509,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           game_input: INPUT_METHODS,
           game_wait: WAIT_METHODS,
         };
-        const allowed = methodSets[action];
+        const allowed = methodSets[action]!;
         const method = args.method as string;
         if (!allowed.has(method)) {
           return textResult(`Error: Unknown method "${method}". Supported: ${[...allowed].join(', ')}`);

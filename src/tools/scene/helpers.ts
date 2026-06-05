@@ -1,0 +1,99 @@
+// Scene tool shared helpers.
+
+import type { ToolResult } from '../../types.js';
+import { opsErrorResult } from '../shared.js';
+import { gdEscape, valueToGd } from '../shared.js';
+import { writeFileSync, renameSync, unlinkSync } from 'fs';
+import { getLogger } from '../../core/logger.js';
+
+export const ACTIONS = [
+  'read_scene', 'create_scene', 'add_node', 'save_scene', 'load_sprite',
+  'quick_scene', 'batch_add_nodes', 'query_scene_tree', 'inspect_node',
+  'edit_node', 'remove_node', 'instance_scene', 'set_instance_property', 'detach_instance',
+  'health_check',
+  'merge_scene',
+] as const;
+
+/** Validate that a value is a non-empty string; returns opsErrorResult if not. */
+export function requireScenePath(value: unknown): ToolResult | null {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return opsErrorResult('INVALID_PARAMS', `scene_path must be a non-empty string, got: ${value === undefined ? 'undefined' : value === null ? 'null' : typeof value}`);
+  }
+  return null;
+}
+
+/**
+ * Generates a GDScript property-set line for a given key/value pair.
+ *
+ * Simple types (null, bool, number, string) → direct assignment: `node.key = value`
+ * Vector/Color types → _try_set() call: `_try_set(node, "key", Vector2(...))`
+ *
+ * Uses the shared `valueToGd()` serializer from shared.ts for the expression.
+ * On non-finite values, returns a comment line starting with `# skipped`.
+ */
+export function gdScriptSetLine(key: string, value: unknown, varName = 'node'): string {
+  const needsTrySet = isVectorLike(value);
+  const ek = gdEscape(key);
+  try {
+    const expr = valueToGd(value);
+    if (needsTrySet) {
+      return `_try_set(${varName}, "${ek}", ${expr})`;
+    }
+    return `${varName}.${ek} = ${expr}`;
+  } catch (e: unknown) {
+    // valueToGd throws on non-finite numbers — convert to a skip comment
+    const msg = (e as Error).message;
+    if (msg.includes('Non-finite')) return `# skipped ${key}: non-finite number`;
+    throw e;
+  }
+}
+
+/** Returns true if the value is an array/object that produces a Vector/Color expression. */
+export function isVectorLike(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return (value.length >= 2 && value.length <= 4 && value.every(v => typeof v === 'number'));
+  }
+  if (typeof value === 'object' && value !== null) {
+    const obj = value as Record<string, unknown>;
+    return !!(typeof obj.x === 'number' || typeof obj.r === 'number');
+  }
+  return false;
+}
+
+// ─── trySetHelper (shared across edit_node, instance_scene, set_instance_property) ──
+
+export const TRY_SET_HELPER = `
+func _try_set(node: Node, prop: String, value: Variant) -> void:
+\tvar _ok = false
+\tif node.get_property_list().any(func(p): return p.name == prop):
+\t\tnode.set(prop, value)
+\t\t_ok = true
+\tif not _ok and node is Control:
+\t\tvar _vtype = typeof(value)
+\t\tif _vtype == TYPE_VECTOR2:
+\t\t\tnode.add_theme_font_size_override(prop, int(value.x))
+\t\telif _vtype == TYPE_COLOR:
+\t\t\tnode.add_theme_color_override(prop, value)
+\t\telif _vtype == TYPE_FLOAT or _vtype == TYPE_INT:
+\t\t\tif node.has_theme_constant(prop):
+\t\t\t\tnode.add_theme_constant_override(prop, int(value))
+`;
+
+export const BLOCKED_PROPS = new Set([
+  'script', 'owner', 'name', 'parent', 'children', 'tree',
+  'meta', 'process_mode', 'process_priority',
+  'process_input', 'process_unhandled_input', 'process_unhandled_key_input',
+  'process_internal', 'physics_process_mode', 'input_event', 'ready',
+]);
+
+/** Atomic file write: write to temp then rename. Uses temp+rename on all platforms (NTFS same-volume rename is atomic). */
+export function writeAtomic(filePath: string, content: string): void {
+  const tmp = filePath + '.mcp-tmp';
+  writeFileSync(tmp, content, 'utf-8');
+  try {
+    renameSync(tmp, filePath);
+  } catch (e) {
+    try { unlinkSync(tmp); } catch (cleanupErr) { getLogger().debug('scene', `writeAtomic temp cleanup failed: ${cleanupErr instanceof Error ? cleanupErr.message : cleanupErr}`); }
+    throw e;
+  }
+}

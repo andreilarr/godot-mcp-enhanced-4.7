@@ -2,7 +2,7 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { requireProjectPath, resolveWithinRoot } from '../helpers.js';
+import { requireProjectPath, resolveWithinRoot, scanFiles } from '../helpers.js';
 import { getLogger } from '../core/logger.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { batchValidateScripts } from './validation.js';
@@ -116,7 +116,7 @@ export function checkSceneIntegrity(projectPath: string, scenePath: string): { p
   const extRegex = /^\[ext_resource[^\]]*path="res:\/\/([^"]+)"/gm;
   let match: RegExpExecArray | null;
   while ((match = extRegex.exec(content)) !== null) {
-    const refPath = match[1];
+    const refPath = match[1]!;
     const diskPath = join(projectPath, refPath);
     if (!existsSync(diskPath)) {
       issues.push({
@@ -170,11 +170,6 @@ function buildSceneContentCache(projectPath: string, cache: Map<string, string>)
     } catch (err) { getLogger().debug('delivery', `scan scene cache: ${err instanceof Error ? err.message : err}`); }
   })(projectPath, '');
   return cache;
-}
-
-/** @deprecated No-op — cache lifecycle is now bound to handleTool calls. */
-export function resetSceneCache(): void {
-  // Intentionally empty: kept for backward compatibility with tests.
 }
 
 export function findAssociatedScenes(projectPath: string, scriptPath: string, cache?: Map<string, string>): string[] {
@@ -254,20 +249,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
     } else {
       // scope=full: collect all .tscn
-      function collectScenes(dir: string, prefix: string): string[] {
-        const result: string[] = [];
-        try {
-          for (const e of readdirSync(dir, { withFileTypes: true })) {
-            if (e.isDirectory() && !SKIP_DIRS.has(e.name)) {
-              result.push(...collectScenes(join(dir, e.name), `${prefix}${e.name}/`));
-            } else if (e.name.endsWith('.tscn')) {
-              result.push(`${prefix}${e.name}`);
-            }
-          }
-        } catch (err) { getLogger().debug('delivery', `collect scenes: ${err instanceof Error ? err.message : err}`); }
-        return result;
-      }
-      scenePaths = collectScenes(projectPath, '');
+      // A-07: Replaced inline collectScenes with scanFiles
+      const sceneFiles = scanFiles(projectPath, ['.tscn'], { skipDirs: [...SKIP_DIRS] });
+      scenePaths = sceneFiles.map(f => f.replace(projectPath + (process.platform === 'win32' ? '\\' : '/'), ''));
     }
 
     if (!report.scene_tree) {
@@ -298,26 +282,15 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             const scriptRegex = /path="(res:\/\/[^"]+\.gd)"/g;
             let m: RegExpExecArray | null;
             while ((m = scriptRegex.exec(content)) !== null) {
-              scriptPaths.push(m[1].replace('res://', ''));
+              scriptPaths.push(m[1]!.replace('res://', ''));
             }
           }
         }
       }
     } else {
-      function collectScripts(dir: string, prefix: string): string[] {
-        const result: string[] = [];
-        try {
-          for (const e of readdirSync(dir, { withFileTypes: true })) {
-            if (e.isDirectory() && !SKIP_DIRS.has(e.name)) {
-              result.push(...collectScripts(join(dir, e.name), `${prefix}${e.name}/`));
-            } else if (e.name.endsWith('.gd')) {
-              result.push(`${prefix}${e.name}`);
-            }
-          }
-        } catch (err) { getLogger().debug('delivery', `collect scripts: ${err instanceof Error ? err.message : err}`); }
-        return result;
-      }
-      scriptPaths = collectScripts(projectPath, '');
+      // A-07: Replaced inline collectScripts with scanFiles
+      const scriptFiles = scanFiles(projectPath, ['.gd'], { skipDirs: [...SKIP_DIRS] });
+      scriptPaths = scriptFiles.map(f => f.replace(projectPath + (process.platform === 'win32' ? '\\' : '/'), ''));
     }
 
     // Check file existence
@@ -336,11 +309,11 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const preloadRegex = /(?:preload|load)\("res:\/\/([^"]+)"\)/g;
       let m: RegExpExecArray | null;
       while ((m = preloadRegex.exec(content)) !== null) {
-        if (!existsSync(join(projectPath, m[1]))) {
+        if (!existsSync(join(projectPath, m[1]!))) {
           issues.push({
             severity: 'warning',
             location: sp,
-            message: `Resource not found: res://${m[1]} (referenced by preload/load)`,
+            message: `Resource not found: res://${m[1]!} (referenced by preload/load)`,
           });
         }
       }
@@ -431,8 +404,12 @@ func _initialize():
 
       // Execute each assertion independently for isolation
       for (let i = 0; i < assertions.length; i++) {
-        const a = assertions[i];
+        const a = assertions[i]!;
         const desc = a.description ?? 'unnamed assertion';
+        if (typeof a.gdscript !== 'string' || !a.gdscript.trim()) {
+          assertionResults.push({ description: desc, passed: false, error: 'Missing required "gdscript" field in assertion' });
+          continue;
+        }
         try {
           const wrappedCode = wrapAssertionCode(a.gdscript, desc);
           const assertResult = await executeGdscript({
@@ -483,22 +460,9 @@ func _initialize():
         continue;
       }
 
-      // Collect .md files recursively (reuse existing SKIP_DIRS pattern)
-      function collectGddFiles(dir: string, prefix: string): string[] {
-        const result: string[] = [];
-        try {
-          for (const e of readdirSync(dir, { withFileTypes: true })) {
-            if (e.isDirectory() && !SKIP_DIRS.has(e.name)) {
-              result.push(...collectGddFiles(join(dir, e.name), `${prefix}${e.name}/`));
-            } else if (e.name.endsWith('.md')) {
-              result.push(`${prefix}${e.name}`);
-            }
-          }
-        } catch (err) { getLogger().debug('delivery', `collect GDD files: ${err instanceof Error ? err.message : err}`); }
-        return result;
-      }
-
-      const gddFiles = collectGddFiles(fullDir, '');
+      // A-07: Replaced inline collectGddFiles with scanFiles
+      const gddFileList = scanFiles(fullDir, ['.md'], { skipDirs: [...SKIP_DIRS] });
+      const gddFiles = gddFileList.map(f => f.replace(fullDir + (process.platform === 'win32' ? '\\' : '/'), ''));
       gddFilesScanned += gddFiles.length;
 
       for (const gf of gddFiles) {

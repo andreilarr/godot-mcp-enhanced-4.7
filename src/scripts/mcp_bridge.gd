@@ -1171,6 +1171,21 @@ func _is_safe_value(value: Variant, depth: int = 0) -> bool:
 		return true
 	if value is bool or value is int or value is float or value is String or value is StringName:
 		return true
+	# Keep in sync with safe_values.gd — geometric + PackedArray types
+	if value is Vector2 or value is Vector2i or value is Vector3 or value is Vector3i:
+		return true
+	if value is Color or value is Rect2 or value is Rect2i:
+		return true
+	if value is Transform2D or value is Transform3D or value is Basis or value is Quaternion:
+		return true
+	if value is Plane or value is AABB:
+		return true
+	if value is PackedByteArray or value is PackedInt32Array or value is PackedInt64Array:
+		return true
+	if value is PackedFloat32Array or value is PackedFloat64Array or value is PackedStringArray:
+		return true
+	if value is PackedVector2Array or value is PackedVector3Array or value is PackedColorArray:
+		return true
 	if depth >= _MAX_SAFE_DEPTH:
 		return false
 	if value is Array:

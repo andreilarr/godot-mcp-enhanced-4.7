@@ -260,12 +260,16 @@ export class ToolDispatcher {
     this._editorFallback = true;
   }
 
-  /** Convert camelCase arg keys to snake_case. Only top-level keys are converted; nested objects are left intact. */
-  private normalizeArgs(rawArgs: Record<string, unknown> | undefined): Record<string, unknown> {
+  /** I-05: Convert camelCase arg keys to snake_case, recursively for nested plain objects. */
+  private normalizeArgs(rawArgs: Record<string, unknown> | undefined, depth = 0): Record<string, unknown> {
+    if (!rawArgs || depth > 5) return rawArgs ?? {};
     const args: Record<string, unknown> = {};
-    if (rawArgs) {
-      for (const [key, value] of Object.entries(rawArgs)) {
-        const snake = key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+    for (const [key, value] of Object.entries(rawArgs)) {
+      const snake = key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+      // Recursively normalize nested plain objects (e.g. layout/flex params in UI tools)
+      if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+        args[snake] = this.normalizeArgs(value as Record<string, unknown>, depth + 1);
+      } else {
         args[snake] = value;
       }
     }

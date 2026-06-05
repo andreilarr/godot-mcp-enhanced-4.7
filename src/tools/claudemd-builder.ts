@@ -112,7 +112,7 @@ export function buildEngineVersion(config: GodotConfig | null): string | null {
   if (typeof features === 'string') {
     // PackedStringArray("4.6", ...) → extract first quoted value
     const m = features.match(/PackedStringArray\("([^"]+)"/);
-    version = m ? m[1] : features;
+    version = m ? m[1]! : features;
   } else if (Array.isArray(features) && features.length > 0) {
     version = String(features[0]);
   }
@@ -166,7 +166,7 @@ export function buildKeyPaths(projectDir: string): string | null {
   }
   if (existing.length === 0) return null;
   // Fix last prefix: ├── → └──
-  existing[existing.length - 1] = existing[existing.length - 1].replace('├──', '└──');
+  existing[existing.length - 1] = existing[existing.length - 1]!.replace('├──', '└──');
   return existing.join('\n');
 }
 
@@ -248,12 +248,12 @@ export function buildLayerNames(config: GodotConfig | null): string | null {
     if (parts.length !== 2) continue;
     const group = parts[0];
     const layerPart = parts[1];
-    const match = layerPart.match(/layer_(\d+)/);
+    const match = layerPart!.match(/layer_(\d+)/);
     if (!match) continue;
-    const idx = parseInt(match[1], 10);
+    const idx = parseInt(match[1]!, 10);
 
-    if (!groups[group]) groups[group] = [];
-    groups[group].push({ idx, name: value });
+    if (!groups[group!]) groups[group!] = [];
+    groups[group!]!.push({ idx, name: value });
   }
 
   const LABELS: Record<string, string> = {
@@ -348,8 +348,8 @@ function parseSections(content: string): { title: string; preSections: string; s
   let title = '';
   let titleEndIdx = 0;
   for (let i = 0; i < lines.length; i++) {
-    if (/^# /.test(lines[i])) {
-      title = lines[i];
+    if (/^# /.test(lines[i]!)) {
+      title = lines[i]!;
       titleEndIdx = i + 1;
       break;
     }
@@ -359,11 +359,11 @@ function parseSections(content: string): { title: string; preSections: string; s
   let preSections = '';
   let firstSectionIdx = lines.length;
   for (let i = titleEndIdx; i < lines.length; i++) {
-    if (/^## (?!#)/.test(lines[i])) {
+    if (/^## (?!#)/.test(lines[i]!)) {
       firstSectionIdx = i;
       break;
     }
-    preSections += (preSections ? '\n' : '') + lines[i];
+    preSections += (preSections ? '\n' : '') + lines[i]!;
   }
   preSections = preSections.trim();
 
@@ -372,10 +372,10 @@ function parseSections(content: string): { title: string; preSections: string; s
   let current: Section | null = null;
 
   for (let i = firstSectionIdx; i < lines.length; i++) {
-    const headerMatch = lines[i].match(/^## (?!#)\s*(.*)/);
+    const headerMatch = lines[i]!.match(/^## (?!#)\s*(.*)/);
     if (headerMatch) {
       if (current) sections.push(current);
-      const fullHeader = '## ' + headerMatch[1].trim();
+      const fullHeader = '## ' + headerMatch[1]!.trim();
       const norm = normalizeHeader(fullHeader);
       current = {
         header: fullHeader,

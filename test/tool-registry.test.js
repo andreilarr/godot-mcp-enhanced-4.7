@@ -10,7 +10,6 @@ import {
   getAllToolNames,
   registerInlineTool,
 } from '../src/core/tool-registry.js';
-import { VERIFY_ELIGIBLE_TOOLS, isVerifyEligible } from '../src/core/tool-registry.js';
 
 describe('tool-registry', () => {
   it('registers tools with tags', () => {
@@ -66,24 +65,6 @@ describe('tool-registry', () => {
     ]);
     const names = getAllToolNames();
     expect(names.sort()).toEqual(['a', 'b']);
-  });
-});
-
-describe('L1 verify eligible tools', () => {
-  it('VERIFY_ELIGIBLE_TOOLS contains merged tool names', () => {
-    expect(VERIFY_ELIGIBLE_TOOLS.has('scene')).toBeTruthy();
-    expect(VERIFY_ELIGIBLE_TOOLS.has('script')).toBeTruthy();
-    expect(VERIFY_ELIGIBLE_TOOLS.has('ui')).toBeTruthy();
-  });
-
-  it('isVerifyEligible returns true for scene', () => {
-    expect(isVerifyEligible('scene')).toBe(true);
-  });
-
-  it('isVerifyEligible returns false for non-eligible tools', () => {
-    expect(isVerifyEligible('profiler')).toBe(false);
-    expect(isVerifyEligible('physics')).toBe(false);
-    expect(isVerifyEligible('docs')).toBe(false);
   });
 });
 

@@ -64,7 +64,7 @@ func _init():
 			log_error("Unknown operation: " + operation)
 			cleanup_and_quit([], 1)
 
-	quit()
+	call_deferred("quit")
 	return
 # ─── Logging helpers ──────────────────────────────────────────────────────────
 

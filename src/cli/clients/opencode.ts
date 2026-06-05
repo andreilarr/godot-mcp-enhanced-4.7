@@ -14,10 +14,12 @@ export class OpenCodeAdapter implements ClientAdapter {
     } catch { return false; }
   }
 
+  // A-10: 使用精确匹配（完整服务器名称 "godot"）替代子串匹配
   async isConfigured(_projectDir: string): Promise<boolean> {
     try {
       const { stdout } = await execFileAsync('opencode', ['mcp', 'list'], { timeout: 5000 });
-      return stdout.includes('godot');
+      // 精确匹配行首或空格后的 "godot"，避免误匹配 "godot-docs" 等
+      return /(?:^|\s)godot(?:\s|$)/m.test(stdout);
     } catch { return false; }
   }
 

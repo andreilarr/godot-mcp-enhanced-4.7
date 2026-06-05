@@ -161,13 +161,17 @@ export class GodotServer {
       if (existsSync(join(envPath, 'project.godot'))) return envPath;
       getLogger().warn('godot-mcp', `GODOT_PROJECT_PATH="${envPath}" does not contain project.godot, ignoring`);
     }
+    // I-06: 增加上限到 30 层 + 添加诊断日志帮助用户定位
     let dir = process.cwd();
-    for (let i = 0; i < 15; i++) {
+    const searchedPaths: string[] = [];
+    for (let i = 0; i < 30; i++) {
       if (existsSync(join(dir, 'project.godot'))) return dir;
+      searchedPaths.push(dir);
       const parent = join(dir, '..');
       if (parent === dir) break;
       dir = parent;
     }
+    getLogger().debug('godot-mcp', `detectProjectPath: no project.godot found. Searched: ${searchedPaths.join(' → ')}`);
     return undefined;
   }
 

@@ -40,7 +40,6 @@ import {
   TOOL_META,
   checkSceneIntegrity,
   findAssociatedScenes,
-  resetSceneCache,
 } from '../src/tools/delivery.js';
 
 const mockExecuteGdscript = executeGdscript;
@@ -205,12 +204,12 @@ describe('delivery: scene_tree dimension', () => {
 
   beforeEach(() => {
     tmpDir = createTempProject();
-    resetSceneCache();
+
   });
 
   afterEach(() => {
     cleanupDir(tmpDir);
-    resetSceneCache();
+
   });
 
   it('checkSceneIntegrity: passes for scene with valid references', () => {
@@ -353,7 +352,7 @@ describe('delivery: scene_tree dimension', () => {
 [node name="Main" type="Node2D"]
 `);
 
-    resetSceneCache();
+
     const scenes = findAssociatedScenes(tmpDir, 'scripts/player.gd');
     expect(scenes).toContain('main.tscn');
   });
@@ -363,7 +362,7 @@ describe('delivery: scene_tree dimension', () => {
     writeFileSync(join(tmpDir, 'scripts', 'orphan.gd'), 'extends Node2D');
     writeFileSync(join(tmpDir, 'main.tscn'), '[gd_scene load_steps=1 format=3]\n[node name="Main" type="Node2D"]');
 
-    resetSceneCache();
+
     const scenes = findAssociatedScenes(tmpDir, 'scripts/orphan.gd');
     expect(scenes).toHaveLength(0);
   });
@@ -384,14 +383,14 @@ describe('delivery: script_health dimension', () => {
 
   beforeEach(() => {
     tmpDir = createTempProject();
-    resetSceneCache();
+
     mockBatchValidate.mockReset();
     mockBatchValidate.mockResolvedValue([]);
   });
 
   afterEach(() => {
     cleanupDir(tmpDir);
-    resetSceneCache();
+
   });
 
   it('scope=full: collects .gd files and validates', async () => {
@@ -1003,12 +1002,12 @@ describe('delivery: edge cases', () => {
     mockExecuteGdscript.mockReset();
     mockBatchValidate.mockReset();
     mockBatchValidate.mockResolvedValue([]);
-    resetSceneCache();
+
   });
 
   afterEach(() => {
     cleanupDir(tmpDir);
-    resetSceneCache();
+
   });
 
   it('handles empty project (no scenes, no scripts)', async () => {

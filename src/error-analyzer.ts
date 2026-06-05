@@ -99,7 +99,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     type: 'runtime_error',
     suggestion: (msg) => {
       const match = msg.match(/(?:File not found|can't open|Resource not found):\s*(.+)/i);
-      const path = match ? match[1].trim() : 'the resource';
+      const path = match ? match[1]!.trim() : 'the resource';
       return `File/resource not found: ${path}. Check the path is correct and the file exists in the project.`;
     },
   },
@@ -123,7 +123,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     type: 'runtime_error',
     suggestion: (msg) => {
       const match = msg.match(/Condition "(.+?)" is true/);
-      const cond = match ? match[1] : 'an internal condition';
+      const cond = match ? match[1]! : 'an internal condition';
       return `Internal assertion failed: ${cond}. This usually indicates invalid state or a bug in the logic leading to this call.`;
     },
   },
@@ -147,12 +147,12 @@ function parseLocation(lines: string[], startIdx: number): ParsedLocation {
 
   // Check "at: <file>(<line>)" on the next line(s)
   for (let i = startIdx + 1; i < Math.min(startIdx + 3, lines.length); i++) {
-    const line = lines[i].trim();
+    const line = lines[i]!.trim();
 
     // at: res://path/to/script.gd:123
     const atMatch = line.match(/^(?:at|in):\s*(.+?)(?::(\d+))?$/);
     if (atMatch) {
-      result.file = atMatch[1].trim();
+      result.file = atMatch[1]!.trim();
       if (atMatch[2]) result.line = parseInt(atMatch[2], 10);
       break;
     }
@@ -160,8 +160,8 @@ function parseLocation(lines: string[], startIdx: number): ParsedLocation {
     // at: <file>(<line>)
     const atMatch2 = line.match(/^(?:at|in):\s*(.+?)\((\d+)\)$/);
     if (atMatch2) {
-      result.file = atMatch2[1].trim();
-      result.line = parseInt(atMatch2[2], 10);
+      result.file = atMatch2[1]!.trim();
+      result.line = parseInt(atMatch2[2]!, 10);
       break;
     }
 
@@ -190,7 +190,7 @@ export function analyzeOutput(output: string[]): AnalysisResult {
 
   let i = 0;
   while (i < output.length) {
-    const line = output[i];
+    const line = output[i]!;
     const trimmed = line.trim();
 
     if (!trimmed) {

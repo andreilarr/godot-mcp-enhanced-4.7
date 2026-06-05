@@ -43,13 +43,13 @@ function isInComment(line: string, matchIndex: number): boolean {
   let stringChar = '';
   for (let i = 0; i < matchIndex && i < line.length; i++) {
     if (!inString) {
-      if (line[i] === '#') return true;
-      if (line[i] === '"' || line[i] === "'") {
+      if (line[i]! === '#') return true;
+      if (line[i]! === '"' || line[i]! === "'") {
         inString = true;
-        stringChar = line[i];
+        stringChar = line[i]!;
       }
     } else {
-      if (line[i] === stringChar && (i === 0 || line[i - 1] !== '\\')) {
+      if (line[i]! === stringChar && (i === 0 || line[i - 1]! !== '\\')) {
         inString = false;
       }
     }
@@ -62,12 +62,12 @@ function isInString(line: string, matchIndex: number): boolean {
   let stringChar = '';
   for (let i = 0; i < matchIndex && i < line.length; i++) {
     if (!inString) {
-      if (line[i] === '"' || line[i] === "'") {
+      if (line[i]! === '"' || line[i]! === "'") {
         inString = true;
-        stringChar = line[i];
+        stringChar = line[i]!;
       }
     } else {
-      if (line[i] === stringChar && (i === 0 || line[i - 1] !== '\\')) {
+      if (line[i]! === stringChar && (i === 0 || line[i - 1]! !== '\\')) {
         inString = false;
       }
     }
@@ -92,21 +92,21 @@ function extractFunctions(code: string): FunctionInfo[] {
   const lines = code.split(/\r?\n/);
 
   for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(/^(\s*)func\s+(\w+)\s*\(/);
+    const match = lines[i]!.match(/^(\s*)func\s+(\w+)\s*\(/);
     if (!match) continue;
 
-    const baseIndent = match[1].length;
-    const funcName = match[2];
+    const baseIndent = match[1]!.length;
+    const funcName = match[2]!;
     const startLine = i + 1;
     const bodyLines: string[] = [];
 
     for (let j = i + 1; j < lines.length; j++) {
-      const line = lines[j];
+      const line = lines[j]!;
       if (line.trim() === '') {
         bodyLines.push(line);
         continue;
       }
-      const lineIndent = line.match(/^(\s*)/)?.[1].length ?? 0;
+      const lineIndent = line.match(/^(\s*)/)?.[1]!.length ?? 0;
       if (lineIndent <= baseIndent && line.trim() !== '') break;
       bodyLines.push(line);
     }
@@ -129,11 +129,11 @@ function extractContext(code: string, matchIndex: number): LintContext {
   let matchLine = 0;
 
   for (let i = 0; i < lines.length; i++) {
-    if (charCount + lines[i].length >= matchIndex) {
+    if (charCount + lines[i]!.length >= matchIndex) {
       matchLine = i;
       break;
     }
-    charCount += lines[i].length + 1;
+    charCount += lines[i]!.length + 1;
   }
 
   const startLine = Math.max(0, matchLine - 50);
@@ -317,7 +317,7 @@ const RULES: LintRule[] = [
     suggestion: "检查 extends 的基类是否有同名成员，如有请重命名此变量",
     requiresSemanticValidation: true,
     contextFilter: (match, context): boolean => {
-      const varName = match[2];
+      const varName = match[2]!;
       const SHADOW_PRONE = [
         'velocity', 'position', 'rotation', 'scale', 'modulate', 'visible',
         'speed', 'health', 'damage', 'direction', 'state', 'current_state',
@@ -476,7 +476,7 @@ function lintRegex(
   // Precompute line start offsets
   const lineOffsets = new Uint32Array(lines.length + 1);
   for (let i = 0; i < lines.length; i++) {
-    lineOffsets[i + 1] = lineOffsets[i] + lines[i].length + 1;
+    lineOffsets[i + 1] = lineOffsets[i]! + lines[i]!.length + 1;
   }
   const globalPattern = rule.pattern.global
     ? rule.pattern
@@ -489,13 +489,13 @@ function lintRegex(
     let lo = 0, hi = lines.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (lineOffsets[mid] <= matchIndex) lo = mid + 1;
+      if (lineOffsets[mid]! <= matchIndex) lo = mid + 1;
       else hi = mid;
     }
     const lineNum = lo;
     const lineText = lines[lineNum - 1] || '';
 
-    const lineOffset = matchIndex - lineOffsets[lineNum - 1];
+    const lineOffset = matchIndex - lineOffsets[lineNum - 1]!;
 
     if (isInCommentOrString(lineText, Math.max(0, lineOffset))) continue;
 

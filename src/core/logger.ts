@@ -250,6 +250,10 @@ function createLogger(opts: LoggerOptions = {}): Logger {
     if (buffer.length > 0 && fd !== null) {
       const data = buffer.map(e => JSON.stringify(e) + '\n').join('');
       try {
+        // I-02: writeSync is intentional — ensures log data is flushed before process exit.
+        // The buffer mechanism (100ms / 50 entries) limits writeSync calls to ~10/sec,
+        // and each write is typically <10KB, blocking the event loop for <1ms.
+        // Switching to async writeFile risks data loss on crash/exit.
         writeSync(fd, data);
       } catch { /* ignore write errors */ }
       buffer = [];
@@ -414,11 +418,15 @@ export function getLogger(opts?: LoggerOptions): Logger {
   if (!instance) {
     instance = createLogger(opts);
   } else if (opts && Object.keys(opts).length > 0) {
-    // 单例已存在，配置被忽略 — 输出 warn 提醒
-    instance.warn('logger', 'getLogger() called with options but singleton already exists — options ignored');
+    // A-01: 仅在首次忽略时 warn，避免每次调用都输出重复日志
+    if (!_singletonWarned) {
+      instance.warn('logger', 'getLogger() called with options but singleton already exists — options ignored');
+      _singletonWarned = true;
+    }
   }
   return instance;
 }
+let _singletonWarned = false;
 
 export function resetLogger(): void {
   if (instance) {

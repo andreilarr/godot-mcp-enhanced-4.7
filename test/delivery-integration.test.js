@@ -2,14 +2,6 @@
 import { expect } from 'vitest';
 
 describe('delivery integration tests', () => {
-  it('VERIFY_ELIGIBLE_TOOLS contains expected tools', async () => {
-    const reg = await import('../src/core/tool-registry.js');
-    const supportedTools = ['scene', 'script', 'ui'];
-    for (const name of supportedTools) {
-      expect(reg.VERIFY_ELIGIBLE_TOOLS.has(name)).toBeTruthy();
-    }
-  });
-
   it('verify_delivery is registered in GodotServer toolModules', async () => {
     const mod = await import('../src/tools/delivery.js');
     expect(mod.getToolDefinitions).toBeTruthy();

@@ -356,7 +356,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           const assertionResults: Array<Record<string, unknown>> = [];
 
           for (let i = 0; i < assertionList.length; i++) {
-            const a = assertionList[i];
+            const a = assertionList[i]!;
             const desc = a.description ?? `assertion ${i}`;
             const assertType = (a as Record<string, unknown>).type as string || 'gdscript';
 
@@ -400,6 +400,10 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             }
 
             // ── default: gdscript assertion ──
+            if (typeof a.gdscript !== 'string' || !a.gdscript.trim()) {
+              assertionResults.push({ description: desc, passed: false, error: 'Missing required "gdscript" field in assertion' });
+              continue;
+            }
             try {
               const wrappedCode = wrapAssertionCode(a.gdscript, desc);
               const assertResult = await executeGdscript({
@@ -589,7 +593,7 @@ export function parseE2eDsl(line: string): DslCommand | null {
   // waitFor("path")
   const waitMatch = trimmed.match(/^waitFor\(\s*"([^"]+)"\s*\)$/);
   if (waitMatch) {
-    const path = waitMatch[1];
+    const path = waitMatch[1]!;
     if (path.length > 1024) return DSL_ERROR(`waitFor: path exceeds 1024 chars (${path.length})`);
     if (CTRL_RE.test(path)) return DSL_ERROR(`waitFor: path contains control characters`);
     if (!/^root(\/[\w.-]+)+$/.test(path)) return DSL_ERROR(`waitFor: invalid path "${path}" — must be root/X/Y format with alphanumeric, dot, or hyphen segments`);
@@ -621,7 +625,7 @@ export function parseE2eDsl(line: string): DslCommand | null {
   // typeText("text")
   const typeMatch = trimmed.match(/^typeText\(\s*"([^"]*)"\s*\)$/);
   if (typeMatch) {
-    const text = typeMatch[1];
+    const text = typeMatch[1]!;
     if (text.length > 512) return DSL_ERROR(`typeText: text exceeds 512 chars (${text.length})`);
     if (CTRL_RE.test(text)) return DSL_ERROR(`typeText: text contains control characters`);
     return { method: 'send_text', params: { text } };

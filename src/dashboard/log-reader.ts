@@ -26,6 +26,11 @@ class LogReader extends EventEmitter {
   private watcher: ReturnType<typeof watch> | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private stopped = false;
+  private fd: number | null = null;
+  private fdPath = '';
+  // A-11: 防抖时间戳，避免 fs.watch + setInterval 双重触发时重复 statSync/readSync
+  private lastCheckMs = 0;
+  private static readonly CHECK_DEBOUNCE_MS = 500;
 
   constructor(logDir: string, opts: LogReaderOptions = {}) {
     super();
@@ -56,6 +61,11 @@ class LogReader extends EventEmitter {
 
   stop(): void {
     this.stopped = true;
+    if (this.fd !== null) {
+      closeSync(this.fd);
+      this.fd = null;
+      this.fdPath = '';
+    }
     if (this.watcher) {
       this.watcher.close();
       this.watcher = null;
@@ -100,6 +110,11 @@ class LogReader extends EventEmitter {
   }
 
   private checkForNewData(): void {
+    // A-11: 防抖 — fs.watch 事件和轮询可能同时触发，至少间隔 500ms
+    const now = Date.now();
+    if (now - this.lastCheckMs < LogReader.CHECK_DEBOUNCE_MS) return;
+    this.lastCheckMs = now;
+
     const todayFile = this.getTodayFile();
     if (todayFile !== this.currentFile) {
       this.currentFile = todayFile;
@@ -130,6 +145,18 @@ class LogReader extends EventEmitter {
   }
 
   /**
+   * Get or create a cached file descriptor for the given path.
+   * Reopens when the path changes (e.g. date rotation).
+   */
+  private ensureFd(filePath: string): number {
+    if (this.fd !== null && this.fdPath === filePath) return this.fd;
+    if (this.fd !== null) closeSync(this.fd);
+    this.fd = openSync(filePath, 'r');
+    this.fdPath = filePath;
+    return this.fd;
+  }
+
+  /**
    * 用 readSync + Buffer 从 byteOffset 读取增量内容。
    * I-03: 用 pendingTail 缓冲不完整尾部，防止 UTF-8 多字节截断。
    */
@@ -142,13 +169,23 @@ class LogReader extends EventEmitter {
 
       const readSize = stat.size - offset;
       const buf = Buffer.alloc(readSize);
-      const fd = openSync(filePath, 'r');
+      const fd = this.ensureFd(filePath);
       let totalBytes = 0;
 
       try {
         totalBytes = readSync(fd, buf, 0, readSize, offset);
-      } finally {
-        closeSync(fd);
+      } catch {
+        // fd may be stale (file truncated/rotated) — reopen and retry once
+        if (this.fd !== null) { closeSync(this.fd); this.fd = null; this.fdPath = ''; }
+        const fd2 = this.ensureFd(filePath);
+        // Re-stat after reopen: file may have been truncated/rotated
+        const newStat = statSync(filePath);
+        if (newStat.size <= offset) {
+          return { entries: [], bytesRead: 0 };
+        }
+        const retrySize = Math.min(readSize, newStat.size - offset);
+        const retryBuf = Buffer.alloc(retrySize);
+        totalBytes = readSync(fd2, retryBuf, 0, retrySize, offset);
       }
 
       if (totalBytes === 0) {

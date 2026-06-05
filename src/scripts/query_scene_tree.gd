@@ -54,6 +54,7 @@ func _init():
 	var total = _count_nodes(tree_data)
 
 	_output_result({"root": tree_data, "total_nodes": total, "scene_path": scene_path})
+	root.queue_free()
 
 	quit()
 

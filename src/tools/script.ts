@@ -16,8 +16,8 @@ function detectDuplicateLines(lines: string[]): string[] {
   const warnings: string[] = [];
   let runStart = -1;
   for (let i = 1; i <= lines.length; i++) {
-    const cur = i < lines.length ? lines[i].trim() : '';
-    const prev = lines[i - 1].trim();
+    const cur = i < lines.length ? lines[i]!.trim() : '';
+    const prev = lines[i - 1]!.trim();
     if (cur.length > 10 && cur === prev && (cur.includes('(') || cur.includes('='))) {
       if (runStart < 0) runStart = i - 1;
     } else {
@@ -49,17 +49,17 @@ async function validateAndRevert(
 ): Promise<string | null> {
   try {
     const valResult = await batchValidateScripts(godotPath, projectPath, [fullPath], 15000);
-    if (valResult.length > 0 && valResult[0].errors.length > 0) {
+    if (valResult.length > 0 && valResult[0]!.errors.length > 0) {
       try {
         writeFileSync(fullPath, rawFile, 'utf-8');
       } catch (rollbackErr) {
         return `⚠️ CRITICAL: Parse error detected AND rollback failed!\n` +
-          `Parse errors:\n  ${valResult[0].errors.join('\n  ')}\n` +
+          `Parse errors:\n  ${valResult[0]!.errors.join('\n  ')}\n` +
           `Rollback error: ${rollbackErr}\n` +
           `File may be in a corrupted state: ${fullPath}`;
       }
       // 尝试解析结构化错误信息
-      const parsed = parseGodotErrors(valResult[0].errors);
+      const parsed = parseGodotErrors(valResult[0]!.errors);
       let errorLines: string;
       if (parsed.length > 0) {
         errorLines = parsed.map(e => {
@@ -69,7 +69,7 @@ async function validateAndRevert(
         }).join('\n');
       } else {
         // 回退到原始格式
-        errorLines = valResult[0].errors.map(e => `  ${e}`).join('\n');
+        errorLines = valResult[0]!.errors.map(e => `  ${e}`).join('\n');
       }
 
       return `⚠️ Edit REVERTED due to GDScript parse error:\n` +
@@ -113,17 +113,17 @@ function parseGodotErrors(rawErrors: string[]): ParseErrorDetail[] {
     const match = err.match(/:(\d+)\s*-\s*(Parse Error|Script Error):\s*(.*)/);
     if (match) {
       const detail: ParseErrorDetail = {
-        line: parseInt(match[1]),
-        message: match[3],
-        type: match[2] === 'Parse Error' ? 'parse_error' : 'script_error',
+        line: parseInt(match[1]!),
+        message: match[3]!,
+        type: match[2]! === 'Parse Error' ? 'parse_error' : 'script_error',
       };
       // best-effort 标识符提取
       const identMatch =
-        match[3].match(/identifier "([^"]+)"/i) ||
-        match[3].match(/"(\w+)" not declared/i) ||
-        match[3].match(/Unexpected identifier:\s*"(\w+)"/i);
+        match[3]!.match(/identifier "([^"]+)"/i) ||
+        match[3]!.match(/"(\w+)" not declared/i) ||
+        match[3]!.match(/Unexpected identifier:\s*"(\w+)"/i);
       if (identMatch) {
-        detail.identifier = identMatch[1];
+        detail.identifier = identMatch[1]!;
       }
       details.push(detail);
     }
@@ -155,7 +155,7 @@ function detectIndentStyle(lines: string[]): IndentStyle {
     if (!leadingMatch) continue;
 
     // 只统计有实际缩进的行（缩进长度 > 0 已经由 leadingMatch 保证）
-    const leading = leadingMatch[1];
+    const leading = leadingMatch[1]!;
     if (leading.includes('\t')) {
       tabCount++;
     } else {
@@ -273,11 +273,11 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         let csBaseClass = '';
         for (const line of lines) {
           const nsMatch = line.match(/^\s*namespace\s+(\S+)/);
-          if (nsMatch) csNamespace = nsMatch[1];
+          if (nsMatch) csNamespace = nsMatch[1]!;
           const clsMatch = line.match(/^\s*(?:public\s+)?(?:partial\s+)?class\s+([A-Za-z_]\w*)/);
-          if (clsMatch && !csClassName) csClassName = clsMatch[1];
+          if (clsMatch && !csClassName) csClassName = clsMatch[1]!;
           const baseMatch = line.match(/^\s*(?:public\s+)?(?:partial\s+)?class\s+[A-Za-z_]\w*\s*:\s*([A-Za-z_]\w*)/);
-          if (baseMatch) csBaseClass = baseMatch[1];
+          if (baseMatch) csBaseClass = baseMatch[1]!;
         }
         return textResult(JSON.stringify({
           path: sp,
@@ -296,9 +296,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       for (const line of lines) {
         const extMatch = line.match(/^extends\s+(\S+)/);
-        if (extMatch) extendsClass = extMatch[1];
+        if (extMatch) extendsClass = extMatch[1]!;
         const clsMatch = line.match(/^class_name\s+(\S+)/);
-        if (clsMatch) className = clsMatch[1];
+        if (clsMatch) className = clsMatch[1]!;
       }
 
       return textResult(JSON.stringify({
@@ -492,12 +492,12 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         if (indentStyle.type === 'tab') {
           // 保持现有 tab 逻辑
           const originalLine = lines[startLine - 1] || '';
-          const originalBaseIndent = (originalLine.match(/^(\t*)/) || ['',''])[1].length;
+          const originalBaseIndent = (originalLine.match(/^(\t*)/) || ['',''])[1]!.length;
 
           const newNonEmptyLines = newLines.filter(l => l.trim() !== '');
           let newMinIndent = Infinity;
           for (const nl of newNonEmptyLines) {
-            const tabs = (nl.match(/^(\t*)/) || ['',''])[1].length;
+            const tabs = (nl.match(/^(\t*)/) || ['',''])[1]!.length;
             if (tabs < newMinIndent) newMinIndent = tabs;
           }
           if (newMinIndent === Infinity) newMinIndent = 0;
@@ -507,7 +507,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           adjustedLines = newLines.map((line: string) => {
             if (line.trim() === '') return line;
 
-            const currentTabs = (line.match(/^(\t*)/) || ['',''])[1].length;
+            const currentTabs = (line.match(/^(\t*)/) || ['',''])[1]!.length;
 
             if (indentDelta > 0) {
               return '\t'.repeat(indentDelta) + line;
@@ -520,12 +520,12 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         } else {
           // 空格缩进逻辑
           const originalLine = lines[startLine - 1] || '';
-          const originalBaseIndent = (originalLine.match(/^( *)/) || ['',''])[1].length;
+          const originalBaseIndent = (originalLine.match(/^( *)/) || ['',''])[1]!.length;
 
           const newNonEmptyLines = newLines.filter(l => l.trim() !== '');
           let newMinIndent = Infinity;
           for (const nl of newNonEmptyLines) {
-            const spaces = (nl.match(/^( *)/) || ['',''])[1].length;
+            const spaces = (nl.match(/^( *)/) || ['',''])[1]!.length;
             if (spaces < newMinIndent) newMinIndent = spaces;
           }
           if (newMinIndent === Infinity) newMinIndent = 0;
@@ -534,7 +534,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
           adjustedLines = newLines.map((line: string) => {
             if (line.trim() === '') return line;
-            const currentSpaces = (line.match(/^( *)/) || ['',''])[1].length;
+            const currentSpaces = (line.match(/^( *)/) || ['',''])[1]!.length;
             if (indentDelta > 0) {
               return ' '.repeat(indentDelta) + line;
             } else if (indentDelta < 0) {
@@ -604,19 +604,19 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       let className = '';
       for (const line of srcLines) {
         const extMatch = line.match(/^extends\s+(\S+)/);
-        if (extMatch) extendsClass = extMatch[1];
+        if (extMatch) extendsClass = extMatch[1]!;
         const clsMatch = line.match(/^class_name\s+(\S+)/);
-        if (clsMatch) className = clsMatch[1];
+        if (clsMatch) className = clsMatch[1]!;
       }
 
       const publicMethods: string[] = [];
       const voidMethods = new Set<string>();
       for (const line of srcLines) {
         const funcMatch = line.match(/^func\s+(\w+)\s*\((?:[^)]*)\)\s*(?:->\s*(\w+))?\s*:/);
-        if (funcMatch && !funcMatch[1].startsWith('_')) {
-          publicMethods.push(funcMatch[1]);
+        if (funcMatch && !funcMatch[1]!.startsWith('_')) {
+          publicMethods.push(funcMatch[1]!);
           if (funcMatch[2] === 'void') {
-            voidMethods.add(funcMatch[1]);
+            voidMethods.add(funcMatch[1]!);
           }
         }
       }
@@ -833,7 +833,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             tmpFiles.push(tmpPath);
           }
           for (let i = 0; i < pendingWrites.length; i++) {
-            renameSync(tmpFiles[i], pendingWrites[i].filePath);
+            renameSync(tmpFiles[i]!, pendingWrites[i]!.filePath);
           }
         } catch (writeErr) {
           for (const tmp of tmpFiles) {

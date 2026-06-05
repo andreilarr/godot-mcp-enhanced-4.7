@@ -1,4 +1,10 @@
 // src/tscn-parser.ts — Godot .tscn scene file parser
+//
+// I-10: Non-null assertions (!) on regex match groups (e.g. match[1]!) are used
+// extensively. These are safe because each is guarded by an `if (match)` check
+// that ensures the match succeeded. If the regex pattern has N capture groups,
+// match[N] is guaranteed non-null when the overall match succeeds.
+// For dynamic array indexing or untrusted input, prefer `is` checks instead.
 
 export interface ExtResource {
   id: string | number;
@@ -248,7 +254,7 @@ function parseTypedValue(raw: string): NodeProperty {
   // Type is before the value if there's a space after a type name
   const typeMatch = rest.match(/^(\w+)\s+(.+)$/s);
   if (typeMatch) {
-    return { name, type: typeMatch[1], value: parseValue(typeMatch[2]) };
+    return { name, type: typeMatch[1]!, value: parseValue(typeMatch[2]!) };
   }
 
   return { name, type: 'unknown', value: parseValue(rest) };
@@ -311,13 +317,14 @@ export function parseTscn(content: string): ParsedScene {
       // Parse inline attributes
       const attrMatch = trimmed.match(/\[(\w+)\s+(.*)\]/);
       if (attrMatch) {
-        const attrs = attrMatch[2];
-        const pairs = attrs.match(/(\w+)=(?:"([^"]*)"|(\S+))/g);
+        const attrs = attrMatch[2]!;
+        // I-02: 非引号分支改为匹配到下一个 key= 或行尾，支持含空格的值（如 PackedStringArray(...)）
+        const pairs = attrs.match(/(\w+)=(?:"([^"]*)"|((?:(?!\s+\w+=).)+))/g);
         if (pairs) {
           for (const pair of pairs) {
             const eq = pair.indexOf('=');
             const key = pair.slice(0, eq);
-            const val = pair.slice(eq + 1).replace(/^"|"$/g, '');
+            const val = pair.slice(eq + 1).replace(/^"|"$/g, '').replace(/""/g, '"');
             if (key === 'id') {
               const numericId = Number(val);
               currentExt!.id = !isNaN(numericId) && val !== '' ? numericId : val;
@@ -340,13 +347,13 @@ export function parseTscn(content: string): ParsedScene {
 
       const attrMatch = trimmed.match(/\[(\w+)\s+(.*)\]/);
       if (attrMatch) {
-        const attrs = attrMatch[2];
+        const attrs = attrMatch[2]!;
         const pairs = attrs.match(/(\w+)=(?:"([^"]*)"|(\S+))/g);
         if (pairs) {
           for (const pair of pairs) {
             const eq = pair.indexOf('=');
             const key = pair.slice(0, eq);
-            const val = pair.slice(eq + 1).replace(/^"|"$/g, '');
+            const val = pair.slice(eq + 1).replace(/^"|"$/g, '').replace(/""/g, '"');
             if (key === 'id') currentSub!.id = val;
             else if (key === 'type') currentSub!.type = val;
             else currentSub![key] = val;
@@ -365,20 +372,20 @@ export function parseTscn(content: string): ParsedScene {
 
       const attrMatch = trimmed.match(/\[(\w+)\s+(.*)\]/);
       if (attrMatch) {
-        const attrs = attrMatch[2];
+        const attrs = attrMatch[2]!;
         const pairs = attrs.match(/(\w+)=(?:"([^"]*)"|(\S+))/g);
         if (pairs) {
           for (const pair of pairs) {
             const eq = pair.indexOf('=');
             const key = pair.slice(0, eq);
-            const val = pair.slice(eq + 1).replace(/^"|"$/g, '');
+            const val = pair.slice(eq + 1).replace(/^"|"$/g, '').replace(/""/g, '"');
             if (key === 'name') currentNode!.name = val;
             else if (key === 'type') currentNode!.type = val;
             else if (key === 'parent') currentNode!.parent = val;
             else if (key === 'instance') {
               const erMatch = val.match(/ExtResource\(["']?([^"']+)["']?\)/);
               if (erMatch) {
-                const rawId = erMatch[1];
+                const rawId = erMatch[1]!;
                 const numericId = Number(rawId);
                 currentNode!.instance = !isNaN(numericId) && rawId !== '' ? numericId : rawId;
               }
@@ -398,13 +405,13 @@ export function parseTscn(content: string): ParsedScene {
 
       const attrMatch = trimmed.match(/\[(\w+)\s+(.*)\]/);
       if (attrMatch) {
-        const attrs = attrMatch[2];
+        const attrs = attrMatch[2]!;
         const pairs = attrs.match(/(\w+)="([^"]*)"/g);
         if (pairs) {
           for (const pair of pairs) {
             const eq = pair.indexOf('=');
             const key = pair.slice(0, eq);
-            const val = pair.slice(eq + 1).replace(/^"|"$/g, '');
+            const val = pair.slice(eq + 1).replace(/^"|"$/g, '').replace(/""/g, '"');
             if (key === 'signal') currentConnection!.signal = val;
             else if (key === 'from') currentConnection!.from = val;
             else if (key === 'to') currentConnection!.to = val;

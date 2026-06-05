@@ -308,7 +308,7 @@ async function runSingleVerify(
   if (captureTree) {
     const treeMatch = result.stdout.match(/=== Scene Tree ===([\s\S]*?)===/);
     if (treeMatch) {
-      entry.tree = { raw: treeMatch[1].trim() };
+      entry.tree = { raw: treeMatch[1]!.trim() };
     }
   }
 

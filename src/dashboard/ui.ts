@@ -79,7 +79,7 @@ function truncW(s: string, maxCols: number): string {
   while (i < s.length) {
     if (s.charCodeAt(i) === 0x1b && i + 1 < s.length && s[i + 1] === '[') {
       i += 2;
-      while (i < s.length && !/[a-zA-Z]/.test(s[i])) i++;
+      while (i < s.length && !/[a-zA-Z]/.test(s[i]!)) i++;
       if (i < s.length) i++;
       continue;
     }
@@ -130,7 +130,7 @@ function formatUptime(startTime: string): string {
 function renderStatusBar(state: DashboardState, paused: boolean, width: number): string[] {
   const uptime = formatUptime(state.startTime);
   const modeIcon = state.mode === 'unknown' ? STATUS.disconnected : STATUS.connected;
-  const modeColor = MODE_COLORS[state.mode] ?? 252;
+  const modeColor = MODE_COLORS[state.mode as keyof typeof MODE_COLORS] ?? 252;
   const pauseIcon = paused ? ` ${STATUS.paused}` : '';
   const project = state.projectPath
     ? `│ Project: ${truncate(state.projectPath, 30)} `
@@ -357,14 +357,12 @@ function composeFrame(state: DashboardState | null, ui: UIState): string {
   const toolLines = renderToolStatsTable(tools, rightWidth, toolTargetLines);
   const perfLines = renderPerformancePanel(state, rightWidth, perfTargetLines);
 
-  // 左右面板逐行交错拼接
+  // 合并右侧面板后逐行拼接
+  const rightPanel = [...toolLines, ...perfLines];
   const midContent: string[] = [];
   for (let i = 0; i < midLines; i++) {
-    const left = i < logLines.length ? logLines[i] : ' '.repeat(leftWidth);
-    const right = i < toolLines.length ? toolLines[i]
-      : (i - toolLines.length) >= 0 && (i - toolLines.length) < perfLines.length
-        ? perfLines[i - toolLines.length]
-        : '';
+    const left = i < logLines.length ? logLines[i]! : ' '.repeat(leftWidth);
+    const right = i < rightPanel.length ? rightPanel[i]! : '';
     midContent.push(left + right);
   }
 
@@ -471,7 +469,7 @@ export function renderDashboard(
     } else if (chunk === 'l') {
       const levels = ['ALL', 'INFO', 'WARN', 'ERROR'];
       const idx = levels.indexOf(ui.levelFilter);
-      ui.levelFilter = levels[(idx + 1) % levels.length];
+      ui.levelFilter = levels[(idx + 1) % levels.length]!;
     } else if (chunk === 'c') {
       if (ui.dashboard) {
         ui.dashboard.recentLogs.clear();
@@ -500,8 +498,10 @@ export function renderDashboard(
   (async () => {
     try {
       for await (const s of stateStream) {
-        if (!ui.paused) {
-          ui.dashboard = s;
+        ui.dashboard = s;
+        // A-13: 仅在 scrollOffset=0（用户在底部）时保持自动跟随
+        // 用户向上滚动时不重置 offset，避免跳回底部
+        if (!ui.paused && ui.scrollOffset === 0) {
           ui.scrollOffset = 0;
         }
         scheduleRender();

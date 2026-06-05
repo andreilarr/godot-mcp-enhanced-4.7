@@ -18,7 +18,7 @@ function downsample(values: number[], target: number): number[] {
   const sampled: number[] = [];
   const step = (values.length - 1) / (target - 1);
   for (let i = 0; i < target; i++) {
-    sampled.push(values[Math.round(i * step)]);
+    sampled.push(values[Math.round(i * step)]!);
   }
   return sampled;
 }

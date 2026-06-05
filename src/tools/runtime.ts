@@ -19,6 +19,22 @@ const ACTIONS = [
 
 // ─── classifyOutput helper ──────────────────────────────────────────────────
 
+// A-06: Use precise pattern matching to avoid false positives like "no errors found"
+const ERROR_PATTERNS = [
+  /^\s*error:/i,           // "ERROR:" or "  error:" at line start
+  /\berror\b(?!\s+found)/i, // "error" but not "error found" or "errors found"
+  /traceback/i,
+  /exception/i,
+  /SCRIPT ERROR/i,
+  /\*\*ERROR\*\*/i,
+];
+
+const WARN_PATTERNS = [
+  /^\s*warn(?:ing)?:/i,    // "WARNING:" or "warn:" at line start
+  /\bwarn(?:ing)?\b(?!\s+found)/i, // "warning"/"warn" but not "warning found" or "warnings found"
+  /\*\*WARNING\*\*/i,
+];
+
 function classifyOutput(lines: string[]): {
   errors: string[];
   warnings: string[];
@@ -29,10 +45,9 @@ function classifyOutput(lines: string[]): {
   const prints: string[] = [];
 
   for (const line of lines) {
-    const lower = line.toLowerCase();
-    if (lower.includes('error') || lower.includes('exception') || lower.includes('traceback')) {
+    if (ERROR_PATTERNS.some(p => p.test(line))) {
       errors.push(line);
-    } else if (lower.includes('warning') || lower.includes('warn')) {
+    } else if (WARN_PATTERNS.some(p => p.test(line))) {
       warnings.push(line);
     } else {
       prints.push(line);

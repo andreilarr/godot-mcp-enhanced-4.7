@@ -28,8 +28,6 @@ import {
   gdEscape,
   SCENE_TREE_HEADER,
   MARKER_RESULT,
-  genCheckNodeExists,
-  genCheckProperties,
   wrapAssertionCode,
 } from '../src/tools/shared.js';
 import {
@@ -437,58 +435,8 @@ describe('genRecordingLoadScript — GDScript load generation', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 6. shared.ts — genCheckNodeExists / genCheckProperties
+// 6. shared.ts — wrapAssertionCode
 // ═══════════════════════════════════════════════════════════════════════════════
-
-describe('genCheckNodeExists — GDScript node existence check', () => {
-  it('generates code that calls _mcp_get_node', () => {
-    const code = genCheckNodeExists('root/Player');
-    expect(code).toContain('_mcp_get_node(');
-    expect(code).toContain('root/Player');
-  });
-
-  it('outputs node_exists key', () => {
-    const code = genCheckNodeExists('root/Player');
-    expect(code).toContain('"node_exists"');
-  });
-
-  it('uses JSON.stringify for output', () => {
-    const code = genCheckNodeExists('root/Player');
-    expect(code).toContain('JSON.stringify');
-  });
-
-  it('handles paths with special characters via gdEscape', () => {
-    // Path with $ character — NOT escaped ($ is not special in GDScript strings)
-    const code = genCheckNodeExists('root/$Special');
-    expect(code).toContain('$Special');
-  });
-});
-
-describe('genCheckProperties — GDScript property check', () => {
-  it('generates code that reads properties from a node', () => {
-    const code = genCheckProperties('root/Player', { health: 100, name: 'Hero' });
-    expect(code).toContain('_mcp_get_node(');
-    expect(code).toContain('"health"');
-    expect(code).toContain('"name"');
-  });
-
-  it('outputs props key', () => {
-    const code = genCheckProperties('root/Player', { x: 1 });
-    expect(code).toContain('"props"');
-  });
-
-  it('handles empty property set', () => {
-    const code = genCheckProperties('root/Player', {});
-    expect(code).toContain('_mcp_get_node(');
-    expect(code).toContain('"props"');
-  });
-
-  it('escapes property names containing special chars', () => {
-    const code = genCheckProperties('root/Node', { 'my%prop': 'val' });
-    // % should be escaped to %%
-    expect(code).toContain('my%%prop');
-  });
-});
 
 describe('wrapAssertionCode — GDScript assertion wrapper', () => {
   it('wraps user code with SCENE_TREE_HEADER and _mcp_done', () => {

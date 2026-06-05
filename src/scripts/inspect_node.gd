@@ -89,6 +89,7 @@ func _init():
 	result["children"] = _get_children_details(target, 0, max_depth)
 
 	_output_result(result)
+	root.queue_free()
 
 	quit()
 

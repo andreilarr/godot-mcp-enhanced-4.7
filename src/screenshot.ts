@@ -109,7 +109,7 @@ function runScreenshot(
 function parseDimensions(output: string): { width: number; height: number } | null {
   const match = output.match(/\((\d+)x(\d+)\)/);
   if (match) {
-    return { width: parseInt(match[1]), height: parseInt(match[2]) };
+    return { width: parseInt(match[1]!), height: parseInt(match[2]!) };
   }
   return null;
 }
@@ -163,6 +163,8 @@ export async function captureScreenshot(
   // Pass parameters as positional args after script path
   args.push(outputPath);
   if (scene) args.push(scene);
+  // I-09: 记录 frame delay 的精确索引，不依赖 args.length - 2 硬编码
+  const frameDelayIdx = args.length;
   args.push(String(frameDelay));
   args.push(`${viewportSize.width}x${viewportSize.height}`);
 
@@ -186,10 +188,9 @@ export async function captureScreenshot(
   // --- Retry: if primary mode failed but process succeeded, retry with doubled frame delay ---
   if (!existsSync(outputPath) && result1.code === 0) {
     const retryArgs = [...args];
-    // Frame delay is at args.length - 2 (second-to-last), viewport size is last
-    const fdIdx = retryArgs.length - 2;
-    if (fdIdx >= 0) {
-      retryArgs[fdIdx] = String(frameDelay * 2);
+    // I-09: 使用构建时记录的精确索引，替代脆弱的 args.length - 2
+    if (frameDelayIdx < retryArgs.length) {
+      retryArgs[frameDelayIdx] = String(frameDelay * 2);
     }
     const retryResult = await runScreenshot(godotPath, retryArgs, timeout);
     if (existsSync(outputPath)) {

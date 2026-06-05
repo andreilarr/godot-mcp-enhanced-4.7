@@ -2,7 +2,8 @@
 import WebSocket from 'ws';
 import { getLogger } from './logger.js';
 
-// Auth uses a dedicated id outside the normal requestId sequence to avoid conflicts
+// I-01: Auth uses a dedicated id outside the normal requestId sequence to avoid conflicts.
+// The plugin expects id=-1 for auth handshake (negative IDs are never used by normal requests).
 const AUTH_REQUEST_ID = -1;
 const MAX_INBOUND_MESSAGE_SIZE = 1048576; // 1MB
 const MAX_AUTH_FAILURES = 5;
@@ -188,7 +189,9 @@ export class EditorConnection {
               getLogger().error('auth', `Locked out for ${AUTH_LOCKOUT_MS / 1000}s after ${MAX_AUTH_FAILURES} failures`);
             }
             this.connected = false;
-            this.connectAttempt = true;
+            // I-09: Don't set connectAttempt = true here — it's already true from connect() entry.
+            // Setting it again would cause ws.on('close') to see wasConnected=false,
+            // preventing reconnect even though the connection was previously established.
             this.ws = null;
             ws.removeAllListeners();
             ws.terminate();
@@ -251,7 +254,11 @@ export class EditorConnection {
           clearTimeout(pending.timer);
           this.pending.delete(msg.id);
           if (msg.error) {
-            pending.reject(new Error(msg.error.message || 'JSON-RPC error'));
+            // I-01: Preserve structured error info (code, data) from editor plugin
+            const err = new Error(msg.error.message || 'JSON-RPC error') as Error & { code?: unknown; data?: unknown };
+            if (msg.error.code !== undefined) err.code = msg.error.code;
+            if (msg.error.data !== undefined) err.data = msg.error.data;
+            pending.reject(err);
           } else {
             pending.resolve(msg.result);
           }
@@ -299,7 +306,8 @@ export class EditorConnection {
         attempts++;
       }
       if (attempts >= 1000) {
-        reject(new Error('No available request IDs — too many pending requests'));
+        // A-03: 附加当前 pending 数量信息帮助调试
+        reject(new Error(`No available request IDs — too many pending requests (pending.size=${this.pending.size})`));
         return;
       }
       const id = this.requestId = candidate;
@@ -389,7 +397,7 @@ export class EditorConnection {
         this.ws?.close();
       }, 10000);
 
-      // Use id=0 for auth (matches plugin expectation)
+      // I-01: Use id=-1 for auth (negative IDs never conflict with normal requests)
       this.pending.set(AUTH_REQUEST_ID, {
         resolve: (_result: unknown) => {
           if (settled) return;

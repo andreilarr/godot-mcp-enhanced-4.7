@@ -34,6 +34,8 @@ static func is_safe(val: Variant, depth: int = 0) -> bool:
 		return true
 	if val is Dictionary:
 		for key in val:
+			if not is_safe(key, depth + 1):
+				return false
 			if not is_safe(val[key], depth + 1):
 				return false
 		return true

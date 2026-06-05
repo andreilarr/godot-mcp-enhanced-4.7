@@ -1,3 +1,7 @@
+// A-02: TODO(v0.18.0) — Remove this file once all deprecated properties have been
+// fully removed from Godot and no longer need mapping. Until then, this file provides
+// backward-compatible property name translation for the docs tool and lint rules.
+
 export interface DeprecatedProperty {
   removed: boolean;
   replacement?: string;

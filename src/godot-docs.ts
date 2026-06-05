@@ -203,7 +203,8 @@ export function initDocs(docsPath: string): void {
 
   initialized = true;
   const versionInfo = docsVersion ? ` (Godot ${docsVersion})` : '';
-  getLogger().error('godot-docs', `Loaded ${classMap.size} classes from ${docsPath}${versionInfo}`);
+  // A-14: 使用 info 级别而非 error — 这是正常加载信息，不应触发 totalErrors 计数
+  getLogger().info('godot-docs', `Loaded ${classMap.size} classes from ${docsPath}${versionInfo}`);
 }
 
 function ensureInit(): void {

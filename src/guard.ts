@@ -63,8 +63,12 @@ export function requiresConfirmation(toolName: string, args?: Record<string, unk
 export function createPendingToken(toolName: string, args: Record<string, unknown>): string {
   ensureCleanupTimer();
   const now = Date.now();
-  // A-08: Rate limit — prevent high-frequency token creation from evicting legitimate tokens
+  // A-05: Rate limit — prevent high-frequency token creation from evicting legitimate tokens
   _recentCreations = _recentCreations.filter(t => now - t < 1000);
+  // A-05: 防止数组在高频场景下短暂膨胀，超过 2x 限制时截断
+  if (_recentCreations.length > TOKEN_RATE_LIMIT * 2) {
+    _recentCreations = _recentCreations.slice(-TOKEN_RATE_LIMIT);
+  }
   if (_recentCreations.length >= TOKEN_RATE_LIMIT) {
     throw new Error(`Token creation rate limit exceeded (max ${TOKEN_RATE_LIMIT}/s). Please wait and retry.`);
   }

@@ -68,55 +68,29 @@ func setup(plugin: EditorPlugin) -> void:
 	add_child(_ui_commands)
 
 func cleanup() -> void:
-	if _sync_commands:
-		_sync_commands.cleanup()
-		_sync_commands.queue_free()
-		_sync_commands = null
-	if _recording_commands:
-		_recording_commands.cleanup()
-		_recording_commands.queue_free()
-		_recording_commands = null
-	if _animation_commands:
-		if _animation_commands.has_method("cleanup"): _animation_commands.cleanup()
-		_animation_commands.queue_free()
-		_animation_commands = null
-	if _ui_commands:
-		if _ui_commands.has_method("cleanup"): _ui_commands.cleanup()
-		_ui_commands.queue_free()
-		_ui_commands = null
-	if _scene_commands:
-		if _scene_commands.has_method("cleanup"): _scene_commands.cleanup()
-		_scene_commands.queue_free()
-		_scene_commands = null
-	if _node_commands:
-		if _node_commands.has_method("cleanup"): _node_commands.cleanup()
-		_node_commands.queue_free()
-		_node_commands = null
-	if _test_commands:
-		if _test_commands.has_method("cleanup"): _test_commands.cleanup()
-		_test_commands.queue_free()
-		_test_commands = null
-	if _export_commands:
-		if _export_commands.has_method("cleanup"): _export_commands.cleanup()
-		_export_commands.queue_free()
-		_export_commands = null
-	if _particle_commands:
-		if _particle_commands.has_method("cleanup"):
-			_particle_commands.cleanup()
-		_particle_commands.queue_free()
-		_particle_commands = null
-	if _nav_commands:
-		if _nav_commands.has_method("cleanup"): _nav_commands.cleanup()
-		_nav_commands.queue_free()
-		_nav_commands = null
-	if _animtree_commands:
-		if _animtree_commands.has_method("cleanup"): _animtree_commands.cleanup()
-		_animtree_commands.queue_free()
-		_animtree_commands = null
-	if _undo_manager:
-		if _undo_manager.has_method("cleanup"): _undo_manager.cleanup()
-		_undo_manager.queue_free()
-		_undo_manager = null
+	var modules = [
+		_sync_commands, _recording_commands, _animation_commands,
+		_ui_commands, _scene_commands, _node_commands,
+		_test_commands, _export_commands, _particle_commands,
+		_nav_commands, _animtree_commands, _undo_manager,
+	]
+	for node in modules:
+		if node:
+			if node.has_method("cleanup"):
+				node.cleanup()
+			node.queue_free()
+	_sync_commands = null
+	_recording_commands = null
+	_animation_commands = null
+	_ui_commands = null
+	_scene_commands = null
+	_node_commands = null
+	_test_commands = null
+	_export_commands = null
+	_particle_commands = null
+	_nav_commands = null
+	_animtree_commands = null
+	_undo_manager = null
 	if _editor_guards:
 		_editor_guards.queue_free()
 		_editor_guards = null

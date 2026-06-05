@@ -272,7 +272,7 @@ const stateMachineSimple: CodeTemplate = {
 ${enumBody}
 }
 
-var current_state: State = State.${stateNames[0].trim()}
+var current_state: State = State.${stateNames[0]!.trim()}
 
 func _process(delta):
 \tmatch current_state:
@@ -473,12 +473,12 @@ class_name ${className}
 
 # ── State machine pattern ──
 enum State { ${states.join(', ')} }
-var state: State = State.${states[0]}
+var state: State = State.${states[0]!}
 
 func _physics_process(delta: float) -> void:
 	match state:
-		State.${states[0]}:
-			_process_${states[0].toLowerCase()}(delta)
+		State.${states[0]!}:
+			_process_${states[0]!.toLowerCase()}(delta)
 ${states.slice(1).map(s => `\t\tState.${s}:\n\t\t\t_process_${s.toLowerCase()}(delta)`).join('\n')}
 
 func _transition_to(new_state: State) -> void:
@@ -489,7 +489,7 @@ func _transition_to(new_state: State) -> void:
 
 func _enter_state(s: State) -> void: pass
 func _exit_state(s: State) -> void: pass
-func _process_${states[0].toLowerCase()}(_delta: float) -> void: pass
+func _process_${states[0]!.toLowerCase()}(_delta: float) -> void: pass
 `;
     },
   },
@@ -636,7 +636,7 @@ export function loadUserTemplates(projectPath: string): CodeTemplate[] {
         params: validated.variables ?? [],
         generate: (p) => renderTemplate(validated.code, p),
         verifiedGodotVersion: validated.godotVersion ?? '4.2',
-        lastVerified: new Date().toISOString().split('T')[0],
+        lastVerified: new Date().toISOString().split('T')[0]!,
         tags: validated.tags ?? [],
         appliesTo: validated.appliesTo ?? [],
       });

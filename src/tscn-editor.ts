@@ -1,4 +1,7 @@
 ﻿// src/tscn-editor.ts — Line-based .tscn scene file editor
+//
+// I-10: Non-null assertions (!) on regex match groups are guarded by preceding
+// `if (match)` checks — see tscn-parser.ts header for the full rationale.
 
 export interface SceneEditResult {
   success: boolean;
@@ -15,7 +18,7 @@ function normalizeLines(content: string): string[] {
 /** Find the end of a section (next `[...]` line or end of file). Returns index of the next section start. */
 function findSectionEnd(lines: string[], startLine: number): number {
   for (let i = startLine + 1; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     if (trimmed.startsWith('[')) return i;
   }
   return lines.length;
@@ -52,13 +55,13 @@ function getBracketAttr(header: string, attr: string): string | null {
   const safeAttr = escapeRegExp(attr);
   const re = new RegExp(`(?:^|\\s)${safeAttr}="([^"]*)"`);
   const m = header.match(re);
-  return m ? m[1] : null;
+  return m ? m[1]! : null;
 }
 
 /** Get the name part of a nodePath like "Root/Player/Sprite2D" → "Sprite2D" */
 function leafName(nodePath: string): string {
   const parts = nodePath.split('/');
-  return parts[parts.length - 1];
+  return parts[parts.length - 1]!;
 }
 
 /** Build a parent path prefix from a nodePath. "Root/Player/Sprite2D" → "Root/Player" */
@@ -77,7 +80,7 @@ function findNodeSectionLine(lines: string[], nodePath: string): number {
   const targetParent = parentPath(nodePath);
 
   for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     if (!trimmed.startsWith('[node')) continue;
 
     const name = getBracketAttr(trimmed, 'name');
@@ -97,7 +100,7 @@ function findNodeSectionLine(lines: string[], nodePath: string): number {
     // Check property lines below the header
     const end = findSectionEnd(lines, i);
     for (let j = i + 1; j < end; j++) {
-      const propLine = lines[j].trim();
+      const propLine = lines[j]!.trim();
       if (propLine.startsWith('parent = ') || propLine.startsWith('parent=')) {
         const val = propLine.replace(/^parent\s*=\s*/, '').replace(/"/g, '').trim();
         if (val === targetParent) return i;
@@ -141,7 +144,7 @@ export function editNodeProperty(
 
   // Try to find existing property line
   for (let i = nodeLine + 1; i <= end; i++) {
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     if (trimmed.startsWith(propPrefix)) {
       lines[i] = `${property} = ${formatTscnValue(value)}`;
       return { success: true, message: `Updated ${property} on ${nodePath}`, scene: lines.join('\n') };
@@ -160,7 +163,7 @@ export function editNodeProperty(
   // Property not found — insert after the last property line of the node section
   let insertAt = nodeLine + 1;
   for (let i = nodeLine + 1; i <= end; i++) {
-    if (lines[i].trim() !== '' && (lines[i].startsWith('\t') || lines[i].startsWith(' '))) {
+    if (lines[i]!.trim() !== '' && (lines[i]!.startsWith('\t') || lines[i]!.startsWith(' '))) {
       insertAt = i + 1;
     }
   }
@@ -212,7 +215,7 @@ export function deleteNode(
   // Find all descendant node sections
   const descendantRanges: [number, number][] = [];
   for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     if (!trimmed.startsWith('[node')) continue;
 
     const name = getBracketAttr(trimmed, 'name');
@@ -222,7 +225,7 @@ export function deleteNode(
     if (parent === null) {
       const end = findSectionEnd(lines, i);
       for (let j = i + 1; j < end; j++) {
-        const pl = lines[j].trim();
+        const pl = lines[j]!.trim();
         if (pl.startsWith('parent = ') || pl.startsWith('parent=')) {
           parent = pl.replace(/^parent\s*=\s*/, '').replace(/"/g, '').trim();
           break;
@@ -274,7 +277,7 @@ export function addConnection(
   const connLine = `[connection signal="${escapeTscnAttr(signal)}" from="${escapeTscnAttr(fromNode)}" to="${escapeTscnAttr(toNode)}" method="${escapeTscnAttr(method)}"]`;
 
   // Append before any trailing empty lines
-  while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+  while (lines.length > 0 && lines[lines.length - 1]!.trim() === '') {
     lines.pop();
   }
   lines.push('');
@@ -301,7 +304,7 @@ export function removeConnection(
   let removed = false;
 
   for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     if (!trimmed.startsWith('[connection')) continue;
 
     const sig = getBracketAttr(trimmed, 'signal');
@@ -343,15 +346,18 @@ export function setNodeScript(
     return { success: false, message: `Node not found: ${nodePath}` };
   }
 
-  // Check if ext_resource for this script already exists
-  let extId: number | null = null;
+  // C-01: Check if ext_resource for this script already exists
+  // Use \bid="([^"]+)" to match both numeric IDs and Godot 4.x string UIDs
+  let extId: string | number | null = null;
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('[ext_resource')) continue;
     if (trimmed.includes(`path="${scriptPath}"`)) {
-      const idMatch = trimmed.match(/id=(\d+)/);
+      const idMatch = trimmed.match(/\bid="([^"]+)"/);
       if (idMatch) {
-        extId = parseInt(idMatch[1]);
+        const raw = idMatch[1]!;
+        const num = Number(raw);
+        extId = !isNaN(num) && raw !== '' ? num : raw;
         break;
       }
     }
@@ -363,7 +369,7 @@ export function setNodeScript(
     for (const line of lines) {
       const idMatch = line.match(/\[ext_resource.*\bid=(\d+)/);
       if (idMatch) {
-        const id = parseInt(idMatch[1]);
+        const id = parseInt(idMatch[1]!);
         if (id > maxId) maxId = id;
       }
     }
@@ -372,7 +378,7 @@ export function setNodeScript(
     // Insert the new ext_resource after the last ext_resource or after the header
     let insertAt = lines.length;
     for (let i = lines.length - 1; i >= 0; i--) {
-      if (lines[i].trim().startsWith('[ext_resource')) {
+      if (lines[i]!.trim().startsWith('[ext_resource')) {
         insertAt = i + 1;
         break;
       }
@@ -380,7 +386,7 @@ export function setNodeScript(
     // If no ext_resource found, insert after header
     if (insertAt === lines.length) {
       for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim().startsWith('[') && !lines[i].trim().startsWith('[gd_scene')) {
+        if (lines[i]!.trim().startsWith('[') && !lines[i]!.trim().startsWith('[gd_scene')) {
           insertAt = i;
           break;
         }
@@ -399,7 +405,7 @@ export function setNodeScript(
   const end = nodeSectionEnd(lines, newNodeLine);
   let found = false;
   for (let i = newNodeLine + 1; i <= end; i++) {
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     if (trimmed.startsWith('script = ') || trimmed.startsWith('script=')) {
       lines[i] = `script = ExtResource("${extId}")`;
       found = true;
@@ -434,7 +440,7 @@ export function changeNodeType(
     return { success: false, message: `Node not found: ${nodePath}` };
   }
 
-  const header = lines[nodeLine];
+  const header = lines[nodeLine]!;
   const typeMatch = header.match(/type="[^"]*"/);
 
   if (!typeMatch) {
@@ -443,6 +449,21 @@ export function changeNodeType(
 
   const oldType = typeMatch[0].match(/type="([^"]*)"/)![1];
   lines[nodeLine] = header.replace(/type="[^"]*"/, `type="${escapeTscnAttr(newType)}"`);
+
+  // A-08: Update load_steps in gd_scene header to match ext_resource + sub_resource count + 1
+  let extCount = 0;
+  let subCount = 0;
+  for (const line of lines) {
+    if (line.trim().startsWith('[ext_resource')) extCount++;
+    if (line.trim().startsWith('[sub_resource')) subCount++;
+  }
+  const newLoadSteps = extCount + subCount + 1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]!.startsWith('[gd_scene') && lines[i]!.includes('load_steps=')) {
+      lines[i] = lines[i]!.replace(/load_steps=\d+/, `load_steps=${newLoadSteps}`);
+      break;
+    }
+  }
 
   return {
     success: true,
@@ -473,9 +494,9 @@ function parseExtResourceMap(lines: string[]): Map<string | number, string> {
     const idMatch = trimmed.match(/\bid="([^"]+)"/);
     const pathMatch = trimmed.match(/\bpath="([^"]+)"/);
     if (idMatch && pathMatch) {
-      const rawId = idMatch[1];
+      const rawId = idMatch[1]!;
       const numericId = Number(rawId);
-      map.set(!isNaN(numericId) && rawId !== '' ? numericId : rawId, pathMatch[1]);
+      map.set(!isNaN(numericId) && rawId !== '' ? numericId : rawId, pathMatch[1]!);
     }
   }
   return map;
@@ -535,20 +556,20 @@ export function findInstanceNode(
   const tscnParent = parentToTscnParent(parent);
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i]!;
     if (!line.startsWith('[node ')) continue;
 
     const nameMatch = line.match(/name="([^"]+)"/);
-    if (!nameMatch || nameMatch[1] !== nodeName) continue;
+    if (!nameMatch || nameMatch[1]! !== nodeName) continue;
 
     const parentMatch = line.match(/parent="([^"]+)"/);
-    const lineParent = parentMatch ? parentMatch[1] : '.';
+    const lineParent = parentMatch ? parentMatch[1]! : '.';
     if (lineParent !== tscnParent) continue;
 
     const instanceMatch = line.match(/instance=ExtResource\("([^"]+)"\)/);
     if (!instanceMatch) continue;
 
-    const rawInstId = instanceMatch[1];
+    const rawInstId = instanceMatch[1]!;
     const numericInstId = Number(rawInstId);
     const instanceId: string | number = !isNaN(numericInstId) && rawInstId !== '' ? numericInstId : rawInstId;
     const sourcePath = extMap.get(instanceId);
@@ -558,7 +579,7 @@ export function findInstanceNode(
     const propertyOverrides: string[] = [];
     const end = findSectionEnd(lines, i);
     for (let j = i + 1; j < end; j++) {
-      const propLine = lines[j];
+      const propLine = lines[j]!;
       if (propLine.includes('=')) {
         propertyOverrides.push(propLine);
       }
@@ -625,7 +646,7 @@ function parseSourceScene(sourceTscn: string): {
     } else if (section === 'sub') {
       subResources.push(line);
     } else if (section === 'node') {
-      nodeGroups[nodeGroups.length - 1].props.push(line);
+      nodeGroups[nodeGroups.length - 1]!.props.push(line);
     }
     // ext_resource and connection are typically single-line — nothing extra to collect
   }
@@ -682,7 +703,7 @@ function findMaxSubResourceId(lines: string[]): number {
     if (!trimmed.startsWith('[sub_resource')) continue;
     const m = trimmed.match(/\bid="(\d+)"/);
     if (m) {
-      const id = parseInt(m[1]);
+      const id = parseInt(m[1]!);
       if (id > maxId) maxId = id;
     }
   }
@@ -707,7 +728,7 @@ function remapSubResourceIds(
     if (trimmed.startsWith('[sub_resource')) {
       const idMatch = trimmed.match(/\bid="(\d+)"/);
       if (idMatch) {
-        const oldId = parseInt(idMatch[1]);
+        const oldId = parseInt(idMatch[1]!);
         const newId = nextId++;
         idMap.set(oldId, newId);
         remapped.push(line.replace(`id="${oldId}"`, `id="${newId}"`));
@@ -812,7 +833,7 @@ export function detachInstance(
   const expandedLines: string[] = [];
 
   // Root node: remove instance attr, adjust name and parent
-  const rootGroup = source.nodeGroups[0];
+  const rootGroup = source.nodeGroups[0]!;
   let rootHeader = rootGroup.header;
 
   // Remove instance=ExtResource("N") if present (source might itself be instanced)
@@ -849,7 +870,7 @@ export function detachInstance(
   expandedLines.push(rootHeader);
 
   // Add root node property lines (remapped), but remove any that will be overridden
-  let sourceNodeLines = rootGroup.props.map(l => {
+  let sourceNodeLines = rootGroup!.props.map(l => {
     return remapSubResourceRefs(remapNodeLineRefs(l, idMap), subIdMap);
   });
 
@@ -858,11 +879,11 @@ export function detachInstance(
     const overrideKeys = new Set<string>();
     for (const ovr of info.propertyOverrides) {
       const m = ovr.trim().match(/^(\w+)\s*=/);
-      if (m) overrideKeys.add(m[1]);
+      if (m) overrideKeys.add(m[1]!);
     }
     sourceNodeLines = sourceNodeLines.filter(line => {
       const m = line.trim().match(/^(\w+)\s*=/);
-      return !m || !overrideKeys.has(m[1]);
+      return !m || !overrideKeys.has(m[1]!);
     });
   }
 
@@ -877,7 +898,7 @@ export function detachInstance(
 
   // Child nodes: prepend nodeName/ to their parent attribute
   for (let i = 1; i < source.nodeGroups.length; i++) {
-    const group = source.nodeGroups[i];
+    const group = source.nodeGroups[i]!;
     let header = group.header;
 
     const parentMatch = header.match(/parent="([^"]+)"/);
@@ -904,7 +925,7 @@ export function detachInstance(
   // Find where to insert new ext_resources (after last existing ext_resource)
   let lastExtResourceIdx = -1;
   for (let i = 0; i < targetLines.length; i++) {
-    if (targetLines[i].trim().startsWith('[ext_resource')) {
+    if (targetLines[i]!.trim().startsWith('[ext_resource')) {
       lastExtResourceIdx = i;
     }
   }
@@ -912,7 +933,7 @@ export function detachInstance(
   // Find the first [node] line in target — sub_resources go before it
   let firstNodeIdx = -1;
   for (let i = 0; i < targetLines.length; i++) {
-    if (targetLines[i].trim().startsWith('[node')) {
+    if (targetLines[i]!.trim().startsWith('[node')) {
       firstNodeIdx = i;
       break;
     }
@@ -943,7 +964,7 @@ export function detachInstance(
       insertedSubResources = true;
     }
 
-    cleanResult.push(targetLines[i]);
+    cleanResult.push(targetLines[i]!);
 
     // After last existing ext_resource, insert new ext_resources from source
     if (i === lastExtResourceIdx && remappedExtResources.length > 0) {
@@ -962,7 +983,7 @@ export function detachInstance(
   // Append remapped connections at the end (before trailing blank lines)
   if (remappedConnections.length > 0) {
     // Remove trailing blank lines, add connections, then trailing newline
-    while (cleanResult.length > 0 && cleanResult[cleanResult.length - 1].trim() === '') {
+    while (cleanResult.length > 0 && cleanResult[cleanResult.length - 1]!.trim() === '') {
       cleanResult.pop();
     }
     cleanResult.push('');
@@ -984,7 +1005,7 @@ export function detachInstance(
   if (otherRefs === 0) {
     const extLinePattern = new RegExp(`^\\s*\\[ext_resource[^\\]]*\\bid="${info.instanceId}"`);
     for (let i = cleanResult.length - 1; i >= 0; i--) {
-      if (extLinePattern.test(cleanResult[i])) {
+      if (extLinePattern.test(cleanResult[i]!)) {
         cleanResult.splice(i, 1);
         break;
       }
@@ -1000,8 +1021,8 @@ export function detachInstance(
   }
   const newLoadSteps = extCount + subCount + 1;
   for (let i = 0; i < cleanResult.length; i++) {
-    if (cleanResult[i].startsWith('[gd_scene') && cleanResult[i].includes('load_steps=')) {
-      cleanResult[i] = cleanResult[i].replace(
+    if (cleanResult[i]!.startsWith('[gd_scene') && cleanResult[i]!.includes('load_steps=')) {
+      cleanResult[i] = cleanResult[i]!.replace(
         /load_steps=\d+/,
         `load_steps=${newLoadSteps}`,
       );

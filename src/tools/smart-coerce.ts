@@ -19,8 +19,8 @@ const NAMED_COLORS: Record<string, [number, number, number]> = {
 
 function hexToNorm(hex: string): [number, number, number, number] {
   let h = hex.replace('#', '');
-  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-  if (h.length === 4) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+  if (h.length === 3) h = h[0]! + h[0]! + h[1]! + h[1]! + h[2]! + h[2]!;
+  if (h.length === 4) h = h[0]! + h[0]! + h[1]! + h[1]! + h[2]! + h[2]! + h[3]! + h[3]!;
   const r = Math.round(parseInt(h.slice(0, 2), 16) / 255 * 1000) / 1000;
   const g = Math.round(parseInt(h.slice(2, 4), 16) / 255 * 1000) / 1000;
   const b = Math.round(parseInt(h.slice(4, 6), 16) / 255 * 1000) / 1000;

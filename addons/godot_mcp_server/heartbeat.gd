@@ -48,7 +48,8 @@ func tick(delta: float, peer: WebSocketPeer) -> void:
 
 	if state.ping >= PING_INTERVAL:
 		state.ping = 0.0
-		peer.send_text(_ping_json)
+		if peer.get_ready_state() == WebSocketPeer.STATE_OPEN:
+			peer.send_text(_ping_json)
 
 
 func pause_for_operation(timeout_sec: float) -> void:

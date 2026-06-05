@@ -6,9 +6,7 @@
     "outDir": "./build",
     "rootDir": "./src",
     "strict": true,
-    // TODO (A-01): Enable noUncheckedIndexedAccess for full strict null-safety on index access.
-    // Currently blocked by 64+ indexed access sites that would need undefined checks.
-    // "noUncheckedIndexedAccess": true,
+    "noUncheckedIndexedAccess": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,

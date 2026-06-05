@@ -1,7 +1,6 @@
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import type { ClientAdapter } from './clients/types.js';
 
 const __cliDir = dirname(fileURLToPath(import.meta.url));
 const __rootDir = join(__cliDir, '..', '..');
@@ -11,7 +10,7 @@ export type Subcommand = typeof SUBCOMMANDS[number];
 
 export function parseSubcommand(args: string[]): { subcommand: Subcommand; rest: string[] } | null {
   if (args.length === 0) return null;
-  const first = args[0];
+  const first = args[0]!;
   if ((SUBCOMMANDS as readonly string[]).includes(first)) {
     return { subcommand: first as Subcommand, rest: args.slice(1) };
   }
@@ -21,7 +20,7 @@ export function parseSubcommand(args: string[]): { subcommand: Subcommand; rest:
 export async function routeCommand(args: string[]): Promise<void> {
   const parsed = parseSubcommand(args);
   if (!parsed) {
-    console.error(`Unknown command: ${args[0]}`);
+    console.error(`Unknown command: ${args[0]!}`);
     console.error('Run "godot-mcp-enhanced --help" for usage.');
     process.exit(1);
   }
@@ -53,7 +52,7 @@ export async function routeCommand(args: string[]): Promise<void> {
 
 export function isCliInvocation(args: string[]): boolean {
   if (args.length === 0) return false;
-  const first = args[0];
+  const first = args[0]!;
   if (first.startsWith('-')) {
     // --help / --version 走 CLI
     if (first === '--help' || first === '-h' || first === '--version' || first === '-v') return true;

@@ -11,7 +11,7 @@ import {
   buildTypeGuide, buildBestPractices, mergeSections, SECTION_ORDER, GODOT_MCP_RULES,
 } from './claudemd-builder.js';
 import { DETAILED_RULE_TEMPLATES } from './rule-templates.js';
-import { validatePath, requireString, requireProjectPath, resolveWithinRoot, type GodotConfig } from '../helpers.js';
+import { validatePath, requireString, requireProjectPath, resolveWithinRoot, scanFiles, type GodotConfig } from '../helpers.js';
 import { getScaffoldFiles, PROJECT_TEMPLATES } from './code-templates.js';
 import { getLogger } from '../core/logger.js';
 
@@ -100,22 +100,13 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const cfg = readFileSync(cfgPath, 'utf-8');
       const config = ctx.parseGodotConfig(cfg);
 
+      // A-07: Replaced inline countFiles with scanFiles
+      const allFiles = scanFiles(p, [], { skipDotFiles: true });
       const stats: Record<string, number> = {};
-      function countFiles(dir: string, depth: number): void {
-        if (depth > 10) return;
-        try {
-          for (const entry of readdirSync(dir, { withFileTypes: true })) {
-            if (entry.name.startsWith('.')) continue;
-            const ext = entry.name.includes('.') ? '.' + entry.name.split('.').pop() : '';
-            if (entry.isDirectory()) {
-              countFiles(join(dir, entry.name), depth + 1);
-            } else if (ext) {
-              stats[ext] = (stats[ext] || 0) + 1;
-            }
-          }
-        } catch (err) { getLogger().debug('project', `count files: ${err instanceof Error ? err.message : err}`); }
+      for (const f of allFiles) {
+        const ext = '.' + f.split('.').pop()!;
+        stats[ext] = (stats[ext] || 0) + 1;
       }
-      countFiles(p, 0);
 
       return textResult(JSON.stringify({
         name: (config.application as Record<string, unknown> | undefined)?.name as string || basename(p),
@@ -129,25 +120,11 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const extensions = args.extensions as string[] | undefined;
       const subdir = args.subdirectory as string | undefined;
       const target = subdir ? resolveWithinRoot(p, subdir) : p;
-      const files: string[] = [];
 
-      function scan(dir: string): void {
-        try {
-          for (const entry of readdirSync(dir, { withFileTypes: true })) {
-            if (entry.name.startsWith('.')) continue;
-            const full = join(dir, entry.name);
-            if (entry.isDirectory()) {
-              scan(full);
-            } else {
-              const ext = '.' + entry.name.split('.').pop();
-              if (!extensions || extensions.includes(ext)) {
-                files.push(full.replace(p + (process.platform === 'win32' ? '\\' : '/'), ''));
-              }
-            }
-          }
-        } catch (err) { getLogger().debug('project', `list files scan: ${err instanceof Error ? err.message : err}`); }
-      }
-      scan(target);
+      // A-07: Replaced inline scan with scanFiles (empty array = all files)
+      const extFilter = extensions && extensions.length > 0 ? extensions : [];
+      const allFiles = scanFiles(target, extFilter, { skipDotFiles: true });
+      const files = allFiles.map(f => f.replace(p + (process.platform === 'win32' ? '\\' : '/'), ''));
 
       return textResult(JSON.stringify({ count: files.length, files }, null, 2));
     }
@@ -328,7 +305,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           const allConfigured = hookEntries.every(he => existingMatchers.has(he.matcher));
           // Check if SessionStart is already configured
           const ssConfigured = (existing.hooks?.SessionStart ?? []).some(
-            e => (e.hooks[0]?.command ?? '') === sessionStartEntry.hooks[0].command,
+            e => (e.hooks[0]?.command ?? '') === sessionStartEntry.hooks[0]!.command,
           );
 
           if (allConfigured && ssConfigured && !force) {

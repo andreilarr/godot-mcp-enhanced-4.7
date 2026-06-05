@@ -14,7 +14,8 @@
  */
 
 import { spawn } from 'child_process';
-import { writeFileSync, mkdirSync, rmSync, readdirSync, lstatSync, mkdtempSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
+import { writeFile, mkdir, rm, readdir, lstat, mkdtemp } from 'fs/promises';
 import { join, basename, resolve } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
@@ -43,13 +44,15 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
 
 /** Best-effort scan for dangerous GDScript patterns. Returns warnings array.
  *  Enabled by default; set GODOT_MCP_SANDBOX=disabled to skip scanning.
- *  When warnings are found, execution is BLOCKED unless GODOT_MCP_ALLOW_UNSAFE=true.
+ *  When warnings are found, execution is BLOCKED unless GODOT_MCP_DISABLE_SAFETY=true
+ *  (or the legacy GODOT_MCP_ALLOW_UNSAFE=true).
  *
- *  LIMITATIONS: This scanner uses simple regex matching and does NOT parse GDScript syntax.
- *  It can be bypassed by string concatenation (e.g. "OS" + ".execute"), preload of
- *  malicious scripts, or other indirect execution patterns. It is designed to prevent
- *  ACCIDENTAL use of dangerous APIs, not to defend against adversarial input. For
- *  true sandboxing, use container/VM isolation. */
+ *  ⚠️  SECURITY LIMITATION: This scanner uses simple regex matching and does NOT
+ *  parse GDScript syntax. It can be bypassed by string concatenation
+ *  (e.g. "OS" + ".execute"), preload of malicious scripts, or other indirect
+ *  execution patterns. It is designed to prevent ACCIDENTAL use of dangerous
+ *  APIs, not to defend against adversarial input. For true sandboxing, use
+ *  container/VM isolation. */
 export function scanGdscriptSandbox(code: string): string[] {
   if (process.env.GODOT_MCP_SANDBOX === 'disabled') {
     getLogger().warn('security', 'GODOT_MCP_SANDBOX=disabled — sandbox scanning skipped');
@@ -126,47 +129,56 @@ function generateMarker(): string {
 const BASE_TMP_DIR = join(tmpdir(), 'godot-mcp-exec');
 let baseDirReady = false;
 
-function ensureBaseDir(): void {
+async function ensureBaseDir(): Promise<void> {
   if (baseDirReady) return;
-  mkdirSync(BASE_TMP_DIR, { recursive: true, mode: 0o700 });
+  await mkdir(BASE_TMP_DIR, { recursive: true, mode: 0o700 });
   baseDirReady = true;
 }
 
 /** Create an isolated session directory for one execution */
-function createSessionDir(): string {
-  ensureBaseDir();
-  return mkdtempSync(join(BASE_TMP_DIR, `${TMP_PREFIX}`));
+async function createSessionDir(): Promise<string> {
+  await ensureBaseDir();
+  // A-02: 嵌入时间戳到目录名，cleanupOldSessions 解析文件名判断过期（不依赖 mtime）
+  return mkdtemp(join(BASE_TMP_DIR, `${TMP_PREFIX}${Date.now()}-`));
 }
 
 /** Background cleanup: remove session dirs older than 1 hour */
-function cleanupOldSessions(): void {
+async function cleanupOldSessions(): Promise<void> {
   if (!baseDirReady) return;
   const maxAge = 60 * 60 * 1000;
   const now = Date.now();
   try {
-    for (const entry of readdirSync(BASE_TMP_DIR)) {
+    for (const entry of await readdir(BASE_TMP_DIR)) {
       if (!entry.startsWith(TMP_PREFIX)) continue;
       const dirPath = join(BASE_TMP_DIR, entry);
-      const stat = lstatSync(dirPath);
+      const stat = await lstat(dirPath);
       if (stat.isSymbolicLink()) continue;
-      if (stat.isDirectory() && now - stat.mtimeMs > maxAge) {
-        rmSync(dirPath, { recursive: true, force: true });
+      // A-02: 优先解析文件名中的时间戳；回退到 mtime（兼容旧格式目录）
+      let dirAge: number;
+      const tsMatch = entry.match(/-(\d+)-$/);
+      if (tsMatch) {
+        dirAge = now - parseInt(tsMatch[1]!);
+      } else {
+        dirAge = now - stat.mtimeMs;
+      }
+      if (stat.isDirectory() && dirAge > maxAge) {
+        await rm(dirPath, { recursive: true, force: true });
       }
     }
   } catch (err) { getLogger().debug('gdscript', `cleanup stale dirs: ${err}`); }
 }
 
-function writeTempScript(code: string, sessionDir: string): string {
+async function writeTempScript(code: string, sessionDir: string): Promise<string> {
   const id = randomUUID().replace(/-/g, '').substring(0, 8);
   const filePath = join(sessionDir, `${id}.gd`);
-  writeFileSync(filePath, code, 'utf-8');
+  await writeFile(filePath, code, 'utf-8');
   return filePath;
 }
 
-function writeSessionFile(content: string, ext: string, sessionDir: string): string {
+async function writeSessionFile(content: string, ext: string, sessionDir: string): Promise<string> {
   const id = randomUUID().replace(/-/g, '').substring(0, 8);
   const filePath = join(sessionDir, `${id}${ext}`);
-  writeFileSync(filePath, content, 'utf-8');
+  await writeFile(filePath, content, 'utf-8');
   return filePath;
 }
 
@@ -302,7 +314,7 @@ export function wrapSnippetAsNode(code: string, resultMarker = MARKER_RESULT_SHA
 
   // Rename user's _initialize to _mcp_user_init to avoid collision with our _initialize
   for (let i = 0; i < declarationLines.length; i++) {
-    declarationLines[i] = declarationLines[i].replace(/func _initialize\(/g, "func _mcp_user_init(");
+    declarationLines[i] = declarationLines[i]!.replace(/func _initialize\(/g, "func _mcp_user_init(");
   }
   const hasUserInit = /func _mcp_user_init\(/.test(declarationLines.join('\n'));
 
@@ -425,17 +437,27 @@ export async function executeGdscript(
   // C-SEC-02: Sandbox scan — BLOCKS execution on dangerous patterns by default
   const skipSandbox = (options as unknown as Record<symbol, boolean>)[_trustedSymbol] === true;
   const sandboxWarnings = skipSandbox ? [] : scanGdscriptSandbox(code);
-  if (sandboxWarnings.length > 0 && process.env.GODOT_MCP_ALLOW_UNSAFE !== 'true') {
+  // C-02: Support both new GODOT_MCP_DISABLE_SAFETY and legacy GODOT_MCP_ALLOW_UNSAFE
+  const safetyDisabled = process.env.GODOT_MCP_DISABLE_SAFETY === 'true' || process.env.GODOT_MCP_ALLOW_UNSAFE === 'true';
+  if (sandboxWarnings.length > 0 && !safetyDisabled) {
     return {
       success: false, compile_success: false,
-      compile_error: `Sandbox violation: code contains dangerous patterns. Set GODOT_MCP_ALLOW_UNSAFE=true to override.\n${sandboxWarnings.join('\n')}`,
+      compile_error: `Sandbox violation: code contains dangerous patterns. Set GODOT_MCP_DISABLE_SAFETY=true to override.\n${sandboxWarnings.join('\n')}`,
       errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0,
     };
   }
-  if (sandboxWarnings.length > 0 && process.env.GODOT_MCP_ALLOW_UNSAFE === 'true') {
-    getLogger().warn('security', `GODOT_MCP_ALLOW_UNSAFE=true — executing despite sandbox warnings: ${sandboxWarnings}`);
+  if (sandboxWarnings.length > 0 && safetyDisabled) {
+    // I-04: 结构化审计事件 — 记录安全绕过的完整上下文（代码摘要、时间戳、触发模式）
+    const codeSummary = code.slice(0, 120).replace(/\n/g, '\\n');
+    getLogger().warn('security', JSON.stringify({
+      audit: 'SANDBOX_BYPASS',
+      warnings: sandboxWarnings,
+      codePreview: codeSummary,
+      flag: process.env.GODOT_MCP_DISABLE_SAFETY === 'true' ? 'GODOT_MCP_DISABLE_SAFETY' : 'GODOT_MCP_ALLOW_UNSAFE',
+    }));
+    getLogger().warn('security', `Safety bypass active — executing despite sandbox warnings: ${sandboxWarnings}`);
     // I-18: Mark execution output so downstream consumers know sandbox was bypassed
-    code = '# [UNSANDBOXED] Executing with GODOT_MCP_ALLOW_UNSAFE=true\n' + code;
+    code = '# [UNSANDBOXED] Executing with safety bypass\n' + code;
   }
 
   // Validate godotPath exists and looks like a Godot binary
@@ -484,14 +506,14 @@ export async function executeGdscript(
   scriptContent = scriptContent.replaceAll(MARKER_ERROR_SHARED, rndError);
 
   // Create isolated session directory
-  cleanupOldSessions();
-  const sessionDir = createSessionDir();
+  await cleanupOldSessions();
+  const sessionDir = await createSessionDir();
 
   // Write temp file
   const tempFiles: string[] = [];
   let tempFile: string;
   try {
-    tempFile = writeTempScript(scriptContent, sessionDir);
+    tempFile = await writeTempScript(scriptContent, sessionDir);
     tempFiles.push(tempFile);
   } catch (err) {
     return {
@@ -513,15 +535,15 @@ export async function executeGdscript(
     // Autoload mode: create a loader scene that initializes all autoloads first
     try {
       // Write loader script first to get its absolute path
-      const loaderScriptPath = writeSessionFile(createAutoloadLoaderScript(tempFile, rndError), '.gd', sessionDir);
+      const loaderScriptPath = await writeSessionFile(createAutoloadLoaderScript(tempFile, rndError), '.gd', sessionDir);
       tempFiles.push(loaderScriptPath);
       // Create scene referencing loader script by absolute path (not res://)
       const loaderScene = createAutoloadLoaderScene(loaderScriptPath);
-      const loaderScenePath = writeSessionFile(loaderScene, '.tscn', sessionDir);
+      const loaderScenePath = await writeSessionFile(loaderScene, '.tscn', sessionDir);
       tempFiles.push(loaderScenePath);
       godotArgs.push('--scene', loaderScenePath);
     } catch (err) {
-      try { rmSync(sessionDir, { recursive: true, force: true }); } catch (e) { getLogger().debug('gdscript', `cleanup session on error: ${e}`); }
+      rm(sessionDir, { recursive: true, force: true }).catch(() => {});
       return {
         success: false,
         compile_success: false,
@@ -579,8 +601,8 @@ export async function executeGdscript(
     proc.on('close', (exitCode) => {
       clearTimeout(timer);
       releaseShortRunningSlot();
-      // Cleanup session directory
-      try { rmSync(sessionDir, { recursive: true, force: true }); } catch (e) { getLogger().debug('gdscript', `cleanup session on close: ${e}`); }
+      // Cleanup session directory (fire-and-forget async)
+      rm(sessionDir, { recursive: true, force: true }).catch(() => {});
 
       const rawOutput = stdout + stderr;
       const duration = Date.now() - startTime;
@@ -644,7 +666,7 @@ export async function executeGdscript(
     proc.on('error', (err) => {
       clearTimeout(timer);
       releaseShortRunningSlot();
-      try { rmSync(sessionDir, { recursive: true, force: true }); } catch (e) { getLogger().debug('gdscript', `cleanup session on proc error: ${e}`); }
+      rm(sessionDir, { recursive: true, force: true }).catch(() => {});
 
       // Spawn failure is fatal — reject so callers can catch and report
       reject(new Error(`Failed to spawn Godot process: ${err.message}`));

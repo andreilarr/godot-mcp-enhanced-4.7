@@ -3,11 +3,10 @@
 // Exposes Godot project context via MCP Resources protocol so AI clients
 // can discover and read project information without explicit tool calls.
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
-import { resolve, join, extname, sep } from 'path';
+import { existsSync, readFileSync, statSync } from 'fs';
+import { resolve, join, extname, sep, basename } from 'path';
 import { parseTscnSummary } from './tscn-parser.js';
-import { parseConfigValue, safeRealPath } from './helpers.js';
-import { getLogger } from './core/logger.js';
+import { parseConfigValue, safeRealPath, scanFiles, iterativeDecode } from './helpers.js';
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB — reject files larger than this
 
@@ -320,11 +319,11 @@ function readProjectInfo(projectPath: string): McpResourceContent {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith(';') || trimmed.startsWith('#')) continue;
     const sectionMatch = trimmed.match(/^\[(.+)\]$/);
-    if (sectionMatch) { section = sectionMatch[1]; continue; }
+    if (sectionMatch) { section = sectionMatch[1]!; continue; }
     const kvMatch = trimmed.match(/^(\S+)\s*=\s*(.+)$/);
     if (kvMatch) {
-      const key = section ? `${section}/${kvMatch[1]}` : kvMatch[1];
-      info[key] = parseConfigValue(kvMatch[2].trim());
+      const key = section ? `${section}/${kvMatch[1]!}` : kvMatch[1]!;
+      info[key] = parseConfigValue(kvMatch[2]!.trim());
     }
   }
 
@@ -407,7 +406,7 @@ export function listResources(projectPath: string | undefined): McpResource[] {
     });
   }
 
-  scanForResources(projectPath, '', resources, 0);
+  scanForResources(projectPath, resources);
   if (resources.length >= MAX_RESOURCES) {
     resources.push({
       uri: 'godot://help/truncated',
@@ -419,41 +418,28 @@ export function listResources(projectPath: string | undefined): McpResource[] {
   return resources;
 }
 
-function scanForResources(projectPath: string, relativeDir: string, resources: McpResource[], depth: number): void {
-  if (resources.length >= MAX_RESOURCES) return;
-  if (depth > 5) return;
-  const dir = join(projectPath, relativeDir);
-  let entries;
-  try {
-    entries = readdirSync(dir, { withFileTypes: true });
-  } catch (err) { getLogger().debug('resources', `scanDirectory failed for ${dir}: ${err instanceof Error ? err.message : err}`); return; }
-
-  for (const entry of entries) {
-    if (resources.length >= MAX_RESOURCES) return;
-    if (entry.name.startsWith('.')) continue;
-    if (FORBIDDEN_DIRS.has(entry.name)) continue;
-
-    const rel = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
-
-    if (entry.isDirectory()) {
-      scanForResources(projectPath, rel, resources, depth + 1);
-    } else {
-      const ext = extname(entry.name).toLowerCase();
-      if (ext === '.tscn') {
-        resources.push({
-          uri: `godot://scene/${rel}`,
-          name: entry.name,
-          description: `Scene: ${rel}`,
-          mimeType: 'text/plain',
-        });
-      } else if (ext === '.gd') {
-        resources.push({
-          uri: `godot://script/${rel}`,
-          name: entry.name,
-          description: `Script: ${rel}`,
-          mimeType: 'text/x-gdscript',
-        });
-      }
+// A-07: Replaced recursive readdirSync with scanFiles + resource construction
+function scanForResources(projectPath: string, resources: McpResource[]): void {
+  const files = scanFiles(projectPath, ['.tscn', '.gd'], { skipDirs: [...FORBIDDEN_DIRS] });
+  for (const f of files) {
+    if (resources.length >= MAX_RESOURCES) break;
+    const rel = f.replace(projectPath + (process.platform === 'win32' ? '\\' : '/'), '');
+    const entryName = basename(f);
+    const ext = extname(entryName).toLowerCase();
+    if (ext === '.tscn') {
+      resources.push({
+        uri: `godot://scene/${rel}`,
+        name: entryName,
+        description: `Scene: ${rel}`,
+        mimeType: 'text/plain',
+      });
+    } else if (ext === '.gd') {
+      resources.push({
+        uri: `godot://script/${rel}`,
+        name: entryName,
+        description: `Script: ${rel}`,
+        mimeType: 'text/x-gdscript',
+      });
     }
   }
 }
@@ -495,18 +481,10 @@ export function readResource(uri: string, projectPath: string | undefined): McpR
   }
 
   const rawPath = uri.substring('godot://'.length);
-  // Iterative URL decode to defeat double-encoding (consistent with resolveWithinRoot)
+  // A-15: 使用共享的 iterativeDecode 替代内联重复逻辑
   let path: string;
   try {
-    let decoded = rawPath;
-    let prev = '';
-    let iterations = 0;
-    while (decoded !== prev && iterations < 20) {
-      prev = decoded;
-      decoded = decodeURIComponent(decoded);
-      iterations++;
-    }
-    path = decoded;
+    path = iterativeDecode(rawPath);
   } catch {
     return { uri, mimeType: 'text/plain', text: `ERROR: Invalid encoded path: ${rawPath}` };
   }
@@ -550,25 +528,13 @@ export function readResource(uri: string, projectPath: string | undefined): McpR
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// A-07: Replaced recursive scan with scanFiles
 function countFiles(projectPath: string): Record<string, number> {
   const counts: Record<string, number> = {};
-  function scan(dir: string, depth: number): void {
-    if (depth > 5) return;
-    try {
-      const entries = readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.name.startsWith('.')) continue;
-        if (FORBIDDEN_DIRS.has(entry.name)) continue;
-        const full = join(dir, entry.name);
-        if (entry.isDirectory()) {
-          scan(full, depth + 1);
-        } else {
-          const ext = extname(entry.name).toLowerCase();
-          if (ext) counts[ext] = (counts[ext] || 0) + 1;
-        }
-      }
-    } catch (err) { getLogger().debug('resources', `scanning directory: ${err instanceof Error ? err.message : err}`); }
+  const files = scanFiles(projectPath, [], { skipDirs: [...FORBIDDEN_DIRS] });
+  for (const f of files) {
+    const ext = extname(f).toLowerCase();
+    if (ext) counts[ext] = (counts[ext] || 0) + 1;
   }
-  scan(projectPath, 0);
   return counts;
 }

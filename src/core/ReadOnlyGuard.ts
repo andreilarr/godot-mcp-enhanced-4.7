@@ -1,4 +1,8 @@
 // src/core/ReadOnlyGuard.ts
+// A-07: deny-by-default — unknown tools are blocked in readOnly mode.
+// Registration order safety: GodotServer constructor calls registerModule() for all tool
+// modules BEFORE creating the ReadOnlyGuard instance, so all tools are registered by the
+// time guard.check() is first called. This is enforced by the constructor sequence.
 import { isReadOnly, isKnownTool } from './tool-registry.js';
 
 export interface GuardResult {
