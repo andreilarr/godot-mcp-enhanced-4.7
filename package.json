@@ -39,6 +39,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "handlebars": "^4.7.9",
     "ws": "^8.21.0"
   },
   "devDependencies": {
