@@ -2,7 +2,7 @@
 
 **日期**: 2026-06-05
 **版本**: v0.17.0 规划
-**状态**: 已批准
+**状态**: 已批准（审查修订 v2）
 **目标**: 支持自定义规则、模板 CRUD，以及 Godot Asset Library 深度集成
 
 ---
@@ -25,15 +25,15 @@
 GODOT_MCP_HOME（默认 os.homedir()/.godot-mcp/，可环境变量覆盖）
 ├── meta.json                     ← { "schema_version": 1 }
 ├── templates/
-│   ├── manifest.json             ← 可选索引 ["my-state-machine.json", ...]
+│   ├── manifest.json             ← 可选索引（含 size/mtime）
 │   ├── my-state-machine.json
 │   └── my-camera-rig.json
 ├── rules/
-│   ├── manifest.json             ← 可选索引
+│   ├── manifest.json             ← 可选索引（含 size/mtime）
 │   ├── team-naming.md
 │   └── no-os-access.md
 └── assets/
-    └── cache/                    ← 下载缓存（全局共享）
+    └── cache/                    ← 下载缓存（LRU，上限 2GB）
 
 <project>/.godot-mcp/
 ├── meta.json                     ← { "schema_version": 1 }
@@ -62,11 +62,18 @@ GODOT_MCP_HOME（默认 os.homedir()/.godot-mcp/，可环境变量覆盖）
 
 ### 2.4 发现机制
 
-有 `manifest.json` 走索引，没有则 fallback 到目录扫描。manifest 格式：
+有 `manifest.json` 走索引，没有则 fallback 到目录扫描。
+
+manifest 格式（含轻量完整性信息）：
 
 ```json
-["my-state-machine.json", "my-camera-rig.json"]
+[
+  { "file": "my-state-machine.json", "size": 542, "mtime": "2026-06-05T10:00:00Z" },
+  { "file": "my-camera-rig.json", "size": 318, "mtime": "2026-06-04T15:00:00Z" }
+]
 ```
+
+发现时如果 `size` 或 `mtime` 不匹配，标记该条目为 `status: "stale"` 并 fallback 到目录扫描该条目。manifest 条目缺失的文件仍可通过目录扫描发现。
 
 ### 2.5 版本兼容策略
 
@@ -87,8 +94,9 @@ GODOT_MCP_HOME（默认 os.homedir()/.godot-mcp/，可环境变量覆盖）
   "id": "my-state-machine",
   "name": "State Machine",
   "description": "可配置状态机模板",
-  "applies_to": ["Node"],       // 可选，适用的 Godot 类
-  "tags": ["architecture"],     // 可选
+  "version": "1.0.0",            // 可选，semver，默认 "1.0.0"
+  "applies_to": ["Node"],        // 可选，适用的 Godot 类（继承兼容）
+  "tags": ["architecture"],      // 可选
   "variables": {
     "states": { "type": "string[]", "default": ["Idle", "Walk", "Run"] },
     "initial_state": { "type": "string", "default": "Idle" }
@@ -103,7 +111,7 @@ GODOT_MCP_HOME（默认 os.homedir()/.godot-mcp/，可环境变量覆盖）
 ```
 
 必填字段：`id`、`name`、`description`、`generates`（至少一个）。
-可选字段：`schema_version`（默认 1）、`applies_to`、`tags`、`variables`。
+可选字段：`schema_version`（默认 1）、`version`（默认 "1.0.0"）、`applies_to`、`tags`、`variables`。
 
 ### 3.2 规则文件格式
 
@@ -111,6 +119,7 @@ GODOT_MCP_HOME（默认 os.homedir()/.godot-mcp/，可环境变量覆盖）
 ---
 schema_version: 1
 id: no-os-access
+version: 1.0.0
 overrides: []              // 空 = 纯叠加，不覆盖任何规则
 ---
 
@@ -120,6 +129,7 @@ overrides: []              // 空 = 纯叠加，不覆盖任何规则
 ```
 
 `overrides` 字段：字符串数组，列出被此规则覆盖的全局规则 id。
+`version` 字段：可选，semver，默认 "1.0.0"。
 
 ---
 
@@ -140,7 +150,9 @@ overrides: []              // 空 = 纯叠加，不覆盖任何规则
 ### 4.2 控制结构
 
 支持 Handlebars 标准 `{{#if}}`、`{{#each}}`、`{{#unless}}`。
-不启用 `{{#with}}` 和 partial。
+不启用 `{{#with}}`（作用域切换易出错，可用 `{{#each}}` 替代）。
+
+支持有限的 partial：只能引用同目录下的 `_partial-*.json` 文件，防止无限制的依赖树。
 
 ### 4.3 变量 Fallback
 
@@ -163,9 +175,42 @@ overrides: []              // 空 = 纯叠加，不覆盖任何规则
 
 ---
 
-## 五、Content 工具组
+## 五、迁移策略
 
-### 5.1 工具清单
+### 5.1 内置模板保留函数实现
+
+现有 `src/tools/code-templates.ts` 中的 11 个代码模板（T001-T011）和 5 个架构模板（A001-A005）继续使用 TypeScript 函数式 `generate()` 接口，**不迁移到 Handlebars**。
+
+理由：
+- 内置模板含复杂 TypeScript 逻辑（条件分支、类型转换、Godot 版本适配），无法 1:1 映射到 Handlebars 字符串
+- 内置模板使用 `relatedRules`、`verifiedGodotVersion`、`lastVerified` 等元数据字段，新 schema 保留这些字段作为内置模板的扩展属性
+- 内置模板参数使用 `"Vector3"` / `"float"` / `"Color"` 等 Godot 类型，自定义模板使用 `"string[]"` / `"string"` 等基础类型
+
+### 5.2 统一接口层
+
+`content_list` / `content_get` 返回结果中，内置模板和自定义模板使用统一的响应格式，但内置模板额外包含 `_builtin: true` 标记和扩展元数据：
+
+```
+content_list(type="template", scope="all")
+// → { items: [
+//     { id: "T001", name: "Player Movement", source: "builtin",
+//       _builtin: true, verified_godot_version: "4.4", related_rules: [...] },
+//     { id: "my-state-machine", name: "State Machine", source: "global",
+//       _builtin: false }
+//   ] }
+```
+
+`content_apply_template` 内部路由：`_builtin: true` → 调用函数式 `generate()`，`_builtin: false` → Handlebars 渲染。
+
+### 5.3 内置规则保留硬编码
+
+现有 5 个 `godot-mcp-*.md` 规则继续由 `rule-templates.ts` 硬编码生成，不存入 `.godot-mcp/rules/`。`content_list` 中 `source: "builtin"` 的规则不可修改/删除。
+
+---
+
+## 六、Content 工具组
+
+### 6.1 工具清单
 
 | 工具 | 说明 |
 |------|------|
@@ -175,10 +220,11 @@ overrides: []              // 空 = 纯叠加，不覆盖任何规则
 | `content_update` | 更新已有内容 |
 | `content_delete` | 删除自定义内容（不能删内置） |
 | `content_apply_rule` | 应用规则到项目 → `.claude/rules/`（冲突检测 + 来源标记） |
-| `content_apply_template` | 模板渲染 → 代码生成 → 写入文件 |
-| `content_validate` | 验证内容格式是否正确 |
+| `content_unapply_rule` | 撤销已应用的规则（删除 `.claude/rules/` 中由 MCP 写入的副本） |
+| `content_apply_template` | 模板渲染 → 代码生成 → 写入文件（事务性：全成功或全回滚） |
+| `content_validate` | 验证内容格式（三级校验） |
 
-### 5.2 content_list
+### 6.2 content_list
 
 ```
 content_list(type="template", scope="all", limit=20, offset=0)
@@ -192,7 +238,14 @@ content_list(type="template", scope="all", limit=20, offset=0)
 // }
 ```
 
-### 5.3 content_create
+支持按 `applies_to` 过滤（继承兼容匹配）：
+
+```
+content_list(type="template", applies_to="CharacterBody3D")
+// → 匹配 applies_to 包含 "Node3D"、"Node"、"CharacterBody3D" 的模板
+```
+
+### 6.3 content_create
 
 **创建规则**：
 ```
@@ -225,7 +278,7 @@ content_create(type="template", scope="global",
 )
 ```
 
-### 5.4 content_apply_rule
+### 6.4 content_apply_rule
 
 ```
 content_apply_rule(project_path="D:/game", id="no-os-access")
@@ -233,7 +286,7 @@ content_apply_rule(project_path="D:/game", id="no-os-access")
 
 行为：
 1. 检查 `.claude/rules/no-os-access.md` 是否已存在
-2. 已存在 → 返回 `{ error: "CONFLICT", existing_source: "godot-mcp" }`
+2. 已存在 → 返回 `{ error: "CONFLICT", context: "apply_rule", existing_source: "godot-mcp" }`
 3. 不存在 → 写入带来源标记的文件
 
 写入格式：
@@ -251,7 +304,20 @@ overrides: []
 
 **单向操作**：apply 是一次性写入，不维护双向同步。
 
-### 5.5 content_apply_template
+### 6.5 content_unapply_rule
+
+```
+content_unapply_rule(project_path="D:/game", id="no-os-access")
+```
+
+行为：
+1. 读取 `.claude/rules/no-os-access.md` 的 frontmatter
+2. 验证 `source: godot-mcp`（只能撤销由 MCP 写入的规则）
+3. 无文件 → `{ error: "NOT_FOUND" }`
+4. 文件存在但 `source` 不是 `godot-mcp` → `{ error: "CONFLICT", context: "unapply_rule", message: "非 MCP 写入的规则，无法自动移除" }`
+5. 删除文件 → `{ removed: true }`
+
+### 6.6 content_apply_template
 
 ```
 content_apply_template(
@@ -263,22 +329,35 @@ content_apply_template(
 )
 ```
 
-行为：
-1. Handlebars 渲染模板
-2. 检查目标文件是否存在
-3. 已存在且 `overwrite=false` → 返回 `{ error: "FILE_EXISTS", path: "res://scripts/player_state.gd" }`
-4. 写入文件
-5. 返回 `{ generated: ["res://scripts/player_state.gd"] }`
+行为（事务性）：
+1. Handlebars 渲染所有 `generates` 条目
+2. **预检查**：扫描所有目标文件是否存在
+3. 任一已存在且 `overwrite=false` → 返回 `{ error: "FILE_EXISTS", path: "..." }`，**不做任何写入**
+4. 按序写入所有文件
+5. 任一写入失败 → **删除已写入的文件**，返回 `INSTALL_FAILED`
+6. 全部成功 → 返回 `{ generated: ["res://scripts/player_state.gd", ...] }`
 
-### 5.6 Overrides 环形检测
+### 6.7 Overrides 环形检测
 
 `content_create` / `content_update` 时校验：
 - overrides 指向不存在的 id → `VALIDATION_FAILED`
 - overrides 形成环 → `VALIDATION_FAILED`
 
-`content_list` 合并时防御性检查：遇到环则两条都标 `status: "override_conflict"`，两条都生效。
+`content_list` 合并时防御性检查：遇到环则：
+1. 两条规则都标记 `status: "override_conflict"`
+2. **两条都不生效**（安全优先）
+3. 返回结果包含 `warnings: ["Override cycle detected between A and B — both rules disabled"]`
+4. 用户必须修复 override 链才能让规则生效
 
-### 5.7 查找链路
+### 6.8 applies_to 校验逻辑
+
+`applies_to` 字段：
+- `content_apply_template` 时仅作为**信息提示**返回，不阻止应用
+- `content_list(applies_to="CharacterBody3D")` 时作为过滤参数
+- 匹配语义为**继承兼容**：`CharacterBody3D` 匹配 `["Node3D"]`、`["Node"]`、`["CharacterBody3D"]`
+- 内置 Godot 类继承树在代码中硬编码，用于匹配计算
+
+### 6.9 查找链路
 
 ```
 content_get(id="my-state-machine", type="template")
@@ -288,7 +367,7 @@ content_get(id="my-state-machine", type="template")
   → 都没找到 → { error: "NOT_FOUND" }
 ```
 
-### 5.8 规则合并链路
+### 6.10 规则合并链路
 
 ```
 content_list(type="rule", scope="all")
@@ -298,53 +377,94 @@ content_list(type="rule", scope="all")
   ├─ 处理 overrides：项目规则 overrides=["team-naming"]
   │   → 全局 team-naming 标记 overridden_by
   │   → 其余规则保持 active
+  ├─ 环形检测：A overrides B 且 B overrides A
+  │   → 两条都标 override_conflict，两条都不生效
   └─ 返回列表，每条标注 source + status(active/overridden/override_conflict)
+      + warnings 数组（含环形冲突描述）
 ```
+
+### 6.11 content_validate 三级校验
+
+| 级别 | 范围 | 默认执行 |
+|------|------|---------|
+| **格式校验** | JSON Schema 合法性、必填字段完整 | ✅ 必做 |
+| **语义校验** | overrides id 存在性、generates 变量引用与 variables 定义匹配 | ✅ 必做 |
+| **深度校验** | Handlebars 编译测试、helper 存在性验证 | ❌ 需传 `deep=true` |
 
 ---
 
-## 六、Asset 工具组
+## 七、Asset 工具组
 
-### 6.1 工具清单
+### 7.1 工具清单
 
 | 工具 | 说明 |
 |------|------|
 | `asset_search` | 搜索 Asset Library（query/category/sort/limit/offset） |
 | `asset_info` | 获取资源详情（版本、作者、依赖、下载 URL） |
-| `asset_install` | 下载 + 安装到项目（完整安全校验链） |
-| `asset_list` | 列出已安装资源 |
-| `asset_check_updates` | 只读，检查可用更新 |
-| `asset_update` | 写入，执行更新（可指定 asset_id 更新单个，不传则全部） |
+| `asset_install` | 下载 + 安装到项目（完整安全校验链 + 原子性保证） |
+| `asset_list` | 列出已安装资源（含孤儿检测） |
+| `asset_check_updates` | 只读，检查可用更新（含主版本变化警告） |
+| `asset_update` | 写入，执行更新（可指定 asset_id，支持版本约束） |
 | `asset_remove` | 卸载已安装资源 |
+| `asset_cache_clean` | 清理全局下载缓存 |
 
-### 6.2 Asset Library API 集成
+### 7.2 Asset Library API 集成
 
 - 搜索：`GET https://godotengine.org/asset-library/api/asset?q={query}&category={cat}&sort={sort}&max={limit}&page={offset}`
 - 详情：`GET https://godotengine.org/asset-library/api/asset/{id}`
 - 下载：通过返回的 `download_url` 字段获取 zip 包
 
-### 6.3 asset_install 完整流程
+**超时与重试**：
+- 连接超时：10s
+- 读取超时：30s（下载时 120s）
+- 重试：最多 2 次，指数退避
+- 可通过环境变量 `GODOT_MCP_API_TIMEOUT` 覆盖
+
+**下载 URL 域名白名单**：
+- 允许：`godotengine.org`、`*.godotengine.org`、`github.com`、`objects.githubusercontent.com`
+- URL 不在白名单 → `ASSET_DOWNLOAD_FAILED` + 详细提示
+
+### 7.3 asset_install 完整流程
 
 ```
 asset_install(asset_id=123, project_path="D:/game")
 ```
 
-内部流程：
+内部流程（原子性保证 — 先记录后安装）：
 1. 调用 Asset Library API → 获取 download_url + 版本信息
-2. 下载 zip 到全局缓存 `GODOT_MCP_HOME/assets/cache/`
-3. sha256 校验（与 API 返回的 hash 比对）
-4. 解压到临时目录
-5. 安全校验：
+2. **域名白名单验证** download_url
+3. 下载 zip 到全局缓存 `GODOT_MCP_HOME/assets/cache/`
+4. sha256 校验（与 API 返回的 hash 比对）
+5. 解压到临时目录
+6. 安全校验：
    - 路径穿越扫描 — 拒绝含 `../` 的解压路径
    - 文件大小检查 — 单文件 ≤ 50MB，总解压 ≤ 200MB
    - 插件结构验证 — 至少含一个 `.gd` 或 `.tscn` 文件
-6. 移入 `<project>/addons/<asset-slug>/`
-7. 原子写入 `installed-assets.json`（write-then-rename）
-8. 返回安装结果
+7. **写入 installing 状态**：以 `status: "installing"` 先写入 `installed-assets.json`（原子写入）
+8. 移入 `<project>/addons/<asset-slug>/`
+9. **确认安装**：更新 `installed-assets.json` 中 status 为 `"installed"`
+10. 返回安装结果
 
-**失败回滚**：任何步骤失败时，清理已解压的 addons 目录和临时文件，返回 `INSTALL_FAILED`。
+**崩溃恢复**：`asset_list` 启动时扫描 `installed-assets.json`：
+- 发现 `status: "installing"` 记录 → 检查 addons 目录是否完整
+  - 完整 → 自动更新为 `"installed"`
+  - 不完整 → 清理孤儿文件，删除该记录
 
-### 6.4 installed-assets.json 格式
+### 7.4 asset_update 版本策略
+
+```
+asset_update(asset_id=123, project_path="D:/game")
+```
+
+行为：
+1. 调用 API 获取最新版本
+2. 比较语义化版本
+3. **主版本升级**（如 1.x → 2.x）→ 返回 `{ warning: "MAJOR_VERSION_CHANGE", old: "1.2.0", new: "2.0.0" }`，**不自动更新**
+4. 用户显式传 `allow_major=true` 才允许主版本升级
+5. 更新前备份旧版本到 `GODOT_MCP_HOME/assets/cache/<asset_id>-<old_version>.zip`
+6. 执行安装流程（复用 asset_install 的安全校验链）
+
+### 7.5 installed-assets.json 格式
 
 ```json
 {
@@ -359,6 +479,7 @@ asset_install(asset_id=123, project_path="D:/game")
       "source_url": "https://godotengine.org/asset-library/asset/123",
       "download_url": "https://...",
       "sha256": "abc123...",
+      "status": "installed",
       "installed_at": "2026-06-05T10:30:00Z",
       "install_path": "addons/gpu-particles/"
     }
@@ -366,23 +487,59 @@ asset_install(asset_id=123, project_path="D:/game")
 }
 ```
 
+`status` 字段：`"installing"` | `"installed"`。
+
+### 7.6 缓存管理
+
+- **策略**：安装成功后保留 zip 供未来更新/回滚使用
+- **上限**：总量 2GB，超限 LRU 淘汰（最近最少使用）
+- **清理命令**：
+
+```bash
+godot-mcp asset cache-clean                    # 清理全部缓存
+godot-mcp asset cache-clean --max-age=30d      # 清理 30 天前的
+```
+
 ---
 
-## 七、错误码体系
+## 八、并发与原子性
+
+### 8.1 并发模型
+
+MCP server 为单线程模型（stdio 传输），同一时刻只有一个请求在处理。
+
+CLI 命令可能并发执行，需要文件锁保护。
+
+### 8.2 文件锁策略
+
+| 文件 | 策略 |
+|------|------|
+| `installed-assets.json` | advisory lock（`proper-lockfile` 包），CLI 互斥 |
+| `manifest.json` | write-then-rename（轻量操作，不需要跨进程锁） |
+| 模板/规则文件 | write-then-rename（单个文件写入原子性） |
+
+### 8.3 write-then-rename
+
+所有 JSON 写入操作（`installed-assets.json`、`manifest.json`、模板文件）统一使用：
+1. 写入 `<filename>.tmp`
+2. `fs.rename()` 覆盖目标文件（POSIX 原子操作，Windows 上 `MoveFileEx` MOVEFILE_REPLACE_EXISTING）
+
+---
+
+## 九、错误码体系
 
 沿用现有 `COMMON_ERROR_CODES` 模式，新增：
 
 | 错误码 | HTTP 类比 | 说明 |
 |--------|----------|------|
 | `NOT_FOUND` | 404 | 内容/资源不存在 |
-| `ALREADY_EXISTS` | 409 | 创建时 id 已被占用 |
-| `CONFLICT` | 409 | apply_rule 目标已存在 |
+| `CONFLICT` | 409 | 冲突（通过 context 区分：apply_rule/unapply_rule/create） |
 | `FILE_EXISTS` | 409 | apply_template 目标文件已存在 |
 | `BUILTIN_IMMUTABLE` | 403 | 尝试删除/修改内置内容 |
 | `VALIDATION_FAILED` | 400 | 内容格式校验失败 |
 | `MISSING_VARIABLE` | 400 | 模板必需变量未提供且无默认值 |
 | `SCHEMA_VERSION_MISMATCH` | 400 | 存储层 schema 版本不兼容 |
-| `ASSET_DOWNLOAD_FAILED` | 502 | 下载失败（网络/服务器） |
+| `ASSET_DOWNLOAD_FAILED` | 502 | 下载失败（网络/服务器/域名不在白名单） |
 | `ASSET_INTEGRITY_FAILED` | 409 | sha256 校验失败 |
 | `ASSET_PATH_TRAVERSAL` | 403 | 解压路径含穿越 |
 | `ASSET_SIZE_EXCEEDED` | 413 | 超过大小限制 |
@@ -391,15 +548,23 @@ asset_install(asset_id=123, project_path="D:/game")
 | `INSTALL_FAILED` | 500 | 安装中途失败，已回滚 |
 | `CORRUPTED_STATE` | 500 | installed-assets.json 格式损坏 |
 
+`CONFLICT` 统一覆盖创建冲突和应用冲突，通过 `context` 字段区分场景：
+```json
+{ "error": "CONFLICT", "context": "apply_rule", "existing_source": "godot-mcp" }
+{ "error": "CONFLICT", "context": "create", "existing_source": "global" }
+{ "error": "CONFLICT", "context": "unapply_rule", "message": "非 MCP 写入的规则" }
+```
+
 ---
 
-## 八、CLI 命令映射
+## 十、CLI 命令映射
 
 CLI 与 MCP 工具共享同一业务逻辑层。CLI 是 MCP 工具的命令行包装。
 
 ```bash
 # Content 管理
 godot-mcp content list --type=template --scope=all --limit=20 --offset=0
+godot-mcp content list --type=template --applies-to=CharacterBody3D
 godot-mcp content get --id=my-state-machine --type=template
 godot-mcp content create --type=rule --scope=global --file=./my-rule.md
 godot-mcp content create --type=template --scope=global --file=./my-template.json
@@ -407,9 +572,12 @@ godot-mcp content update --type=rule --id=my-rule --scope=global --file=./update
 godot-mcp content update --type=template --id=my-tpl --scope=global --file=./updated.json
 godot-mcp content delete --type=template --id=old-template --scope=global
 godot-mcp content validate --type=template --file=./new-template.json
+godot-mcp content validate --type=template --file=./new-template.json --deep
 godot-mcp content apply-rule --id=no-os-access --project=./my-game
+godot-mcp content unapply-rule --id=no-os-access --project=./my-game
 godot-mcp content apply-template --id=my-sm --var name=PlayerState --output=res://scripts/
 godot-mcp content apply-template --id=my-sm --var-file=./variables.json --output=res://scripts/
+godot-mcp content apply-template --id=my-sm --var-file=./variables.json --output=res://scripts/ --overwrite
 
 # Asset 管理
 godot-mcp asset search --query=particles --category=3d --limit=10
@@ -417,31 +585,48 @@ godot-mcp asset info --id=123
 godot-mcp asset install --id=123 --project=./my-game
 godot-mcp asset list --project=./my-game
 godot-mcp asset check-updates --project=./my-game
-godot-mcp asset update --project=./my-game                  # 更新全部
+godot-mcp asset update --project=./my-game                  # 更新全部（仅次版本）
 godot-mcp asset update --id=123 --project=./my-game         # 更新单个
+godot-mcp asset update --id=123 --allow-major --project=./my-game  # 允许主版本升级
 godot-mcp asset remove --id=123 --project=./my-game
+godot-mcp asset cache-clean --max-age=30d
 ```
 
 ### --var 传参方式
 
 ```bash
-# 方式 1：重复 flag（适合短列表）
---var states=Idle --var states=Run --var states=Jump
+# 标量变量
+--var name=PlayerState
 
-# 方式 2：JSON 文件（适合复杂变量）
+# 数组变量（加 [] 后缀）
+--var states[]=Idle --var states[]=Run --var states[]=Jump
+
+# JSON 文件（适合复杂变量）
 --var-file=./variables.json
 ```
 
+同名 flag 不加 `[]` 时始终覆盖（最后一个生效）。数组变量必须使用 `[]` 后缀或 `--var-file`。
+
 ---
 
-## 九、架构决策记录
+## 十一、架构决策记录
 
 | 决策 | 选择 | 理由 |
 |------|------|------|
 | 工具分组 | Content + Asset 两个独立工具组 | 规则/模板（本地内容）与 Asset Library（远程资源）是不同域 |
 | 规则合并语义 | 叠加 + 显式 overrides | 安全规则通常需要全部生效，不是覆盖 |
+| 环形 override | 双方都不生效 | 数据错误不应静默降级，安全优先 |
 | 模板引擎 | Handlebars | 轻量、JS 生态成熟、零运行时依赖 |
+| 内置模板迁移 | 保留函数实现 | 内置模板含复杂 TS 逻辑，无法 1:1 迁移到 Handlebars |
 | 存储 | 双层（全局 + 项目） | 类似 .gitconfig 分层，开发者直觉友好 |
-| Asset 安装 | 完整安全校验链 | zip 路径穿越、大小限制、结构验证、原子写入 |
+| Asset 安装原子性 | 先记录 installing 状态 | 消除崩溃窗口，启动时自动恢复 |
+| Asset 下载安全 | 域名白名单 + sha256 | 防止 URL 篡改和缓存污染 |
+| Asset 更新策略 | 主版本需确认 | 防止 API 不兼容的自动升级 |
+| Asset 缓存 | LRU 2GB 上限 | 防止缓存无限膨胀 |
+| 多文件模板 | 事务性写入 | 全成功或全回滚，不产生部分文件 |
+| 并发保护 | advisory lock + write-then-rename | JSON 写入原子性，CLI 互斥 |
 | CLI/MCP 共享 | 统一业务逻辑层 | 避免行为分歧，维护一份代码 |
-| 发现机制 | manifest 可选 + 目录扫描 fallback | 兼顾性能和零配置 |
+| 发现机制 | manifest 含 size/mtime + 目录扫描 fallback | 兼顾性能和完整性 |
+| applies_to | 信息提示 + 列表过滤 | 不阻止应用，但帮助 AI 选择合适模板 |
+| content_validate | 三级校验 | 格式 + 语义必做，深度可选 |
+| CONFLICT 统一 | 合并 ALREADY_EXISTS | 通过 context 字段区分场景 |
