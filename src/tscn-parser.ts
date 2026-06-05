@@ -348,7 +348,8 @@ export function parseTscn(content: string): ParsedScene {
       const attrMatch = trimmed.match(/\[(\w+)\s+(.*)\]/);
       if (attrMatch) {
         const attrs = attrMatch[2]!;
-        const pairs = attrs.match(/(\w+)=(?:"([^"]*)"|(\S+))/g);
+        // I-02: 非引号分支匹配到下一个 key= 或行尾，支持含空格的值
+        const pairs = attrs.match(/(\w+)=(?:"([^"]*)"|((?:(?!\s+\w+=).)+))/g);
         if (pairs) {
           for (const pair of pairs) {
             const eq = pair.indexOf('=');
@@ -373,7 +374,8 @@ export function parseTscn(content: string): ParsedScene {
       const attrMatch = trimmed.match(/\[(\w+)\s+(.*)\]/);
       if (attrMatch) {
         const attrs = attrMatch[2]!;
-        const pairs = attrs.match(/(\w+)=(?:"([^"]*)"|(\S+))/g);
+        // I-02: 非引号分支匹配到下一个 key= 或行尾，支持含空格的值
+        const pairs = attrs.match(/(\w+)=(?:"([^"]*)"|((?:(?!\s+\w+=).)+))/g);
         if (pairs) {
           for (const pair of pairs) {
             const eq = pair.indexOf('=');
