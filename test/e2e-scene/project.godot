@@ -1,0 +1,11 @@
+; E2E Test Scene - minimal Godot 4.x project
+[application]
+config/name="E2E Test Scene"
+run/main_scene="res://scenes/test_3d.tscn"
+
+[display]
+window/size/viewport_width=320
+window/size/viewport_height=240
+
+[rendering]
+renderer/rendering_method="forward_plus"
