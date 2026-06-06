@@ -183,7 +183,9 @@ export function allowOutsideProjectPaths(): boolean {
   return false;
 }
 
-let _pathAllowLogged = false;
+/** Per-message deduplication for path-allow log messages.
+ *  Each security path (UNRESTRICTED, unconfigured) logs once independently. */
+const _pathAllowLogged = new Set<string>();
 
 /** Ensure path ends with separator for prefix matching (avoids double-sep on Windows). */
 function ensureSep(p: string): string {
@@ -205,18 +207,18 @@ function ensureSep(p: string): string {
  *  MCP server's path check. Users who want restriction can set ALLOWED_PROJECT_PATHS. */
 export function isPathInAllowedRoots(requestedPath: string): boolean {
   if (process.env.GODOT_MCP_UNRESTRICTED === 'true') {
-    if (!_pathAllowLogged) {
+    if (!_pathAllowLogged.has('unrestricted')) {
       getLogger().info('security', 'GODOT_MCP_UNRESTRICTED=true — all path restrictions bypassed');
-      _pathAllowLogged = true;
+      _pathAllowLogged.add('unrestricted');
     }
     return true;
   }
   if (allowOutsideProjectPaths()) return true;
   const allowed = getAllowedProjectPaths();
   if (allowed.length === 0) {
-    if (!_pathAllowLogged) {
+    if (!_pathAllowLogged.has('unconfigured')) {
       getLogger().info('security', 'ALLOWED_PROJECT_PATHS not configured — allowing all project paths. Set ALLOWED_PROJECT_PATHS=/path1;/path2 to restrict.');
-      _pathAllowLogged = true;
+      _pathAllowLogged.add('unconfigured');
     }
     return true;
   }
@@ -225,7 +227,7 @@ export function isPathInAllowedRoots(requestedPath: string): boolean {
 }
 
 /** Reset log state (test-only). */
-export function _resetPathAllowWarned(): void { _pathAllowLogged = false; }
+export function _resetPathAllowWarned(): void { _pathAllowLogged.clear(); }
 
 /** Build a safe environment for child processes, only passing necessary variables. */
 /**
