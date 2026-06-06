@@ -1454,3 +1454,57 @@ export function addNode(
     scene: lines.join('\n'),
   };
 }
+
+// ── addNodes (batch) ────────────────────────────────────────────────────────
+
+/**
+ * Add multiple nodes to a .tscn scene in one pass.
+ *
+ * 1. Empty array → immediate success, no changes.
+ * 2. If ANY node has unsupported property types → returns fallback=true
+ *    so the caller can fall through to the Godot-process path.
+ * 3. Otherwise processes each node sequentially, threading the scene content
+ *    through each addNode call.
+ */
+export function addNodes(
+  tscnContent: string,
+  nodes: Array<AddNodeParams>,
+): AddNodeResult {
+  if (nodes.length === 0) {
+    return { success: true, fallback: false, scene: tscnContent };
+  }
+
+  // Pre-check: if any node has unsupported properties, fall back entirely
+  for (const node of nodes) {
+    if (node.properties) {
+      for (const value of Object.values(node.properties)) {
+        if (!canSerializeProperty(value)) {
+          return {
+            success: true,
+            fallback: true,
+            message: `Unsupported property type in node ${node.name}, requires Godot process`,
+          };
+        }
+      }
+    }
+  }
+
+  // Process sequentially, threading content
+  let content = tscnContent;
+  for (const node of nodes) {
+    const result = addNode(content, node);
+    if (!result.success) {
+      return result;
+    }
+    if (result.scene) {
+      content = result.scene;
+    }
+  }
+
+  return {
+    success: true,
+    fallback: false,
+    message: `Added ${nodes.length} node(s)`,
+    scene: content,
+  };
+}

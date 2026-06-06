@@ -9,9 +9,10 @@ import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath, ensure
 import { parseTscn, parseTscnSummary } from '../../tscn-parser.js';
 import { executeGdscript } from '../../gdscript-executor.js';
 import { normalizeNodePath, gdEscape, toSnakeCase, SCENE_TREE_HEADER, opsErrorResult, parseGdscriptResult, sanitizeResPath } from '../shared.js';
+import { addNode } from '../../tscn-editor.js';
 import { acquireShortRunningSlot, releaseShortRunningSlot } from '../../core/process-state.js';
 import { spawnGodot } from '../spawn-helper.js';
-import { ACTIONS, requireScenePath, gdScriptSetLine, TRY_SET_HELPER, writeAtomic } from './helpers.js';
+import { ACTIONS, requireScenePath, gdScriptSetLine, TRY_SET_HELPER, writeAtomic, BLOCKED_PROPS } from './helpers.js';
 import { handleInstanceScene, handleSetInstanceProperty, handleDetachInstance } from './scene-instance.js';
 import { mergeTscn, checkSceneHealth } from './scene-merge.js';
 
@@ -97,6 +98,59 @@ export async function handleTool(
       return textResult(JSON.stringify({ header: parsed.header, extResources: parsed.extResources, subResources: parsed.subResources, nodeTree: roots, connections: parsed.connections, totalNodes: parsed.nodes.length }, null, 2));
     }
 
+    // P1 file-op shortcut for add_node: try pure text editing first,
+    // fall through to spawnGodot if properties are unsupported.
+    case 'add_node': {
+      // Validate params
+      const p = requireProjectPath(args);
+      const sceneRelPath = normalizeUserProjectPath(args.scene_path as string);
+      if (!/^[A-Za-z0-9_]+$/.test(String(args.node_type ?? ''))) {
+        return textResult(`Error: node_type contains invalid characters: "${args.node_type}"`);
+      }
+      if (!String(args.node_name ?? '') || /[\]["/:\\]/.test(String(args.node_name))) {
+        return textResult(`Error: node_name contains invalid characters: "${args.node_name}"`);
+      }
+
+      const absPath = resolveWithinRoot(p, sceneRelPath);
+      if (!existsSync(absPath)) {
+        return opsErrorResult('FILE_NOT_FOUND', `Scene file not found: ${sceneRelPath}`);
+      }
+
+      // Convert parent_node_path to .tscn parent format
+      const rawParent = String(args.parent_node_path || 'root');
+      let tscnParent: string;
+      if (rawParent === 'root' || rawParent === '/root' || rawParent === '') {
+        tscnParent = '.';
+      } else {
+        // Strip "root/" prefix if present, keep the rest as tscn parent path
+        const stripped = rawParent.replace(/^\/?root\/?/, '');
+        tscnParent = stripped || '.';
+      }
+
+      const tscnContent = readFileSync(absPath, 'utf-8');
+      const result = addNode(tscnContent, {
+        parent: tscnParent,
+        name: String(args.node_name),
+        type: String(args.node_type),
+        properties: args.properties as Record<string, unknown> | undefined,
+      });
+
+      if (result.success && result.fallback) {
+        // Unsupported properties — fall through to spawnGodot path below
+        break;
+      }
+
+      if (!result.success) {
+        return textResult(`Error: ${result.message}`);
+      }
+
+      // Write back the modified .tscn
+      if (result.scene) {
+        writeFileSync(absPath, result.scene, 'utf-8');
+      }
+      return textResult(result.message);
+    }
+
     case 'create_scene':
     case 'add_node':
     case 'save_scene':
@@ -131,7 +185,7 @@ export async function handleTool(
       releaseShortRunningSlot();
       if (result.timedOut) return { content: [{ type: 'text', text: `${action} timed out.` }] };
       if (result.exitCode === -1 && result.stdout.startsWith('SPAWN_FAILED:')) return opsErrorResult('SPAWN_FAILED', `Failed to spawn Godot: ${result.stdout.replace('SPAWN_FAILED: ', '')}`);
-      if (result.exitCode !== 0) return { content: [{ type: 'text', text: `${action} failed (exit code ${result.exitCode}):\n${result.stdout}` }] };
+      if (result.exitCode !== 0) return { content: [{ type: 'text', text: `${action} failed (exit code ${result.exitCode}):\n${result.stdout}${result.stderr ? '\n' + result.stderr : ''}` }] };
       return { content: [{ type: 'text', text: result.stdout.trim() || `${action} completed successfully.` }] };
     }
 
@@ -211,7 +265,9 @@ export async function handleTool(
         const properties = args.properties as Record<string, unknown>;
         if (!properties || typeof properties !== 'object' || Object.keys(properties).length === 0) return opsErrorResult('INVALID_PARAMS', '"properties" must be a non-empty object.');
         let propLines = '';
-        for (const [key, value] of Object.entries(properties)) { const gdKey = toSnakeCase(key); if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(gdKey)) return textResult(`Error: Invalid property name: "${key}"`); propLines += `\n\t${gdScriptSetLine(gdKey, value)}`; }
+        for (const [key, value] of Object.entries(properties)) {
+          if (BLOCKED_PROPS.has(key)) continue; // C-SEC-06: block dangerous props (script, owner, name, etc.)
+          const gdKey = toSnakeCase(key); if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(gdKey)) return textResult(`Error: Invalid property name: "${key}"`); propLines += `\n\t${gdScriptSetLine(gdKey, value)}`; }
         const script = `${SCENE_TREE_HEADER}\n${TRY_SET_HELPER}\nfunc _initialize():\n\tif not _mcp_load_scene("${gdEscape(scenePath)}"):\n\t\t_mcp_done()\n\t\treturn\n\tvar node = _mcp_get_scene_node("${gdEscape(nodePath)}")\n\tif node == null:\n\t\t_mcp_output("error", "Node not found: ${gdEscape(nodePath)}")\n\t\t_mcp_done()\n\t\treturn${propLines}\n\t_mcp_output("edited", {"node": "${gdEscape(nodePath)}"})\n\t_mcp_done()\n`;
         const godot = await ctx.findGodot(); const loadAutoloads = args.load_autoloads !== false;
         return parseGdscriptResult(await executeGdscript({ godotPath: godot, projectPath: p, code: script, timeout: 30, loadAutoloads }), [], (msg) => msg.includes('not found') ? 'NODE_NOT_FOUND' : 'SCRIPT_EXEC_FAILED', { suggestion: 'Use query_scene_tree to list available nodes, or inspect_node to check a specific path.' });
