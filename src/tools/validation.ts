@@ -141,7 +141,7 @@ export function isErrorFalsePositive(line: string): boolean {
 
 // ─── Script file collection ────────────────────────────────────────────────
 
-function collectFilesByExt(projectPath: string, extensions: string[], excludeDirs: string[] = ['.godot', '.import', 'addons', 'tools']): string[] {
+function collectFilesByExt(projectPath: string, extensions: string[], excludeDirs: string[] = ['.godot', '.import']): string[] {
   return scanFiles(projectPath, extensions, { skipDirs: excludeDirs });
 }
 

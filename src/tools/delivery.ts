@@ -16,6 +16,7 @@ const MAX_ASSERTIONS = 10;
 const PERF_TIMEOUT_S = 20;
 const ASSERTION_TIMEOUT_S = 15;
 const ORPHAN_WARNING_THRESHOLD = 100;
+// 交付检查跳过 addons：第三方插件代码不纳入交付质量门禁
 const SKIP_DIRS = new Set(['.godot', '.import', 'addons']);
 
 // ─── Types ──────────────────────────────────────────────────────────────────
