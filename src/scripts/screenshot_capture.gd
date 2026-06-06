@@ -153,7 +153,10 @@ func _on_process_frame() -> void:
 		print("[SCREENSHOT] SAVED: %s (%dx%d)" % [global_path, img.get_width(), img.get_height()])
 		# 空白检测：采样像素判断是否为均匀色（2D headless 渲染限制）
 		if _detect_blank_image(img):
-			print("[SCREENSHOT] WARNING: BLANK_DETECTED - captured image appears to be uniform (possible 2D rendering limitation)")
+			print("[SCREENSHOT] WARNING: BLANK_DETECTED - This is a known limitation of Godot headless mode.")
+			print("[SCREENSHOT] HINT: 2D CanvasItem content (ColorRect/Sprite2D/Label) cannot render in headless mode.")
+			print("[SCREENSHOT] HINT: Use Game Bridge take_screenshot (requires running game via F5 or run_project),")
+			print("[SCREENSHOT] HINT: or Editor mode screenshot, or provide a screenshot and use screenshot analyze.")
 	else:
 		push_error("[SCREENSHOT] Save failed: error %d" % err)
 		printerr("[SCREENSHOT] Could not save to: %s (error %d)" % [_output_path, err])

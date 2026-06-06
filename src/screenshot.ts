@@ -10,6 +10,10 @@
  *   - Windows: always windowed (headless rendering is not supported)
  *   - Linux/macOS: try headless first (opengl3), fall back to windowed
  *
+ * P4 SubViewport verdict (2026-06-06): SubViewport does NOT work in headless
+ * mode. The dummy renderer's texture_storage returns null textures. Verified on
+ * Godot 4.6.3 Windows headless. Fallback: improved BLANK_DETECTED hints.
+ *
  * The bundled GDScript (screenshot_capture.gd) uses the process_frame signal
  * and call_deferred() to reliably load scenes and capture frames.
  */
@@ -240,4 +244,16 @@ export async function captureScreenshot(
     error: `Screenshot failed (${mode} mode). Godot exited with code ${result1.code}.${imageNullHint}`,
     godotOutput: result1.output,
   };
+}
+
+/**
+ * Check if a screenshot result contains a BLANK_DETECTED warning.
+ * Returns the hint text if blank detected, empty string otherwise.
+ */
+export function getBlankHint(godotOutput: string): string {
+  if (!godotOutput.includes('BLANK_DETECTED')) return '';
+  return '2D CanvasItem content cannot render in headless mode. '
+    + 'Alternatives: (1) Game Bridge take_screenshot with running game, '
+    + '(2) Editor mode screenshot, '
+    + '(3) Provide a screenshot and use screenshot analyze.';
 }
