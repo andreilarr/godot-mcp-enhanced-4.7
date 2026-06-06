@@ -17,13 +17,14 @@ import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { writeFile, mkdir, rm, readdir, lstat, mkdtemp } from 'fs/promises';
 import { join, basename, resolve } from 'path';
-import { tmpdir } from 'os';
+import { tmpdir, userInfo } from 'os';
 import { randomUUID } from 'crypto';
 import { analyzeOutput, type ParsedError } from './error-analyzer.js';
 import { forceKillTree, getProjectDir, getRunningProcess, acquireShortRunningSlot, releaseShortRunningSlot } from './core/process-state.js';
 import { buildSafeEnv } from './helpers.js';
 import { MARKER_RESULT as MARKER_RESULT_SHARED, MARKER_ERROR as MARKER_ERROR_SHARED, GD_MCP_GET_ROOT, GD_MCP_GET_NODE, GD_MCP_LOAD_MAIN_SCENE, GD_MCP_OUTPUT } from './tools/shared.js';
 import { getLogger } from './core/logger.js';
+import { needsImport, runImport } from './tools/import-check.js';
 
 
 // ─── Sandbox scanner (C-SEC-02) ──────────────────────────────────────────────
@@ -31,8 +32,10 @@ import { getLogger } from './core/logger.js';
 const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /OS\.(execute|shell_open|kill|set_restart_on_exit|crash)\b/, label: 'OS system command' },
   { pattern: /DirAccess\.(remove_absolute|remove)\b/, label: 'Directory removal' },
-  { pattern: /FileAccess\.open\s*\([^)]*WRITE/, label: 'File write access' },
+  { pattern: /FileAccess\.open\b/, label: 'File access (read/write)' },
   { pattern: /Engine\.(set_singleton)\b/, label: 'Engine singleton modification' },
+  // C-03: Engine.get_singleton bypasses class-level restrictions (e.g. FileAccess, DirAccess)
+  { pattern: /Engine\.get_singleton\b/, label: 'Engine singleton access (sandbox bypass)' },
   { pattern: /JavaScriptBridge\.eval\b/, label: 'JavaScript eval (web escape)' },
   { pattern: /\bstr2var\b/, label: 'str2var (arbitrary deserialization)' },
   { pattern: /\bbytes2var\b/, label: 'bytes2var (arbitrary deserialization)' },
@@ -40,18 +43,80 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /Thread\.(new|start)\b/, label: 'Thread creation' },
   { pattern: /Semaphore\.new\b/, label: 'Semaphore creation' },
   { pattern: /Mutex\.new\b/, label: 'Mutex creation' },
+  // C-SEC-01: Reflection/indirect call bypass vectors
+  { pattern: /\bClassDB\b/, label: 'ClassDB reflection (sandbox bypass)' },
+  // C-SEC-01: Only flag .call()/.callv() with string-literal first arg (reflection pattern).
+  // Legitimate Callable.call(variable) is NOT flagged — internal tools use this (e.g. physics-ops collision_overlay).
+  { pattern: /\.call\s*\(\s*["']/, label: 'Indirect call via .call("string") (sandbox bypass)' },
+  { pattern: /\.callv\s*\(\s*["']/, label: 'Indirect call via .callv("string") (sandbox bypass)' },
 ];
+
+/**
+ * Phase 2: Dangerous API tokens that should not appear in string concatenation.
+ * Detects bypass attempts like "OS" + ".execute" or preload with computed paths.
+ */
+const DANGEROUS_API_TOKENS: readonly string[] = [
+  'OS.execute', 'OS.shell_open', 'OS.kill',
+  'DirAccess.remove', 'DirAccess.remove_absolute',
+  'JavaScriptBridge.eval',
+  'str2var', 'bytes2var',
+  // C-SEC-01: Reflection bypass tokens for string concatenation detection
+  'ClassDB', '.call(', '.callv(',
+  // C-03: Singleton access via string concatenation
+  'Engine.get_singleton',
+];
+
+/** Check if code uses string concatenation to build dangerous API names.
+ *  Catches patterns like: "OS" + ".execute", 'Dir' + 'Access.remove', etc.
+ *  Uses sliding window over string literals to reconstruct concatenated tokens. */
+function detectStringConcatBypass(code: string): string[] {
+  const warnings: string[] = [];
+  // Extract all string literal contents (single and double quoted)
+  const stringContents: string[] = [];
+  const stringLiteralRe = /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'/g;
+  let match: RegExpExecArray | null;
+  while ((match = stringLiteralRe.exec(code)) !== null) {
+    const content = match[1] ?? match[2];
+    if (content) stringContents.push(content);
+  }
+
+  // Concatenate adjacent string parts and check against dangerous tokens.
+  // For "ClassName.method" tokens, also check ".method" suffix (e.g. ".execute")
+  // to catch: "OS" + ".execute" → ".execute" matches suffix.
+  for (let i = 0; i < stringContents.length; i++) {
+    for (let j = i; j < Math.min(i + 4, stringContents.length); j++) {
+      const combined = stringContents.slice(i, j + 1).join('');
+      for (const token of DANGEROUS_API_TOKENS) {
+        const dotIdx = token.indexOf('.');
+        const suffix = dotIdx >= 0 ? token.slice(dotIdx) : null;
+        if (combined === token || (suffix !== null && combined === suffix)) {
+          warnings.push(`[SANDBOX-P2] String concatenation bypass attempt: "${token}" built from parts`);
+          break;
+        }
+      }
+    }
+  }
+
+  // Detect preload with non-literal or computed path
+  if (/\bpreload\s*\(\s*(?!["']res:\/\/)/.test(code)) {
+    warnings.push('[SANDBOX-P2] preload() with computed/dynamic path');
+  }
+
+  return warnings;
+}
 
 /** Best-effort scan for dangerous GDScript patterns. Returns warnings array.
  *  Enabled by default; set GODOT_MCP_SANDBOX=disabled to skip scanning.
  *  When warnings are found, execution is BLOCKED unless GODOT_MCP_DISABLE_SAFETY=true
  *  (or the legacy GODOT_MCP_ALLOW_UNSAFE=true).
  *
- *  ⚠️  SECURITY LIMITATION: This scanner uses simple regex matching and does NOT
- *  parse GDScript syntax. It can be bypassed by string concatenation
- *  (e.g. "OS" + ".execute"), preload of malicious scripts, or other indirect
- *  execution patterns. It is designed to prevent ACCIDENTAL use of dangerous
- *  APIs, not to defend against adversarial input. For true sandboxing, use
+ *  Phase 1: Direct regex matching of dangerous API calls.
+ *  Phase 2: String concatenation bypass detection + preload computed path detection.
+ *
+ *  ⚠️  SECURITY LIMITATION: This scanner does NOT parse GDScript syntax.
+ *  Phase 2 catches common bypass patterns but determined attackers may still
+ *  find ways around it. It is designed to prevent ACCIDENTAL and common-intent
+ *  misuse, not to defend against adversarial input. For true sandboxing, use
  *  container/VM isolation. */
 export function scanGdscriptSandbox(code: string): string[] {
   if (process.env.GODOT_MCP_SANDBOX === 'disabled') {
@@ -59,11 +124,18 @@ export function scanGdscriptSandbox(code: string): string[] {
     return [];
   }
   const warnings: string[] = [];
+
+  // Phase 1: Direct pattern matching
   for (const { pattern, label } of DANGEROUS_PATTERNS) {
     if (pattern.test(code)) {
       warnings.push(`[SANDBOX] Potential dangerous operation detected: ${label}`);
     }
   }
+
+  // Phase 2: String concatenation bypass detection
+  const concatWarnings = detectStringConcatBypass(code);
+  warnings.push(...concatWarnings);
+
   return warnings;
 }
 
@@ -127,12 +199,16 @@ function generateMarker(): string {
 // ─── Temp file helpers ──────────────────────────────────────────────────────
 
 const BASE_TMP_DIR = join(tmpdir(), 'godot-mcp-exec');
-let baseDirReady = false;
+let baseDirPromise: Promise<void> | null = null;
 
 async function ensureBaseDir(): Promise<void> {
-  if (baseDirReady) return;
-  await mkdir(BASE_TMP_DIR, { recursive: true, mode: 0o700 });
-  baseDirReady = true;
+  baseDirPromise ??= mkdir(BASE_TMP_DIR, { recursive: true, mode: 0o700 })
+    .then(() => {})
+    .catch((err) => {
+      baseDirPromise = null;  // C-01: clear cache on failure so next call retries
+      throw err;
+    });
+  return baseDirPromise;
 }
 
 /** Create an isolated session directory for one execution */
@@ -144,7 +220,7 @@ async function createSessionDir(): Promise<string> {
 
 /** Background cleanup: remove session dirs older than 1 hour */
 async function cleanupOldSessions(): Promise<void> {
-  if (!baseDirReady) return;
+  if (!baseDirPromise) return;
   const maxAge = 60 * 60 * 1000;
   const now = Date.now();
   try {
@@ -172,6 +248,17 @@ async function writeTempScript(code: string, sessionDir: string): Promise<string
   const id = randomUUID().replace(/-/g, '').substring(0, 8);
   const filePath = join(sessionDir, `${id}.gd`);
   await writeFile(filePath, code, 'utf-8');
+  // I-S5: Restrict file permissions on Windows (icacls) and POSIX (chmod via mode on parent dir)
+  if (process.platform === 'win32') {
+    try {
+      const { execFileSync } = await import('node:child_process');
+      // C-ARC-01: Validate username strictly (no backslash injection), use :R not :F
+      const winUser = userInfo().username;
+      if (winUser && /^[A-Za-z0-9_-]+$/.test(winUser)) {
+        execFileSync('icacls', [filePath, '/inheritance:r', '/grant:r', `${winUser}:R`], { windowsHide: true });
+      }
+    } catch { /* non-critical: best-effort permission restriction */ }
+  }
   return filePath;
 }
 
@@ -199,7 +286,8 @@ export function isFullClass(code: string): boolean {
  * Statements go into _initialize() body.
  */
 function classifyLines(code: string): { declarationLines: string[]; statementLines: string[] } {
-  const lines = code.split('\n');
+  // Normalize CRLF → LF so \r doesn't leak into line content and break GDScript parsing
+  const lines = code.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   const declarationLines: string[] = [];
   const statementLines: string[] = [];
 
@@ -277,6 +365,11 @@ export function wrapSnippet(code: string, resultMarker = MARKER_RESULT_SHARED): 
     ...GD_MCP_LOAD_MAIN_SCENE,
     '',
     ...GD_MCP_OUTPUT,
+    '',
+    'func _mcp_done() -> void:',
+    '\tprint("' + resultMarker + '" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))',
+    '\tif Engine.get_main_loop() == self:',
+    '\t\tquit(0)',
   ];
   // User code — safe: array join does not interpolate dollar-brace or backticks
   if (declarationLines.length > 0) {
@@ -297,9 +390,9 @@ export function wrapSnippet(code: string, resultMarker = MARKER_RESULT_SHARED): 
   }
 
   scriptLines.push(
-    '\t\tprint("' + resultMarker + '" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))',
-    '\t\tif Engine.get_main_loop() == self:',
-    '\t\t\tquit(0)',
+    '\tprint("' + resultMarker + '" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))',
+    '\tif Engine.get_main_loop() == self:',
+    '\t\tquit(0)',
   );
 
   return scriptLines.join('\n') + '\n';
@@ -363,6 +456,7 @@ export function injectHelpers(code: string): string {
   // Skip injection if the code already declares these helpers (exclude comment lines)
   const hasOutputsVar = lines.some(l => /^\s*var\s+_mcp_outputs\s*:/.test(l) && !l.trim().startsWith('#'));
   const hasOutputFunc = lines.some(l => /^\s*func\s+_mcp_output\s*\(/.test(l) && !l.trim().startsWith('#'));
+  const hasDoneFunc = lines.some(l => /^\s*func\s+_mcp_done\s*\(/.test(l) && !l.trim().startsWith('#'));
 
   const helperLines: string[] = [''];
   if (!hasOutputsVar) {
@@ -370,6 +464,15 @@ export function injectHelpers(code: string): string {
   }
   if (!hasOutputFunc) {
     helperLines.push('func _mcp_output(key: String, value: Variant) -> void:', '\t_mcp_outputs.append({"key": key, "value": str(value)})', '');
+  }
+  if (!hasDoneFunc) {
+    helperLines.push(
+      'func _mcp_done() -> void:',
+      '\tprint("' + MARKER_RESULT_SHARED + '" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))',
+      '\tif Engine.get_main_loop() == self:',
+      '\t\tquit(0)',
+      '',
+    );
   }
 
   const result = [...lines.slice(0, extendsIdx + 1), ...helperLines, ...lines.slice(extendsIdx + 1)];
@@ -418,11 +521,6 @@ export async function executeGdscript(
   let loadAutoloads = options.loadAutoloads ?? false;
   const startTime = Date.now();
 
-  // Acquire short-running slot to limit concurrent headless processes (max 3)
-  if (!acquireShortRunningSlot()) {
-    return { success: false, compile_success: false, compile_error: 'Too many concurrent headless operations (max 3). Please wait and retry.', errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0 };
-  }
-
   // Warn if same project is being used by a running game process
   const activeProjectDir = getProjectDir();
   if (activeProjectDir && getRunningProcess() && resolve(projectPath) === resolve(activeProjectDir)) {
@@ -467,6 +565,22 @@ export async function executeGdscript(
   const binName = basename(godotPath).toLowerCase();
   if (!binName.includes('godot')) {
     return { success: false, compile_success: false, compile_error: `Binary does not appear to be Godot: ${basename(godotPath)}`, errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0 };
+  }
+
+  // P3: Auto-import warmup — ensures .godot/imported/ is fresh before headless execution
+  if (needsImport(projectPath)) {
+    try {
+      getLogger().info('executor', `Running import warmup for ${projectPath}`);
+      await runImport(projectPath, godotPath);
+    } catch (importErr) {
+      getLogger().warn('executor', `Import warmup failed: ${importErr instanceof Error ? importErr.message : importErr}`);
+      // Non-fatal — continue execution
+    }
+  }
+
+  // Acquire short-running slot AFTER all validation — ensures no early-return leaks the slot
+  if (!acquireShortRunningSlot()) {
+    return { success: false, compile_success: false, compile_error: 'Too many concurrent headless operations (max 3). Please wait and retry.', errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0 };
   }
 
   // C-01: Generate random per-execution markers to prevent user code forgery
@@ -516,6 +630,7 @@ export async function executeGdscript(
     tempFile = await writeTempScript(scriptContent, sessionDir);
     tempFiles.push(tempFile);
   } catch (err) {
+    releaseShortRunningSlot();
     return {
       success: false,
       compile_success: false,
@@ -544,6 +659,7 @@ export async function executeGdscript(
       godotArgs.push('--scene', loaderScenePath);
     } catch (err) {
       rm(sessionDir, { recursive: true, force: true }).catch(() => {});
+      releaseShortRunningSlot();
       return {
         success: false,
         compile_success: false,
