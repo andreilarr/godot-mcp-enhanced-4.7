@@ -187,7 +187,7 @@ export function getToolDefinitions(): Tool[] {
   return [
     {
       name: 'script',
-      description: '脚本操作。读写: read_script, write_script。编辑: edit_script（行号/search_and_replace）。执行: execute_gdscript。测试: generate_test, create_test_scene。批量替换: project_replace。',
+      description: '脚本操作。读写: read_script, write_script。编辑: edit_script（行号/search_and_replace）。执行: execute_gdscript（⚠️ 沙箱仅防误操作，不可用于不可信输入。高安全场景请用 ALLOW_EXECUTE_GDSCRIPT=false 或容器隔离）。测试: generate_test, create_test_scene。批量替换: project_replace。',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -239,8 +239,8 @@ export function getToolDefinitions(): Tool[] {
           exclude_dirs: {
             type: 'array',
             items: { type: 'string' },
-            description: 'project_replace: 排除目录（默认 [".godot", ".import", "addons", "tools"]）',
-            default: ['.godot', '.import', 'addons', 'tools'],
+            description: 'project_replace: 排除目录（默认 [".godot", ".import"]）',
+            default: ['.godot', '.import'],
           },
           dry_run: { type: 'boolean', description: 'project_replace: 仅预览不写入（默认 false）', default: false },
         },
@@ -390,7 +390,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           if (!normalizedContent.includes(normalizedSearch)) {
             return opsErrorResult('NOT_FOUND', `search_and_replace: search text not found in ${fullPath}`);
           }
-          const newFileContent = normalizedContent.split(normalizedSearch).join(normalizedReplace);
+          const newFileContent = normalizedContent.replaceAll(normalizedSearch, normalizedReplace);
           const finalContent = joinWithLineEnding(newFileContent, hasCRLF);
           writeFileSync(fullPath, finalContent, 'utf-8');
 
@@ -742,7 +742,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       if (extensions.length === 0) {
         return opsErrorResult('INVALID_PARAMS', `No allowed extensions. Allowed: ${[...ALLOWED_EXTENSIONS].join(', ')}`);
       }
-      const userExcludeDirs: string[] = (args.exclude_dirs as string[]) || ['.godot', '.import', 'addons', 'tools'];
+      const userExcludeDirs: string[] = (args.exclude_dirs as string[]) || ['.godot', '.import'];
       const excludeDirs = [...new Set([...userExcludeDirs, ...HARDCODED_EXCLUDE])];
       const dryRun = args.dry_run === true;
 
@@ -815,7 +815,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         totalReplacements += count;
 
         if (!dryRun) {
-          const newContent = normalized.split(normalizedSearch).join(normalizedReplace);
+          const newContent = normalized.replaceAll(normalizedSearch, normalizedReplace);
           const finalContent = hasCRLF ? newContent.split('\n').join('\r\n') : newContent;
           pendingWrites.push({ filePath, finalContent });
         }

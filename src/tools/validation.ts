@@ -462,8 +462,8 @@ export function getToolDefinitions(): Tool[] {
           exclude_paths: {
             type: 'array',
             items: { type: 'string' },
-            description: '排除的目录路径（相对项目根）。默认排除：.godot, .import, tools, addons',
-            default: ['.godot', '.import', 'tools', 'addons'],
+            description: '排除的目录路径（相对项目根）。默认排除：.godot, .import',
+            default: ['.godot', '.import'],
           },
           scripts: {
             type: 'array',
@@ -572,7 +572,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const checkResources = args.check_resources !== false;
       const checkScripts = args.check_scripts !== false;
       const checkScenes = args.check_scenes !== false;
-      const excludePaths: string[] = (Array.isArray(args.exclude_paths) && args.exclude_paths.every((s: unknown) => typeof s === 'string') ? args.exclude_paths as string[] : null) || ['.godot', '.import', 'tools', 'addons'];
+      const excludePaths: string[] = (Array.isArray(args.exclude_paths) && args.exclude_paths.every((s: unknown) => typeof s === 'string') ? args.exclude_paths as string[] : null) || ['.godot', '.import'];
 
       const issues: Array<{ severity: string; category: string; message: string; file?: string }> = [];
 
