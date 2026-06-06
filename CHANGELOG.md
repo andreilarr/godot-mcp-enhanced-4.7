@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Security
+
+- **SEC-REV-01**: `isPathInAllowedRoots` 策略从 deny-by-default 恢复为 allow-by-default。v0.15.0 的 C-SEC-01 引入 deny-by-default（未配置时仅允许 `process.cwd()`），但 `npx` 启动场景下 `cwd` 是缓存目录而非用户项目，导致合法用户被阻断且无恢复路径。现改为：未配置 `ALLOWED_PROJECT_PATHS` 时允许所有路径并记录 info 日志；用户可通过设置 `ALLOWED_PROJECT_PATHS=/path1;/path2` 选择性启用白名单限制
+
+### Fixed
+
+- `DEFAULT_SKIP_DIRS` 移除 `'addons'` 和 `'tools'` — 插件和工具是用户代码目录，不应被默认跳过。修复 `list_files`、`get_project_info`、`validate_scripts`、`validate_project` 无法发现 addons 资源的问题
+- `collectFilesByExt` / `validate_project` / `project_replace` 中硬编码的 `['addons', 'tools']` 同步移除
+- `verify_delivery`（交付检查）**有意保留**跳过 addons — 第三方插件代码不纳入交付质量门禁
+- `_pathAllowLogged` 从共享 boolean 改为 per-key `Set` 去重 — `GODOT_MCP_UNRESTRICTED` 和未配置 `ALLOWED_PROJECT_PATHS` 的日志消息各自独立去重
+
 ## [0.15.1] - 2026-05-27
 
 ### Fixed
