@@ -1208,3 +1208,249 @@ export function addSubResource(
     scene: lines.join('\n'),
   };
 }
+
+// ── addNode ──────────────────────────────────────────────────────────────────
+
+export interface AddNodeParams {
+  parent: string;     // "." for root children, or node path like "Player"
+  name: string;
+  type: string;
+  properties?: Record<string, unknown>;
+}
+
+export interface AddNodeResult {
+  success: boolean;
+  message: string;
+  fallback: boolean;  // true = needs Godot process (unsupported property types)
+  scene?: string;
+}
+
+/**
+ * Check whether a property value can be safely serialized to .tscn text.
+ * Returns true for primitives and flat objects with only primitive values.
+ * Returns false for arrays and objects with nested objects.
+ */
+export function canSerializeProperty(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return true;
+  if (Array.isArray(value)) return false;
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    for (const v of Object.values(obj)) {
+      if (typeof v === 'object' && v !== null) return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Format a property value for .tscn serialization.
+ * - string → auto-quoted via formatTscnValue
+ * - number → unquoted string
+ * - boolean → true/false (unquoted)
+ * - null/undefined → null
+ * - Plain object with x,y → Vector2(x, y)
+ * - Plain object with x,y,z → Vector3(x, y, z)
+ * - Plain object with r,g,b → Color(r, g, b, a) (a defaults to 1)
+ * - Other objects → JSON stringified and auto-quoted
+ */
+function formatPropertyValue(value: unknown): string {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'string') return formatTscnValue(value);
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj);
+    // Vector3: has x, y, z
+    if (keys.includes('x') && keys.includes('y') && keys.includes('z')) {
+      return `Vector3(${obj.x}, ${obj.y}, ${obj.z})`;
+    }
+    // Vector2: has x, y (but not z)
+    if (keys.includes('x') && keys.includes('y')) {
+      return `Vector2(${obj.x}, ${obj.y})`;
+    }
+    // Color: has r, g, b
+    if (keys.includes('r') && keys.includes('g') && keys.includes('b')) {
+      const a = obj.a ?? 1;
+      return `Color(${obj.r}, ${obj.g}, ${obj.b}, ${a})`;
+    }
+    // Fallback: JSON stringify and quote
+    return formatTscnValue(JSON.stringify(value));
+  }
+  // Arrays and other types — should not reach here if canSerializeProperty was called
+  return formatTscnValue(String(value));
+}
+
+/**
+ * Find a node section line by name only (ignoring parent path).
+ * Used by addNode to locate the parent node, since the parent param
+ * is just a name like "Player", not a full path.
+ * For "." parent, returns the root node (first node without parent attr or with parent=".").
+ */
+function findNodeByName(lines: string[], nodeName: string): number {
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i]!.trim();
+    if (!trimmed.startsWith('[node')) continue;
+    const name = getBracketAttr(trimmed, 'name');
+    if (name === nodeName) return i;
+  }
+  return -1;
+}
+
+/**
+ * Find the insertion line index for a new child of `targetParent`.
+ *
+ * In .tscn files, nodes are in depth-first order. A new child of "Player"
+ * must be placed AFTER all of Player's descendants (Player/Sprite,
+ * Player/Sprite/Anim, etc.), not just after Player's own section.
+ *
+ * Algorithm:
+ * 1. Find the target parent node section.
+ * 2. Scan forward from the parent section.
+ * 3. For each subsequent [node] section, check if its parent attribute
+ *    matches the target parent OR starts with targetParent + "/".
+ * 4. If yes → it's a descendant, continue scanning.
+ * 5. If no → this is the insertion point (the line before this section).
+ * 6. If we reach the end of file, insert there.
+ */
+function findLastDescendantLine(lines: string[], parentNodeLine: number, tscnParent: string): number {
+  let lastDescendantEnd = nodeSectionEnd(lines, parentNodeLine);
+
+  for (let i = parentNodeLine + 1; i < lines.length; i++) {
+    const trimmed = lines[i]!.trim();
+    if (!trimmed.startsWith('[node')) continue;
+
+    // Get parent attribute from this node
+    const parentAttr = getBracketAttr(trimmed, 'parent');
+
+    // Also check property lines for parent
+    let effectiveParent = parentAttr;
+    if (effectiveParent === null) {
+      const end = findSectionEnd(lines, i);
+      for (let j = i + 1; j < end; j++) {
+        const pl = lines[j]!.trim();
+        if (pl.startsWith('parent = ') || pl.startsWith('parent=')) {
+          effectiveParent = pl.replace(/^parent\s*=\s*/, '').replace(/"/g, '').trim();
+          break;
+        }
+      }
+    }
+
+    // Check if this node is a descendant of the target parent
+    // For root children (tscnParent="."), descendants have parent="." or parent="ChildOfParent/..."
+    // For non-root (tscnParent="Player"), descendants have parent="Player" or parent="Player/..."
+    const isDescendant = effectiveParent === tscnParent ||
+      (effectiveParent !== null && effectiveParent.startsWith(tscnParent + '/'));
+
+    if (isDescendant) {
+      lastDescendantEnd = nodeSectionEnd(lines, i);
+    } else {
+      // Not a descendant — insertion point found
+      return lastDescendantEnd;
+    }
+  }
+
+  return lastDescendantEnd;
+}
+
+/**
+ * Add a node to a .tscn scene with property type whitelist and auto-fallback.
+ *
+ * If any property value cannot be serialized to .tscn text (arrays, nested objects),
+ * returns `{ success: true, fallback: true }` without modifying the file,
+ * signaling that a Godot process should handle the insertion instead.
+ *
+ * The node is inserted after the last descendant of the parent node,
+ * preserving .tscn depth-first ordering.
+ */
+export function addNode(
+  tscnContent: string,
+  params: AddNodeParams,
+): AddNodeResult {
+  const { parent, name, type, properties } = params;
+
+  // 1. Validate name and type
+  if (!/^[A-Za-z0-9_]+$/.test(name)) {
+    return { success: false, message: `Invalid node name: ${name}`, fallback: false };
+  }
+  if (!/^[A-Za-z0-9_]+$/.test(type)) {
+    return { success: false, message: `Invalid node type: ${type}`, fallback: false };
+  }
+
+  // 2. Check all properties via canSerializeProperty
+  if (properties) {
+    for (const value of Object.values(properties)) {
+      if (!canSerializeProperty(value)) {
+        return {
+          success: true,
+          fallback: true,
+          message: `Unsupported property type for node ${name}, requires Godot process`,
+        };
+      }
+    }
+  }
+
+  const lines = normalizeLines(tscnContent);
+
+  // 3. Determine tscn parent attribute
+  const tscnParent = parent;
+
+  // 4. Find parent node section
+  let parentNodeLine = -1;
+
+  if (parent === '.') {
+    // Adding as root child — find the root node (no parent attr or parent=".")
+    for (let i = 0; i < lines.length; i++) {
+      const trimmed = lines[i]!.trim();
+      if (!trimmed.startsWith('[node')) continue;
+      const p = getBracketAttr(trimmed, 'parent');
+      if (p === null || p === '' || p === '.') {
+        parentNodeLine = i;
+        break;
+      }
+    }
+  } else {
+    // Find the parent node by name (parent param is just a node name like "Player")
+    parentNodeLine = findNodeByName(lines, parent);
+  }
+
+  if (parentNodeLine === -1) {
+    return { success: false, message: `Parent node not found: ${parent}`, fallback: false };
+  }
+
+  // 5. Find insertion point: after the last descendant of the parent
+  const insertAfter = findLastDescendantLine(lines, parentNodeLine, tscnParent);
+
+  // 6. Build [node] section
+  const nodeLines: string[] = [];
+
+  // Header line
+  if (tscnParent === '.') {
+    nodeLines.push(`[node name="${escapeTscnAttr(name)}" type="${escapeTscnAttr(type)}" parent="."]`);
+  } else {
+    nodeLines.push(`[node name="${escapeTscnAttr(name)}" type="${escapeTscnAttr(type)}" parent="${escapeTscnAttr(tscnParent)}"]`);
+  }
+
+  // Property lines
+  if (properties) {
+    for (const [key, value] of Object.entries(properties)) {
+      nodeLines.push(`${key} = ${formatPropertyValue(value)}`);
+    }
+  }
+
+  // 7. Insert after last descendant (add blank line separator before new node)
+  nodeLines.unshift(''); // blank line before the new node
+  lines.splice(insertAfter + 1, 0, ...nodeLines);
+
+  // 8. Update load_steps (+1)
+  incrementLoadSteps(lines);
+
+  return {
+    success: true,
+    fallback: false,
+    message: `Added node ${name} (type=${type}) as child of ${parent}`,
+    scene: lines.join('\n'),
+  };
+}
