@@ -14,6 +14,7 @@ import { DETAILED_RULE_TEMPLATES } from './rule-templates.js';
 import { validatePath, requireString, requireProjectPath, resolveWithinRoot, scanFiles, type GodotConfig } from '../helpers.js';
 import { getScaffoldFiles, PROJECT_TEMPLATES } from './code-templates.js';
 import { getLogger } from '../core/logger.js';
+import { projectWriteConfig, isAllowedConfigKey, validateConfigValue } from './project-config.js';
 
 const ACTIONS = [
   'list_projects',
@@ -22,6 +23,7 @@ const ACTIONS = [
   'read_project_config',
   'create_project',
   'setup_project_rules',
+  'write_config',
 ] as const;
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
@@ -36,7 +38,7 @@ export function getToolDefinitions(): Tool[] {
         properties: {
           action: {
             type: 'string',
-            enum: ['list_projects', 'get_project_info', 'list_files', 'read_project_config', 'create_project', 'setup_project_rules'],
+            enum: ['list_projects', 'get_project_info', 'list_files', 'read_project_config', 'create_project', 'setup_project_rules', 'write_config'],
             description: '操作类型',
           },
           project_path: { type: 'string', description: 'Godot 项目目录路径' },
@@ -52,6 +54,8 @@ export function getToolDefinitions(): Tool[] {
           ci: { type: 'boolean', description: '生成 GitHub Actions CI workflow（默认 false）', default: false },
           godot_version: { type: 'string', description: 'CI 中使用的 Godot 版本（默认 4.4）', default: '4.4' },
           force: { type: 'boolean', description: '覆盖已有配置（默认 false）', default: false },
+          key: { type: 'string', description: '配置键（write_config，如 "application/config/name"）' },
+          value: { type: 'string', description: '配置值（write_config）' },
         },
         required: ['action'],
       },
@@ -454,6 +458,38 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       report.actions = actions;
       return textResult(JSON.stringify(report, null, 2));
+    }
+
+    case 'write_config': {
+      const p = requireProjectPath(args);
+      const cfgPath = join(p, 'project.godot');
+      if (!existsSync(cfgPath)) return textResult(`Error: No project.godot found at ${p}`);
+
+      const key = requireString(args, 'key');
+      const value = requireString(args, 'value');
+
+      // Pre-flight validation for clearer error messages
+      if (!isAllowedConfigKey(key)) {
+        return textResult(`Error: Key "${key}" is not in the allowed whitelist for write_config.`);
+      }
+      const validation = validateConfigValue(key, value);
+      if (!validation.valid) {
+        return textResult(`Error: Invalid value for "${key}": ${validation.error}`);
+      }
+
+      const original = readFileSync(cfgPath, 'utf-8');
+      const result = projectWriteConfig(original, key, value);
+      if (!result.success) {
+        return textResult(`Error: ${result.error}`);
+      }
+
+      writeAtomic(cfgPath, result.content!);
+      return textResult(JSON.stringify({
+        success: true,
+        key,
+        value,
+        message: `Config "${key}" updated successfully.`,
+      }, null, 2));
     }
 
     default:
