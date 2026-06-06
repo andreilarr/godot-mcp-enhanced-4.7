@@ -131,7 +131,7 @@ export const TOOL_GROUPS: Record<string, string[]> = {
   physics:    ['physics', 'node_create_3d'],
   navigation: ['nav'],
   ui:         ['ui'],
-  tilemap:    ['tilemap'],
+  tilemap:    ['tilemap', 'scene_commit'],
   signal:     ['signal'],
   profiler:   ['profiler', 'workflow'],
   test:       ['test', 'verify_delivery'],
