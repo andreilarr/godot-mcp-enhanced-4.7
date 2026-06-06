@@ -154,7 +154,7 @@ export function requireNumber(args: Record<string, unknown>, key: string, fallba
 export function requireProjectPath(args: Record<string, unknown>): string {
   const resolved = validatePath(requireString(args, 'project_path'));
   if (!isPathInAllowedRoots(resolved)) {
-    throw new Error(`project_path not in ALLOWED_PROJECT_PATHS: ${resolved}. Set ALLOWED_PROJECT_PATHS or GODOT_MCP_UNRESTRICTED=true.`);
+    throw new Error(`project_path not in ALLOWED_PROJECT_PATHS: ${resolved}. Check your ALLOWED_PROJECT_PATHS setting.`);
   }
   return resolved;
 }
@@ -175,14 +175,15 @@ export function getAllowedProjectPaths(): string[] {
 
 export function allowOutsideProjectPaths(): boolean {
   // @deprecated since v0.16.0, remove in v0.18.0 — use ALLOWED_PROJECT_PATHS whitelist instead
+  // Migration: set ALLOWED_PROJECT_PATHS=/path1;/path2 (semicolon-separated) or GODOT_MCP_UNRESTRICTED=true
   if (process.env.ALLOW_OUTSIDE_PROJECT_PATHS === 'true') {
-    getLogger().error('security', 'ALLOW_OUTSIDE_PROJECT_PATHS is deprecated (removes in v0.18.0) — migrate to ALLOWED_PROJECT_PATHS whitelist');
+    getLogger().error('security', 'ALLOW_OUTSIDE_PROJECT_PATHS is deprecated (removes in v0.18.0) — migrate to ALLOWED_PROJECT_PATHS whitelist (see getAllowedProjectPaths)');
     return true;
   }
   return false;
 }
 
-let _pathAllowWarned = false;
+let _pathAllowLogged = false;
 
 /** Ensure path ends with separator for prefix matching (avoids double-sep on Windows). */
 function ensureSep(p: string): string {
@@ -190,31 +191,41 @@ function ensureSep(p: string): string {
 }
 
 /** Check if a requested path is within the ALLOWED_PROJECT_PATHS whitelist.
- *  Unconfigured: fall back to process.cwd() as the only allowed root (deny-by-default).
- *  Configured: restrict to whitelist entries only.
- *  Explicit override: GODOT_MCP_UNRESTRICTED=true allows all paths. */
+ *
+ *  Priority:
+ *  1. GODOT_MCP_UNRESTRICTED=true → allow all (backward compat, logs once).
+ *  2. ALLOWED_PROJECT_PATHS set → restrict to whitelist (opt-in security).
+ *  3. Unconfigured → allow all with info log (allow-by-default).
+ *
+ *  Why allow-by-default? When launched via `npx` from Claude Code's mcpServers,
+ *  process.cwd() is the npx cache dir — not the user's Godot project.
+ *  The deny-by-default (cwd fallback) blocked legitimate users who hadn't
+ *  configured env vars, with no actionable path to recovery.
+ *  Real security is enforced by Claude Code's permission system, not by the
+ *  MCP server's path check. Users who want restriction can set ALLOWED_PROJECT_PATHS. */
 export function isPathInAllowedRoots(requestedPath: string): boolean {
   if (process.env.GODOT_MCP_UNRESTRICTED === 'true') {
-    getLogger().warn('security', 'GODOT_MCP_UNRESTRICTED=true — all path restrictions bypassed');
+    if (!_pathAllowLogged) {
+      getLogger().info('security', 'GODOT_MCP_UNRESTRICTED=true — all path restrictions bypassed');
+      _pathAllowLogged = true;
+    }
     return true;
   }
   if (allowOutsideProjectPaths()) return true;
   const allowed = getAllowedProjectPaths();
   if (allowed.length === 0) {
-    if (!_pathAllowWarned) {
-      getLogger().warn('security', 'ALLOWED_PROJECT_PATHS not set — restricted to process.cwd(). Set ALLOWED_PROJECT_PATHS or GODOT_MCP_UNRESTRICTED=true to override.');
-      _pathAllowWarned = true;
+    if (!_pathAllowLogged) {
+      getLogger().info('security', 'ALLOWED_PROJECT_PATHS not configured — allowing all project paths. Set ALLOWED_PROJECT_PATHS=/path1;/path2 to restrict.');
+      _pathAllowLogged = true;
     }
-    const cwd = resolvePath(process.cwd());
-    const resolved = resolvePath(requestedPath);
-    return resolved === cwd || resolved.startsWith(ensureSep(cwd));
+    return true;
   }
   const resolved = resolvePath(requestedPath);
   return allowed.some(p => resolved === p || resolved.startsWith(ensureSep(p)));
 }
 
-/** Reset warning state (test-only). */
-export function _resetPathAllowWarned(): void { _pathAllowWarned = false; }
+/** Reset log state (test-only). */
+export function _resetPathAllowWarned(): void { _pathAllowLogged = false; }
 
 /** Build a safe environment for child processes, only passing necessary variables. */
 /**
@@ -410,7 +421,7 @@ export function parseMcpScriptOutput(rawOutput: string, exitCode: number | null,
 
 // ─── File scanner ────────────────────────────────────────────────────────────
 
-export const DEFAULT_SKIP_DIRS = ['.godot', '.import', 'addons', 'tools'];
+export const DEFAULT_SKIP_DIRS = ['.godot', '.import'];
 
 /** Recursively scan a directory for files matching given extensions.
  *  @param rootDir Root directory to scan
