@@ -210,3 +210,86 @@ describe('scene-commit: generateCommitScript', () => {
     expect(script).toContain('speed');
   });
 });
+
+describe('serializeGdValue type inference', () => {
+  it('infers Vector3 from {x, y, z}', () => {
+    const script = generateCommitScript(
+      'res://scenes/Level.tscn',
+      [{ op: 'node_property', path: 'Player', property: 'position', value: { x: 10, y: 0, z: 5 } }],
+      true,
+    );
+    expect(script).toContain('.position = Vector3(10, 0, 5)');
+  });
+
+  it('infers Vector2 from {x, y}', () => {
+    const script = generateCommitScript(
+      'res://scenes/Level.tscn',
+      [{ op: 'node_property', path: 'Player', property: 'position', value: { x: 100, y: 200 } }],
+      true,
+    );
+    expect(script).toContain('.position = Vector2(100, 200)');
+  });
+
+  it('infers Rect2 from {x, y, w, h}', () => {
+    const script = generateCommitScript(
+      'res://scenes/Level.tscn',
+      [{ op: 'node_property', path: 'Camera', property: 'limit', value: { x: 0, y: 0, w: 800, h: 600 } }],
+      true,
+    );
+    expect(script).toContain('.limit = Rect2(0, 0, 800, 600)');
+  });
+
+  it('infers Color from {r, g, b}', () => {
+    const script = generateCommitScript(
+      'res://scenes/Level.tscn',
+      [{ op: 'node_property', path: 'Light', property: 'color', value: { r: 1, g: 0.5, b: 0, a: 0.8 } }],
+      true,
+    );
+    expect(script).toContain('.color = Color(1, 0.5, 0, 0.8)');
+  });
+
+  it('uses _type override for Vector2i', () => {
+    const script = generateCommitScript(
+      'res://scenes/Level.tscn',
+      [{ op: 'node_property', path: 'Grid', property: 'cell_size', value: { x: 32, y: 32, _type: 'Vector2i' } }],
+      true,
+    );
+    expect(script).toContain('.cell_size = Vector2i(32, 32)');
+  });
+
+  it('uses _type override for Rect2i', () => {
+    const script = generateCommitScript(
+      'res://scenes/Level.tscn',
+      [{ op: 'node_property', path: 'Region', property: 'bounds', value: { x: 0, y: 0, w: 100, h: 50, _type: 'Rect2i' } }],
+      true,
+    );
+    expect(script).toContain('.bounds = Rect2i(0, 0, 100, 50)');
+  });
+
+  it('serializes arrays', () => {
+    const script = generateCommitScript(
+      'res://scenes/Level.tscn',
+      [{ op: 'node_property', path: 'Node', property: 'values', value: [1, 2, 3] }],
+      true,
+    );
+    expect(script).toContain('.values = [1, 2, 3]');
+  });
+
+  it('falls back to JSON for unknown objects', () => {
+    const script = generateCommitScript(
+      'res://scenes/Level.tscn',
+      [{ op: 'node_property', path: 'Node', property: 'data', value: { foo: 'bar', baz: 42 } }],
+      true,
+    );
+    expect(script).toContain('.data = {"foo":"bar","baz":42}');
+  });
+
+  it('node_add properties also use type inference', () => {
+    const script = generateCommitScript(
+      'res://scenes/Level.tscn',
+      [{ op: 'node_add', type: 'Node3D', name: 'Marker', parent: '.', properties: { position: { x: 5, y: 0, z: 10 } } }],
+      true,
+    );
+    expect(script).toContain('.position = Vector3(5, 0, 10)');
+  });
+});

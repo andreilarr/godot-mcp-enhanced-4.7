@@ -215,6 +215,59 @@ function serializeGdValue(value: unknown): string {
   if (typeof value === 'number') return String(value);
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (value === null || value === undefined) return 'null';
-  if (typeof value === 'object') return JSON.stringify(value);
+
+  // Array support
+  if (Array.isArray(value)) {
+    const items = value.map(v => serializeGdValue(v)).join(', ');
+    return `[${items}]`;
+  }
+
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj);
+
+    // _type explicit override
+    if (obj._type && typeof obj._type === 'string') {
+      const t = obj._type;
+      if (t === 'Rect2' || t === 'Rect2i') {
+        return `${t}(${obj.x ?? 0}, ${obj.y ?? 0}, ${obj.w ?? 0}, ${obj.h ?? 0})`;
+      }
+      if (t === 'Vector3' || t === 'Vector3i') {
+        return `${t}(${obj.x ?? 0}, ${obj.y ?? 0}, ${obj.z ?? 0})`;
+      }
+      if (t === 'Vector2' || t === 'Vector2i') {
+        return `${t}(${obj.x ?? 0}, ${obj.y ?? 0})`;
+      }
+      if (t === 'Color') {
+        return `Color(${obj.r ?? 1}, ${obj.g ?? 1}, ${obj.b ?? 1}, ${obj.a ?? 1})`;
+      }
+      // Unknown _type: fall through to auto-inference
+    }
+
+    // Color: has r, g, b
+    if (keys.includes('r') && keys.includes('g') && keys.includes('b')) {
+      const a = obj.a ?? 1;
+      return `Color(${obj.r}, ${obj.g}, ${obj.b}, ${a})`;
+    }
+
+    // Rect2: has x, y, w, h
+    if (keys.includes('w') && keys.includes('h') && keys.includes('x') && keys.includes('y')) {
+      return `Rect2(${obj.x}, ${obj.y}, ${obj.w}, ${obj.h})`;
+    }
+
+    // Vector3: has x, y, z
+    if (keys.includes('x') && keys.includes('y') && keys.includes('z')) {
+      return `Vector3(${obj.x}, ${obj.y}, ${obj.z})`;
+    }
+
+    // Vector2: has x, y
+    if (keys.includes('x') && keys.includes('y')) {
+      return `Vector2(${obj.x}, ${obj.y})`;
+    }
+
+    // Fallback: JSON stringify
+    return JSON.stringify(value);
+  }
+
   return String(value);
 }
