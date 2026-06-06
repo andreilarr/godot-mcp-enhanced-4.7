@@ -44,11 +44,14 @@ test/e2e-scene/
 
 | 优化 | 验证方式 | 预期结果 | 失败则 |
 |------|---------|---------|--------|
-| P1 addNode | `add_node` 向 test_3d.tscn 添加 Node3D 子节点 + save_scene | .tscn 文件出现新节点 | 记录 gap，后续修复 |
+| P1 addNode 3D | `add_node` 向 test_3d.tscn 添加 Node3D 子节点 + save_scene | .tscn 文件出现新节点 | 记录 gap，后续修复 |
+| P1 addNode 2D | `add_node` 向 test_2d.tscn 添加 Sprite2D 子节点 + save_scene | .tscn 包含 type="Sprite2D" 新节点 | 同上 |
 | P1 batch | `batch_add_nodes` 一次添加 5 个节点 | 全部写入 .tscn | 同上 |
 | P1 resources | `read_scene` 读取 test_3d.tscn 资源引用 | 返回正确资源路径 | 同上 |
 | P2 tile ops | `scene_commit` 批量 tile_set + tile_fill | COMMIT_RESULT: success=true | 同上 |
-| P2 node prop | `scene_commit` node_property 操作 | 属性值正确修改 | 同上 |
+| P2 node prop | `scene_commit` node_property 操作（含类型推断） | 属性值正确修改 | 同上 |
+| P3 import | 首次 executeGdscript 前自动触发 `--import` | .godot/imported/ 目录生成 | 同上 |
+| P3 skip | 二次调用检测到已导入（时间戳未变） | 跳过预热，直接执行 | 同上 |
 | P4 2D blank | `screenshot capture` 对 test_2d.tscn | BLANK_DETECTED + 4 行 hint | 验证 hint 完整性 |
 | P4 3D ok | `screenshot capture` 对 test_3d.tscn | 正常 PNG 输出 | 记录 3D 截图 gap |
 | P5 profiles | `validate_scripts` 验证 .gd 语法 | 全部通过 | 修语法 |
@@ -69,23 +72,41 @@ describe('E2E: P1-P5 validation', { timeout: 60_000 }, () => {
   });
 
   // P1 测试组
-  it('P1-addNode: writes to .tscn', async () => {
-    // 1. 读取原始 test_3d.tscn
-    // 2. 通过 tscn-editor addNode 添加子节点
-    // 3. 验证 .tscn 文件包含新节点定义
+  it('P1-addNode-3D: writes Node3D to test_3d.tscn', async () => {
+    // 1. 通过 tscn-editor addNode 向 test_3d.tscn 添加 Node3D 子节点
+    // 2. save_scene 后验证 .tscn 文件包含新节点定义
   });
 
-  it('P1-batch: creates multiple nodes', async () => { ... });
-  it('P1-resources: reads resource references', async () => { ... });
+  it('P1-addNode-2D: writes Sprite2D to test_2d.tscn', async () => {
+    // 1. 通过 tscn-editor addNode 向 test_2d.tscn 添加 Sprite2D 子节点
+    // 2. save_scene 后验证 .tscn 包含 type="Sprite2D" 新节点
+  });
+
+  it('P1-batch: creates multiple nodes', async () => { /* batch_add_nodes 5 个节点 */ });
+  it('P1-resources: reads resource references', async () => { /* read_scene 资源路径 */ });
 
   // P2 测试组
   it('P2-scene_commit: tile operations', async () => {
     // 1. 生成 tile_set + tile_fill 操作
     // 2. 通过 executeGdscript 执行
-    // 3. 解析 COMMIT_RESULT
+    // 3. 解析 COMMIT_RESULT: success=true
   });
 
-  it('P2-scene_commit: node_property', async () => { ... });
+  it('P2-scene_commit: node_property with type inference', async () => {
+    // node_property 传入 { x: 10, y: 0, z: 5 }
+    // 验证自动推断为 Vector3 并正确序列化
+  });
+
+  // P3 测试组
+  it('P3-import: warmup generates .godot/imported/', async () => {
+    // 首次 executeGdscript 前自动触发 --import
+    // 验证 .godot/imported/ 目录存在
+  });
+
+  it('P3-skip: second call skips warmup', async () => {
+    // 二次调用，时间戳未变
+    // 验证不重新触发 --import
+  });
 
   // P4 测试组
   it('P4-screenshot: 2D blank detection', async () => {
@@ -167,29 +188,31 @@ describe('E2E: P1-P5 validation', { timeout: 60_000 }, () => {
 **检测规则**：object 类型值检查键名模式自动推断类型。
 - 有 `w, h` 且有 `x, y` → Rect2
 - 有 `x, y, z` → Vector3
-- 有 `x, y` 且无 `w, h` → Vector2
+- 有 `x, y` 且无 `w, h` → **Vector2**（浮点数更通用；需要 Vector2i 时必须传 `_type: "Vector2i"`）
 - 有 `r, g, b` → Color
 - 显式 `_type` 字段优先
 
+**Array 限制**：首版只支持通用变体数组（`Array`）。Godot 的强类型数组（PackedInt32Array、PackedFloat32Array、PackedVector2Array 等）不自动推断，需要 `_type` 显式指定。未指定 `_type` 的数组统一序列化为 `[1, 2, 3]`（Godot 通用 Array 字面量）。
+
 **修改文件**：`src/tscn-editor.ts` 的属性序列化函数
 
-### 增强 2：P2 scene_commit 增加 edit_node 操作
+### 增强 2：P2 scene_commit 的 node_property 支持类型推断
 
-**当前**：scene_commit 支持 7 种操作（tile_set, tile_fill, tile_erase, tile_clear, tileset_assign, node_property, node_add），缺少 `edit_node`。
+**当前**：scene_commit 的 `node_property` 操作直接传递原始值，不支持 Godot 类型（Vector2/Vector3/Rect2/Color）。
 
-**新增**：
+**改动**：扩展 `node_property` 的 GDScript 生成，使其支持增强 1 中的类型推断规则。当 value 是 object 且匹配 Vector2/Vector3/Rect2/Color 模式时，自动生成对应的 Godot 构造函数调用。
 
 ```typescript
-// 操作定义
+// 操作定义（与现有 node_property 相同，value 支持类型推断）
 {
-  op: "edit_node",
-  path: "root/Player",      // 节点路径
-  property: "position",      // 属性名
-  value: { x: 10, y: 0, z: 5 }  // 属性值
+  op: "node_property",
+  path: "root/Player",
+  property: "position",
+  value: { x: 10, y: 0, z: 5 }  // 自动推断为 Vector3
 }
 ```
 
-**GDScript 生成**：
+**GDScript 生成（类型推断后）**：
 
 ```gdscript
 var _n = get_node_or_null("root/Player")
@@ -204,6 +227,8 @@ else:
     _error_msg = "Property not found: position on root/Player"
 ```
 
+**设计决策**：不新增 `edit_node` 操作。`node_property` 已有完整的 path/property/value 参数，添加类型推断后能力等价于 `edit_node`。两个操作做同一件事违反 DRY。
+
 **修改文件**：`src/tools/scene-commit.ts` 的 `generateCommitScript`
 
 ### 增强 3：P3 import warmup 集成
@@ -212,8 +237,12 @@ else:
 
 **方案**：
 - 在 `executeGdscript()` 首次调用某个 `projectPath` 时，先执行 `godot --headless --import --path <project>` 预热
-- 缓存预热状态（`Map<projectPath, boolean>`），同一会话内只预热一次
+- 使用时间戳缓存（`Map<projectPath, number>`），记录上次预热的 `getLatestMtime` 时间戳
+- 每次执行前对比当前 `getLatestMtime` 与缓存值，仅当有新资源时重新预热
+- 这确保会话内新增的 PNG/OGG 等资源也能被 Godot 导入系统感知
 - 预热超时 15s，失败不阻塞（降级为正常启动）
+
+**注意**：不使用布尔缓存（`Map<string, boolean>`），因为布尔缓存无法捕获会话内新增资源。
 
 **修改文件**：`src/gdscript-executor.ts`
 
@@ -229,10 +258,10 @@ else:
 
 ## 成功标准
 
-- [ ] P1-P5 全部通过 E2E 验证（真实 Godot 进程）
+- [ ] P1-P5 全部通过 E2E 验证（真实 Godot 进程，含 P3 import warmup）
 - [ ] Scope Warning 不再对计划内修改误报
 - [ ] GateGuard 批量任务只要求一次事实
-- [ ] addNode/edit_node 支持 Vector2/Vector3/Rect2/Color 类型
-- [ ] scene_commit 支持 edit_node 操作
-- [ ] import warmup 自动集成且可度量
+- [ ] addNode/edit_node 支持 Vector2/Vector3/Rect2/Color 类型（含类型推断）
+- [ ] scene_commit 的 node_property 支持类型推断（非新增 edit_node）
+- [ ] import warmup 使用时间戳缓存，可感知新增资源
 - [ ] 全量测试不回归（当前 ~1976 tests）
