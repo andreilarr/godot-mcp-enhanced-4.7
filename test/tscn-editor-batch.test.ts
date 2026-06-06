@@ -43,7 +43,7 @@ describe('addNodes', () => {
   it('returns fallback=true if any node has unsupported props', () => {
     const nodes: Array<AddNodeParams> = [
       { parent: '.', name: 'Enemy', type: 'CharacterBody2D' },
-      { parent: '.', name: 'Bad', type: 'Node', properties: { arr: [1, 2, 3] } },
+      { parent: '.', name: 'Bad', type: 'Node', properties: { arr: { nested: { deep: true } } } },
     ];
 
     const result = addNodes(SIMPLE_SCENE, nodes);

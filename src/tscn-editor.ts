@@ -33,6 +33,7 @@ function findSectionEnd(lines: string[], startLine: number): number {
 
 /** Escape special characters in .tscn quoted attribute values */
 function escapeTscnAttr(value: string): string {
+  if (!value) return '';
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
@@ -1233,7 +1234,12 @@ export interface AddNodeResult {
 export function canSerializeProperty(value: unknown): boolean {
   if (value === null || value === undefined) return true;
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return true;
-  if (Array.isArray(value)) return false;
+  if (Array.isArray(value)) {
+    return value.every(v =>
+      v === null || v === undefined ||
+      typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
+    );
+  }
   if (typeof value === 'object') {
     const obj = value as Record<string, unknown>;
     for (const v of Object.values(obj)) {
@@ -1250,36 +1256,62 @@ export function canSerializeProperty(value: unknown): boolean {
  * - number → unquoted string
  * - boolean → true/false (unquoted)
  * - null/undefined → null
- * - Plain object with x,y → Vector2(x, y)
+ * - Array of primitives → [v1, v2, ...]
+ * - Object with _type → uses _type as constructor name
+ * - Plain object with r,g,b → Color(r, g, b, a)
+ * - Plain object with x,y,w,h → Rect2(x, y, w, h)
  * - Plain object with x,y,z → Vector3(x, y, z)
- * - Plain object with r,g,b → Color(r, g, b, a) (a defaults to 1)
+ * - Plain object with x,y → Vector2(x, y)
  * - Other objects → JSON stringified and auto-quoted
  */
-function formatPropertyValue(value: unknown): string {
+export function formatPropertyValue(value: unknown): string {
   if (value === null || value === undefined) return 'null';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (typeof value === 'number') return String(value);
   if (typeof value === 'string') return formatTscnValue(value);
-  if (typeof value === 'object' && !Array.isArray(value)) {
+  if (Array.isArray(value)) {
+    const items = value.map(v => formatPropertyValue(v)).join(', ');
+    return `[${items}]`;
+  }
+  if (typeof value === 'object') {
     const obj = value as Record<string, unknown>;
     const keys = Object.keys(obj);
-    // Vector3: has x, y, z
-    if (keys.includes('x') && keys.includes('y') && keys.includes('z')) {
-      return `Vector3(${obj.x}, ${obj.y}, ${obj.z})`;
-    }
-    // Vector2: has x, y (but not z)
-    if (keys.includes('x') && keys.includes('y')) {
-      return `Vector2(${obj.x}, ${obj.y})`;
+    // _type explicit override — always wins
+    if (obj._type && typeof obj._type === 'string') {
+      const t = obj._type;
+      if (t === 'Rect2' || t === 'Rect2i') {
+        return `${t}(${obj.x ?? 0}, ${obj.y ?? 0}, ${obj.w ?? 0}, ${obj.h ?? 0})`;
+      }
+      if (t === 'Vector2' || t === 'Vector2i' || t === 'Vector3' || t === 'Vector3i') {
+        const args = t.startsWith('Vector3') ? [obj.x, obj.y, obj.z] : [obj.x, obj.y];
+        return `${t}(${args.map(a => a ?? 0).join(', ')})`;
+      }
+      if (t === 'Color') {
+        return `Color(${obj.r ?? 1}, ${obj.g ?? 1}, ${obj.b ?? 1}, ${obj.a ?? 1})`;
+      }
+      // Unknown _type: fall through to auto-inference
     }
     // Color: has r, g, b
     if (keys.includes('r') && keys.includes('g') && keys.includes('b')) {
       const a = obj.a ?? 1;
       return `Color(${obj.r}, ${obj.g}, ${obj.b}, ${a})`;
     }
+    // Rect2: has x, y, w, h
+    if (keys.includes('x') && keys.includes('y') && keys.includes('w') && keys.includes('h')) {
+      return `Rect2(${obj.x}, ${obj.y}, ${obj.w}, ${obj.h})`;
+    }
+    // Vector3: has x, y, z
+    if (keys.includes('x') && keys.includes('y') && keys.includes('z')) {
+      return `Vector3(${obj.x}, ${obj.y}, ${obj.z})`;
+    }
+    // Vector2: has x, y
+    if (keys.includes('x') && keys.includes('y')) {
+      return `Vector2(${obj.x}, ${obj.y})`;
+    }
     // Fallback: JSON stringify and quote
     return formatTscnValue(JSON.stringify(value));
   }
-  // Arrays and other types — should not reach here if canSerializeProperty was called
+  // Other types — should not reach here if canSerializeProperty was called
   return formatTscnValue(String(value));
 }
 

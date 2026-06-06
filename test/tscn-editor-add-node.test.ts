@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addNode, canSerializeProperty } from '../src/tscn-editor.js';
+import { addNode, canSerializeProperty, formatPropertyValue } from '../src/tscn-editor.js';
 import type { AddNodeParams } from '../src/tscn-editor.js';
 
 const SIMPLE_SCENE = `[gd_scene load_steps=2 format=3]
@@ -40,10 +40,15 @@ describe('canSerializeProperty', () => {
     expect(canSerializeProperty({ text: 'hello' })).toBe(true);
   });
 
-  it('rejects arrays', () => {
-    expect(canSerializeProperty([1, 2, 3])).toBe(false);
-    expect(canSerializeProperty([])).toBe(false);
-    expect(canSerializeProperty(['a'])).toBe(false);
+  it('allows arrays of primitives', () => {
+    expect(canSerializeProperty([1, 2, 3])).toBe(true);
+    expect(canSerializeProperty([])).toBe(true);
+    expect(canSerializeProperty(['a'])).toBe(true);
+  });
+
+  it('rejects arrays with nested objects', () => {
+    expect(canSerializeProperty([{ x: 1 }])).toBe(false);
+    expect(canSerializeProperty([[1, 2]])).toBe(false);
   });
 
   it('rejects nested objects', () => {
@@ -141,10 +146,10 @@ describe('addNode', () => {
     expect(result.scene).toContain('modulate = Color(1, 0, 0, 1)');
   });
 
-  it('returns fallback=true for unsupported property types (arrays)', () => {
+  it('serializes array properties of primitives', () => {
     const result = addNode(SIMPLE_SCENE, {
       parent: '.',
-      name: 'BadNode',
+      name: 'ArrNode',
       type: 'Node2D',
       properties: {
         items: [1, 2, 3],
@@ -152,9 +157,8 @@ describe('addNode', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.fallback).toBe(true);
-    // No scene modification when falling back
-    expect(result.scene).toBeUndefined();
+    expect(result.fallback).toBe(false);
+    expect(result.scene).toContain('items = [1, 2, 3]');
   });
 
   it('returns fallback=true for nested object properties', () => {
@@ -276,5 +280,78 @@ describe('addNode', () => {
 
     expect(result.success).toBe(true);
     expect(result.scene).toContain('metadata = null');
+  });
+});
+
+describe('formatPropertyValue', () => {
+  it('formats Vector2 from {x, y}', () => {
+    expect(formatPropertyValue({ x: 10, y: 20 })).toBe('Vector2(10, 20)');
+  });
+
+  it('formats Vector3 from {x, y, z}', () => {
+    expect(formatPropertyValue({ x: 1, y: 2, z: 3 })).toBe('Vector3(1, 2, 3)');
+  });
+
+  it('formats Rect2 from {x, y, w, h}', () => {
+    expect(formatPropertyValue({ x: 0, y: 0, w: 100, h: 50 })).toBe('Rect2(0, 0, 100, 50)');
+  });
+
+  it('formats Color from {r, g, b}', () => {
+    expect(formatPropertyValue({ r: 1, g: 0, b: 0 })).toBe('Color(1, 0, 0, 1)');
+  });
+
+  it('formats Color with alpha from {r, g, b, a}', () => {
+    expect(formatPropertyValue({ r: 0.5, g: 0.5, b: 0.5, a: 0.8 })).toBe('Color(0.5, 0.5, 0.5, 0.8)');
+  });
+
+  it('uses _type override for Vector2i', () => {
+    expect(formatPropertyValue({ x: 10, y: 20, _type: 'Vector2i' })).toBe('Vector2i(10, 20)');
+  });
+
+  it('uses _type override for Rect2i', () => {
+    expect(formatPropertyValue({ x: 0, y: 0, w: 100, h: 50, _type: 'Rect2i' })).toBe('Rect2i(0, 0, 100, 50)');
+  });
+
+  it('uses _type override for Vector3i', () => {
+    expect(formatPropertyValue({ x: 1, y: 2, z: 3, _type: 'Vector3i' })).toBe('Vector3i(1, 2, 3)');
+  });
+
+  it('formats Array of numbers', () => {
+    expect(formatPropertyValue([1, 2, 3])).toBe('[1, 2, 3]');
+  });
+
+  it('formats Array of strings', () => {
+    expect(formatPropertyValue(['a', 'b'])).toBe('["a", "b"]');
+  });
+
+  it('formats Array of booleans', () => {
+    expect(formatPropertyValue([true, false])).toBe('[true, false]');
+  });
+
+  it('formats Rect2 before Vector3 when both w and z present', () => {
+    // Rect2 pattern takes priority when w/h are present
+    expect(formatPropertyValue({ x: 0, y: 0, w: 100, h: 50, z: 3 })).toBe('Rect2(0, 0, 100, 50)');
+  });
+
+  it('uses _type Color override', () => {
+    expect(formatPropertyValue({ r: 1, g: 0, b: 0, a: 0.5, _type: 'Color' })).toBe('Color(1, 0, 0, 0.5)');
+  });
+});
+
+describe('canSerializeProperty (extended)', () => {
+  it('allows arrays of primitives', () => {
+    expect(canSerializeProperty([1, 2, 3])).toBe(true);
+    expect(canSerializeProperty(['a', 'b'])).toBe(true);
+    expect(canSerializeProperty([true, false])).toBe(true);
+  });
+
+  it('rejects arrays with nested objects', () => {
+    expect(canSerializeProperty([{ x: 1 }])).toBe(false);
+    expect(canSerializeProperty([[1, 2]])).toBe(false);
+  });
+
+  it('allows objects with _type field', () => {
+    expect(canSerializeProperty({ x: 10, y: 20, _type: 'Vector2i' })).toBe(true);
+    expect(canSerializeProperty({ x: 0, y: 0, w: 100, h: 50, _type: 'Rect2i' })).toBe(true);
   });
 });
