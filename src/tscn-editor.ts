@@ -9,6 +9,13 @@ export interface SceneEditResult {
   scene?: string;
 }
 
+export interface ResourceAddResult {
+  success: boolean;
+  message: string;
+  id: string;
+  scene?: string;
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function normalizeLines(content: string): string[] {
@@ -357,7 +364,7 @@ export function setNodeScript(
       if (idMatch) {
         const raw = idMatch[1]!;
         const num = Number(raw);
-        extId = !isNaN(num) && raw !== '' ? num : raw;
+        extId = Number.isFinite(num) && raw !== '' ? num : raw;
         break;
       }
     }
@@ -571,7 +578,7 @@ export function findInstanceNode(
 
     const rawInstId = instanceMatch[1]!;
     const numericInstId = Number(rawInstId);
-    const instanceId: string | number = !isNaN(numericInstId) && rawInstId !== '' ? numericInstId : rawInstId;
+    const instanceId: string | number = Number.isFinite(numericInstId) && rawInstId !== '' ? numericInstId : rawInstId;
     const sourcePath = extMap.get(instanceId);
     if (!sourcePath) return null;
 
@@ -603,7 +610,7 @@ function findMaxExtResourceId(lines: string[]): number {
     if (m) {
       const id = Number(m[1]);
       // Only consider numeric IDs for max calculation; string UIDs are skipped
-      if (!isNaN(id) && m[1] !== '' && id > maxId) maxId = id;
+      if (Number.isFinite(id) && m[1] !== '' && id > maxId) maxId = id;
     }
   }
   return maxId;
@@ -669,7 +676,7 @@ function remapExtResourceIds(
     if (!idMatch) return line;
     const rawId = Number(idMatch[1]);
     // Only remap numeric IDs; string UIDs are left as-is
-    if (isNaN(rawId) || idMatch[1] === '') return line;
+    if (!Number.isFinite(rawId) || idMatch[1] === '') return line;
     const oldId = rawId;
     const newId = nextId++;
     idMap.set(oldId, newId);
@@ -1031,4 +1038,173 @@ export function detachInstance(
   }
 
   return cleanResult.join('\n');
+}
+
+// ── Resource add helpers ─────────────────────────────────────────────────────
+
+/**
+ * Increment load_steps in [gd_scene] header by 1.
+ * If no load_steps attribute exists, adds load_steps=2.
+ */
+function incrementLoadSteps(lines: string[]): void {
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i]!.trim();
+    if (!trimmed.startsWith('[gd_scene')) continue;
+    if (trimmed.includes('load_steps=')) {
+      lines[i] = lines[i]!.replace(/load_steps=\d+/, (m) => {
+        const n = parseInt(m.split('=')[1]!);
+        return `load_steps=${n + 1}`;
+      });
+    } else {
+      // Insert load_steps=2 before the closing bracket
+      lines[i] = lines[i]!.replace(']', ' load_steps=2]');
+    }
+    return;
+  }
+}
+
+/**
+ * Add an external resource to a .tscn scene.
+ * Deduplicates by path — if an ext_resource with the same path already exists,
+ * returns the existing id without adding a duplicate or incrementing load_steps.
+ */
+export function addExtResource(
+  tscnContent: string,
+  type: string,
+  resourcePath: string,
+): ResourceAddResult {
+  const lines = normalizeLines(tscnContent);
+
+  // 1. Check for existing ext_resource with same path (dedup)
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('[ext_resource')) continue;
+    if (trimmed.includes(`path="${resourcePath}"`)) {
+      const idMatch = trimmed.match(/\bid="([^"]+)"/);
+      if (idMatch) {
+        return {
+          success: true,
+          message: `ext_resource for ${resourcePath} already exists`,
+          id: idMatch[1]!,
+        };
+      }
+    }
+  }
+
+  // 2. Find max numeric id among all ext_resource entries
+  const maxId = findMaxExtResourceId(lines);
+  const newId = maxId + 1;
+
+  // 3. Insert after last ext_resource line (or after header if none)
+  let insertAt = 0;
+  let foundExt = false;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i]!.trim().startsWith('[ext_resource')) {
+      insertAt = i + 1;
+      foundExt = true;
+      break;
+    }
+  }
+  if (!foundExt) {
+    // Insert after [gd_scene ...] header line
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i]!.trim().startsWith('[gd_scene')) {
+        insertAt = i + 1;
+        break;
+      }
+    }
+  }
+
+  const newLine = `[ext_resource type="${escapeTscnAttr(type)}" path="${escapeTscnAttr(resourcePath)}" id="${newId}"]`;
+  lines.splice(insertAt, 0, newLine);
+
+  // 4. Update load_steps
+  incrementLoadSteps(lines);
+
+  return {
+    success: true,
+    message: `Added ext_resource type="${type}" path="${resourcePath}" id="${newId}"`,
+    id: String(newId),
+    scene: lines.join('\n'),
+  };
+}
+
+/**
+ * Add a sub resource to a .tscn scene.
+ * Generates an id in the format `Type_N` where N is the next available suffix for that type.
+ */
+export function addSubResource(
+  tscnContent: string,
+  type: string,
+  props: Record<string, string>,
+): ResourceAddResult {
+  const lines = normalizeLines(tscnContent);
+
+  // 1. Find max numeric suffix among sub_resource entries with the same type
+  let maxSuffix = 0;
+  const typePattern = `[sub_resource type="${type}" id="${type}_`;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('[sub_resource')) continue;
+    // Match id="Type_N" pattern
+    const idMatch = trimmed.match(/\bid="([^"]+)"/);
+    if (idMatch) {
+      const id = idMatch[1]!;
+      if (id.startsWith(`${type}_`)) {
+        const suffixStr = id.slice(type.length + 1);
+        const suffix = parseInt(suffixStr);
+        if (Number.isFinite(suffix) && suffix > maxSuffix) {
+          maxSuffix = suffix;
+        }
+      }
+    }
+  }
+
+  const newId = `${type}_${maxSuffix + 1}`;
+
+  // 2. Build sub_resource section
+  const headerLine = `[sub_resource type="${escapeTscnAttr(type)}" id="${newId}"]`;
+  const propLines: string[] = [];
+  for (const [key, value] of Object.entries(props)) {
+    propLines.push(`${key} = ${formatTscnValue(value)}`);
+  }
+
+  // 3. Insert before first [node] section, after last [sub_resource]
+  let insertAt = 0;
+  let lastSubResourceIdx = -1;
+  let firstNodeIdx = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i]!.trim();
+    if (trimmed.startsWith('[sub_resource')) {
+      lastSubResourceIdx = i;
+    }
+    if (firstNodeIdx === -1 && trimmed.startsWith('[node')) {
+      firstNodeIdx = i;
+    }
+  }
+
+  if (lastSubResourceIdx >= 0) {
+    // After last sub_resource section end
+    insertAt = findSectionEnd(lines, lastSubResourceIdx);
+  } else if (firstNodeIdx >= 0) {
+    // Before first node section
+    insertAt = firstNodeIdx;
+  } else {
+    // Append at end
+    insertAt = lines.length;
+  }
+
+  const sectionLines = [headerLine, ...propLines];
+  lines.splice(insertAt, 0, ...sectionLines);
+
+  // 4. Update load_steps
+  incrementLoadSteps(lines);
+
+  return {
+    success: true,
+    message: `Added sub_resource type="${type}" id="${newId}"`,
+    id: newId,
+    scene: lines.join('\n'),
+  };
 }
