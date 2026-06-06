@@ -211,7 +211,8 @@ ${errAction}
 }
 
 function serializeGdValue(value: unknown): string {
-  if (typeof value === 'string') return `"${value.replace(/"/g, '\\"')}"`;
+  // I-03: Escape backslash, quote, newline for GDScript string safety
+  if (typeof value === 'string') return `"${value.replace(/\\/g, '\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
   if (typeof value === 'number') return String(value);
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (value === null || value === undefined) return 'null';
@@ -241,32 +242,38 @@ function serializeGdValue(value: unknown): string {
       if (t === 'Color') {
         return `Color(${obj.r ?? 1}, ${obj.g ?? 1}, ${obj.b ?? 1}, ${obj.a ?? 1})`;
       }
-      // Unknown _type: fall through to auto-inference
+      // I-01: Unknown _type intentionally falls through to auto-inference.
+      // Users must use a known type or rely on auto-detection.
+      // Unknown _type
     }
 
     // Color: has r, g, b
-    if (keys.includes('r') && keys.includes('g') && keys.includes('b')) {
-      const a = obj.a ?? 1;
+    if (keys.includes('r') && keys.includes('g') && keys.includes('b')
+      && typeof obj.r === 'number' && typeof obj.g === 'number' && typeof obj.b === 'number') {
+      const a = typeof obj.a === 'number' ? obj.a : 1;
       return `Color(${obj.r}, ${obj.g}, ${obj.b}, ${a})`;
     }
 
     // Rect2: has x, y, w, h
-    if (keys.includes('w') && keys.includes('h') && keys.includes('x') && keys.includes('y')) {
+    if (keys.includes('w') && keys.includes('h') && keys.includes('x') && keys.includes('y') && !keys.includes('z')) {
       return `Rect2(${obj.x}, ${obj.y}, ${obj.w}, ${obj.h})`;
     }
 
     // Vector3: has x, y, z
-    if (keys.includes('x') && keys.includes('y') && keys.includes('z')) {
+    if (keys.includes('x') && keys.includes('y') && keys.includes('z')
+      && typeof obj.x === 'number' && typeof obj.y === 'number' && typeof obj.z === 'number') {
       return `Vector3(${obj.x}, ${obj.y}, ${obj.z})`;
     }
 
     // Vector2: has x, y
-    if (keys.includes('x') && keys.includes('y')) {
+    if (keys.includes('x') && keys.includes('y')
+      && typeof obj.x === 'number' && typeof obj.y === 'number') {
       return `Vector2(${obj.x}, ${obj.y})`;
     }
 
-    // Fallback: JSON stringify
-    return JSON.stringify(value);
+    // C-02: Strip _type from fallback to avoid leaking meta-field into GDScript
+    const { _type: _ignored, ...sanitized } = obj;
+    return JSON.stringify(sanitized);
   }
 
   return String(value);

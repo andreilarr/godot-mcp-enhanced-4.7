@@ -1,4 +1,4 @@
-﻿// src/tscn-editor.ts — Line-based .tscn scene file editor
+// src/tscn-editor.ts — Line-based .tscn scene file editor
 //
 // I-10: Non-null assertions (!) on regex match groups are guarded by preceding
 // `if (match)` checks — see tscn-parser.ts header for the full rationale.
@@ -1259,7 +1259,7 @@ export function canSerializeProperty(value: unknown): boolean {
  * - Array of primitives → [v1, v2, ...]
  * - Object with _type → uses _type as constructor name
  * - Plain object with r,g,b → Color(r, g, b, a)
- * - Plain object with x,y,w,h → Rect2(x, y, w, h)
+ * - Plain object with x,y,w,h (no z) → Rect2(x, y, w, h)
  * - Plain object with x,y,z → Vector3(x, y, z)
  * - Plain object with x,y → Vector2(x, y)
  * - Other objects → JSON stringified and auto-quoted
@@ -1289,11 +1289,14 @@ export function formatPropertyValue(value: unknown): string {
       if (t === 'Color') {
         return `Color(${obj.r ?? 1}, ${obj.g ?? 1}, ${obj.b ?? 1}, ${obj.a ?? 1})`;
       }
-      // Unknown _type: fall through to auto-inference
+      // I-01: Unknown _type intentionally falls through to auto-inference.
+      // Users must use a known type or rely on auto-detection.
+      // Unknown _type
     }
     // Color: has r, g, b
-    if (keys.includes('r') && keys.includes('g') && keys.includes('b')) {
-      const a = obj.a ?? 1;
+    if (keys.includes('r') && keys.includes('g') && keys.includes('b')
+      && typeof obj.r === 'number' && typeof obj.g === 'number' && typeof obj.b === 'number') {
+      const a = typeof obj.a === 'number' ? obj.a : 1;
       return `Color(${obj.r}, ${obj.g}, ${obj.b}, ${a})`;
     }
     // Rect2: has x, y, w, h
@@ -1301,15 +1304,18 @@ export function formatPropertyValue(value: unknown): string {
       return `Rect2(${obj.x}, ${obj.y}, ${obj.w}, ${obj.h})`;
     }
     // Vector3: has x, y, z
-    if (keys.includes('x') && keys.includes('y') && keys.includes('z')) {
+    if (keys.includes('x') && keys.includes('y') && keys.includes('z')
+      && typeof obj.x === 'number' && typeof obj.y === 'number' && typeof obj.z === 'number') {
       return `Vector3(${obj.x}, ${obj.y}, ${obj.z})`;
     }
     // Vector2: has x, y
-    if (keys.includes('x') && keys.includes('y')) {
+    if (keys.includes('x') && keys.includes('y')
+      && typeof obj.x === 'number' && typeof obj.y === 'number') {
       return `Vector2(${obj.x}, ${obj.y})`;
     }
-    // Fallback: JSON stringify and quote
-    return formatTscnValue(JSON.stringify(value));
+    // C-02: Strip _type from fallback to avoid leaking meta-field into .tscn
+    const { _type: _ignored, ...sanitized } = obj;
+    return formatTscnValue(JSON.stringify(sanitized));
   }
   // Other types — should not reach here if canSerializeProperty was called
   return formatTscnValue(String(value));

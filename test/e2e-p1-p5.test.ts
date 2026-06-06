@@ -8,7 +8,7 @@
  * P5: validate - load() test_helper.gd
  */
 
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, writeFileSync, existsSync, rmSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -29,9 +29,21 @@ const SCENE_2D = resolve(E2E_DIR, 'scenes', 'test_2d.tscn');
 const SCREENSHOT_2D = resolve(E2E_DIR, 'test_2d_screenshot.png');
 const SCREENSHOT_3D = resolve(E2E_DIR, 'test_3d_screenshot.png');
 
+// Snapshot original scene files for restoration after tests
+let _snap3d: string;
+let _snap2d: string;
+
+beforeAll(() => {
+  _snap3d = readFileSync(SCENE_3D, "utf-8");
+  _snap2d = readFileSync(SCENE_2D, "utf-8");
+});
+
 // Cleanup
 
 afterAll(() => {
+  // C-01: Restore scene files to prevent fixture pollution
+  if (_snap3d) writeFileSync(SCENE_3D, _snap3d, "utf-8");
+  if (_snap2d) writeFileSync(SCENE_2D, _snap2d, "utf-8");
   for (const f of [SCREENSHOT_2D, SCREENSHOT_3D]) {
     if (existsSync(f)) rmSync(f, { force: true });
   }
