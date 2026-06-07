@@ -158,7 +158,7 @@ func _initialize():
 \t_mcp_done()
 `;
 
-  const result = await executeGdscript({ godotPath: godot, projectPath, code: script, timeout: 30 });
+  const result = await executeGdscriptTrusted({ godotPath: godot, projectPath, code: script, timeout: 30 });
   return parseGdscriptResult(result, [], (_msg) => 'ASSERTION_FAILED');
 }
 
