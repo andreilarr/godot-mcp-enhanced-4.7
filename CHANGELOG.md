@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-06-07
+
+### Fixed
+
+- **C-01**: `parseTscn` 中 `rootNode` 多根节点覆盖保护 — 防止畸形 .tscn 文件解析错误
+- **C-02**: `deleteNode` 删除节点后递减 `load_steps`，与 `addNode`/`detachInstance` 行为一致
+- **C-03**: `addNode` 对含路径的 parent 参数使用 `findNodeSectionLine` 精确匹配，避免同名节点歧义
+- **C-04**: 沙箱安全限制文档扩展——列出已知绕过向量（字符串拼接、变量间接调用）和适用场景
+- **I-02**: `EditorConnection` 构造函数增加 `0.0.0.0` / `::` 拦截，防止绑定所有接口
+- **I-04**: `normalizeArgs` 递归深度超过 5 层时输出 log 警告
+- **I-06**: `remapSubResourceIds` / `remapSubResourceRefs` 支持 Godot 4.x 字符串 UID（如 `StyleBoxFlat_xb1kx`）
+- **I-07**: `confirm_and_execute` 检测 args 截断标记，拒绝执行不完整代码并返回 `ARGS_TRUNCATED` 错误
+- **I-08**: editor 模式 `_duration_ms` 追加前检查是否已存在，避免重复输出
+
 ### Security
 
 - **SEC-REV-01**: `isPathInAllowedRoots` 策略从 deny-by-default 恢复为 allow-by-default。v0.15.0 的 C-SEC-01 引入 deny-by-default（未配置时仅允许 `process.cwd()`），但 `npx` 启动场景下 `cwd` 是缓存目录而非用户项目，导致合法用户被阻断且无恢复路径。现改为：未配置 `ALLOWED_PROJECT_PATHS` 时允许所有路径并记录 info 日志；用户可通过设置 `ALLOWED_PROJECT_PATHS=/path1;/path2` 选择性启用白名单限制
