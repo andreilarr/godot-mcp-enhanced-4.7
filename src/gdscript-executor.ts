@@ -412,14 +412,33 @@ export function wrapSnippetAsNode(code: string, resultMarker = MARKER_RESULT_SHA
   }
   const hasUserInit = /func _mcp_user_init\(/.test(declarationLines.join('\n'));
 
+  // Node context variant: uses get_tree().root instead of self.root
+  const GD_MCP_GET_ROOT_AS_NODE: readonly string[] = [
+    'func _mcp_get_root() -> Node:',
+    '\tif _mcp_root != null:',
+    '\t\treturn _mcp_root',
+    '\tvar _tree = get_tree()',
+    '\tif _tree != null and _tree.root != null:',
+    '\t\t_mcp_root = _tree.root',
+    '\t\treturn _mcp_root',
+    '\treturn null',
+  ];
+
   // Build via array join — prevents JS template interpolation of user code
   const nodeLines: string[] = [
     'extends Node',
     '## MCP autoload snippet mode — runs as Node child in loader scene',
     '',
     'var _mcp_outputs: Array = []',
+    'var _mcp_root: Node = null',
+    '',
+    ...GD_MCP_GET_ROOT_AS_NODE,
     '',
     ...GD_MCP_OUTPUT,
+    '',
+    'func _mcp_done() -> void:',
+    '\tprint("' + resultMarker + '" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))',
+    '\tget_tree().quit(0)',
   ];
 
   // User code — safe: array join does not interpolate dollar-brace or backticks
@@ -438,10 +457,7 @@ export function wrapSnippetAsNode(code: string, resultMarker = MARKER_RESULT_SHA
   if (hasUserInit) {
     nodeLines.push('\t_mcp_user_init()');
   }
-  nodeLines.push(
-    '\tprint("' + resultMarker + '" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))',
-    '\tget_tree().quit(0)',
-  );
+  nodeLines.push('\t_mcp_done()');
 
   return nodeLines.join('\n') + '\n';
 }

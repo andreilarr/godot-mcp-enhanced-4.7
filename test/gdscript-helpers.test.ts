@@ -31,7 +31,9 @@ describe('GDScript helpers - baseline snapshots', () => {
     expect(result).toContain('extends Node');
     expect(result).toContain('func _mcp_output');
     expect(result).toContain('var _mcp_outputs');
-    expect(result).not.toContain('func _mcp_get_root');
+    expect(result).toContain('func _mcp_get_root');
+    expect(result).toContain('func _mcp_done');
+    expect(result).toContain('_tree.root');
     expect(result).not.toContain('func _mcp_get_node');
     expect(result).toMatchSnapshot('wrapSnippetAsNode-var-x');
   });

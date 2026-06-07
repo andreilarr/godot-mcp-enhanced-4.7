@@ -157,14 +157,27 @@ exports[`GDScript helpers - baseline snapshots > wrapSnippetAsNode("var x = 1") 
 ## MCP autoload snippet mode — runs as Node child in loader scene
 
 var _mcp_outputs: Array = []
+var _mcp_root: Node = null
+
+func _mcp_get_root() -> Node:
+	if _mcp_root != null:
+		return _mcp_root
+	var _tree = get_tree()
+	if _tree != null and _tree.root != null:
+		_mcp_root = _tree.root
+		return _mcp_root
+	return null
 
 func _mcp_output(key: String, value: Variant) -> void:
 	_mcp_outputs.append({"key": key, "value": str(value)})
 
+func _mcp_done() -> void:
+	print("___MCP_RESULT___" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
+	get_tree().quit(0)
+
 var x = 1
 
 func _initialize() -> void:
-	print("___MCP_RESULT___" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
-	get_tree().quit(0)
+	_mcp_done()
 "
 `;
