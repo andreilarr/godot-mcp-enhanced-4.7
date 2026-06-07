@@ -225,11 +225,12 @@ describe('isPathInAllowedRoots', () => {
     process.env = originalEnv;
   });
 
-  it('should restrict to process.cwd() when no whitelist set (deny-by-default)', () => {
-    // After security hardening: unconfigured = restricted to cwd, not allow-all
+  it('should allow all paths when no whitelist set (allow-by-default)', () => {
+    // After v0.17.0: unconfigured = allow all paths (not deny-by-default)
+    // This prevents users from being blocked when env vars aren't passed through
     expect(isPathInAllowedRoots(process.cwd())).toBe(true);
-    // A path that is definitely outside cwd should be denied
-    expect(isPathInAllowedRoots('/definitely/outside/path')).toBe(false);
+    expect(isPathInAllowedRoots('/definitely/outside/path')).toBe(true);
+    expect(isPathInAllowedRoots('/any/other/path')).toBe(true);
   });
 
   it('should allow GODOT_MCP_UNRESTRICTED to bypass', () => {
@@ -250,13 +251,13 @@ describe('isPathInAllowedRoots', () => {
     expect(isPathInAllowedRoots(resolve(tmp, 'subdir'))).toBe(true);
   });
 
-  it('should print warning only once when no whitelist set', () => {
-    const warnSpy = vi.spyOn(getLogger(), 'warn').mockImplementation(() => {});
+  it('should log info only once when no whitelist set', () => {
+    const infoSpy = vi.spyOn(getLogger(), 'info').mockImplementation(() => {});
     _resetPathAllowWarned();
     isPathInAllowedRoots('/a');
     isPathInAllowedRoots('/b');
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    warnSpy.mockRestore();
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+    infoSpy.mockRestore();
   });
 
   it('should support semicolon-separated multiple paths in whitelist', () => {

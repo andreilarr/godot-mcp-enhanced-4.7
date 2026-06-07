@@ -78,11 +78,11 @@ describe('scanGdscriptSandbox', () => {
     expect(warnings[0]).toContain('Directory removal');
   });
 
-  it('should detect FileAccess open with WRITE by default', () => {
+  it('should detect FileAccess.open (any mode) by default', () => {
     delete process.env.GODOT_MCP_SANDBOX;
     const warnings = scanGdscriptSandbox('FileAccess.open("user://data.txt", FileAccess.WRITE)');
     expect(warnings.length).toBeGreaterThan(0);
-    expect(warnings[0]).toContain('File write access');
+    expect(warnings[0]).toContain('File access');
   });
 
   it('should detect Engine.set_singleton by default', () => {

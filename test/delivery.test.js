@@ -6,6 +6,7 @@ import { tmpdir } from 'os';
 
 // ─── Mock gdscript-executor ────────────────────────────────────────────────
 vi.mock('../src/gdscript-executor.js', () => ({
+  scanGdscriptSandbox: vi.fn(() => []),
   executeGdscript: vi.fn(async () => ({
     success: true,
     compile_success: true,

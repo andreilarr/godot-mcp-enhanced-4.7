@@ -62,15 +62,20 @@ func _mcp_load_main_scene() -> void:
 func _mcp_output(key: String, value: Variant) -> void:
 	_mcp_outputs.append({"key": key, "value": str(value)})
 
+func _mcp_done() -> void:
+	print("___MCP_RESULT___" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
+	if Engine.get_main_loop() == self:
+		quit(0)
+
 func my_func():
 	return 42
 var result = my_func()
 
 func _initialize():
 	_mcp_load_main_scene()
-		print("___MCP_RESULT___" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
-		if Engine.get_main_loop() == self:
-			quit(0)
+	print("___MCP_RESULT___" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
+	if Engine.get_main_loop() == self:
+		quit(0)
 "
 `;
 
@@ -136,13 +141,18 @@ func _mcp_load_main_scene() -> void:
 func _mcp_output(key: String, value: Variant) -> void:
 	_mcp_outputs.append({"key": key, "value": str(value)})
 
+func _mcp_done() -> void:
+	print("___MCP_RESULT___" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
+	if Engine.get_main_loop() == self:
+		quit(0)
+
 var x = 1
 
 func _initialize():
 	_mcp_load_main_scene()
-		print("___MCP_RESULT___" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
-		if Engine.get_main_loop() == self:
-			quit(0)
+	print("___MCP_RESULT___" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
+	if Engine.get_main_loop() == self:
+		quit(0)
 "
 `;
 

@@ -13,6 +13,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 // Mock gdscript-executor so stress test handler can run without Godot
 const _capturedScripts = [];
 vi.mock('../src/gdscript-executor.js', () => ({
+  scanGdscriptSandbox: vi.fn(() => []),
   executeGdscript: vi.fn(async (opts) => {
     _capturedScripts.push(opts.code);
     return {

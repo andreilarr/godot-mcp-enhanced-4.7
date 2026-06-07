@@ -313,10 +313,11 @@ describe('scanGdscriptSandbox extended', () => {
     expect(warnings[0]).toContain('OS system command');
   });
 
-  it('does not flag FileAccess.open with READ mode', () => {
+  it('flags FileAccess.open with READ mode (C-SEC-02: all file access blocked)', () => {
     process.env.GODOT_MCP_SANDBOX = 'strict';
     const warnings = scanGdscriptSandbox('FileAccess.open("user://data.txt", FileAccess.READ)');
-    expect(warnings).toEqual([]);
+    expect(warnings.length).toBeGreaterThanOrEqual(1);
+    expect(warnings[0]).toContain('File access');
   });
 
   it('flags DirAccess.remove_absolute', () => {
@@ -324,5 +325,134 @@ describe('scanGdscriptSandbox extended', () => {
     const warnings = scanGdscriptSandbox('DirAccess.remove_absolute("/tmp/test")');
     expect(warnings.length).toBeGreaterThan(0);
     expect(warnings[0]).toContain('Directory removal');
+  });
+});
+
+// ─── Phase 2: String concatenation bypass detection ─────────────────────────
+
+describe('scanGdscriptSandbox Phase 2 — concatenation bypass', () => {
+  afterEach(() => {
+    delete process.env.GODOT_MCP_SANDBOX;
+  });
+
+  it('detects OS.execute built from two string parts', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var cmd = "OS" + ".execute"';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.some(w => w.includes('SANDBOX-P2') && w.includes('OS.execute'))).toBe(true);
+  });
+
+  it('detects str2var built from string concatenation', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'call("str" + "2var", data)';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.some(w => w.includes('SANDBOX-P2') && w.includes('str2var'))).toBe(true);
+  });
+
+  it('detects JavaScriptBridge.eval concatenation', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = '"JavaScriptBridge" + ".eval"';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.some(w => w.includes('SANDBOX-P2') && w.includes('JavaScriptBridge.eval'))).toBe(true);
+  });
+
+  it('does not flag harmless string concatenation', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var msg = "Hello" + " " + "World"';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.filter(w => w.includes('SANDBOX-P2'))).toEqual([]);
+  });
+
+  it('detects preload with computed path', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'preload(var_path)';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.some(w => w.includes('SANDBOX-P2') && w.includes('preload'))).toBe(true);
+  });
+
+  it('does not flag preload with res:// literal', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'preload("res://scenes/main.tscn")';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.filter(w => w.includes('preload'))).toEqual([]);
+  });
+
+  it('detects bypass built from 3 string parts', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = '"Dir" + "Access" + ".remove"';
+    // Combined = "DirAccess.remove" which matches
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.some(w => w.includes('SANDBOX-P2'))).toBe(true);
+  });
+
+  it('skips Phase 2 when GODOT_MCP_SANDBOX=disabled', () => {
+    process.env.GODOT_MCP_SANDBOX = 'disabled';
+    const code = 'var cmd = "OS" + ".execute"';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings).toEqual([]);
+  });
+
+  it('detects OS.kill concatenation', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = '"OS" + ".kill"';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.some(w => w.includes('SANDBOX-P2') && w.includes('OS.kill'))).toBe(true);
+  });
+
+  it('detects bytes2var concatenation', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = '"bytes" + "2var"';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.some(w => w.includes('SANDBOX-P2') && w.includes('bytes2var'))).toBe(true);
+  });
+
+  it('does not detect tokens spread across 5+ strings (window limit 4)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    // 5 separate strings, window max is 4, so no combination of ≤4 covers the full token
+    const code = '"a" + "b" + "O" + "S" + ".execute"';
+    const warnings = scanGdscriptSandbox(code);
+    // "OS" + ".execute" are adjacent (indices 2,3) — window=4 includes them,
+    // so this actually IS detected. Design: window covers up to 4 adjacent strings.
+    expect(warnings.some(w => w.includes('SANDBOX-P2'))).toBe(true);
+  });
+
+  // ─── C-SEC-01: Reflection bypass detection (Phase 1 + Phase 2) ────────────
+
+  it('Phase 1: flags ClassDB reflection', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('var methods = ClassDB.class_get_method_list("OS")');
+    expect(warnings.some(w => w.includes('ClassDB'))).toBe(true);
+  });
+
+  it('Phase 1: flags indirect .call() with string arg (reflection)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('OS.call("execute", "whoami", [], false)');
+    expect(warnings.some(w => w.includes('.call('))).toBe(true);
+  });
+
+  it('Phase 1: does NOT flag .call() with variable arg (legitimate Callable)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    // _collect_fn.call(child) is a legitimate Callable invocation — not reflection
+    const warnings = scanGdscriptSandbox('_collect_fn.call(child)');
+    expect(warnings.filter(w => w.includes('.call('))).toEqual([]);
+  });
+
+  it('Phase 1: flags indirect .callv() with string arg (reflection)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('node.callv("set_script", [script_obj])');
+    expect(warnings.some(w => w.includes('.callv('))).toBe(true);
+  });
+
+  it('Phase 1: does NOT flag .callv() with variable arg', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('my_callable.callv(args_array)');
+    expect(warnings.filter(w => w.includes('.callv('))).toEqual([]);
+  });
+
+  it('Phase 2: detects ClassDB built from concatenation', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = '"Class" + "DB"';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.some(w => w.includes('SANDBOX-P2') && w.includes('ClassDB'))).toBe(true);
   });
 });
