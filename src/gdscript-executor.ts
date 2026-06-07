@@ -354,12 +354,18 @@ export function wrapSnippet(code: string, resultMarker = MARKER_RESULT_SHARED): 
   // Rename user's `var root` → `var _mcp_user_root` and update references.
   const ST_RESERVED = ['root'];
   for (const reserved of ST_RESERVED) {
-    const declPattern = new RegExp(`^(var\\s+)${reserved}(\\s*=)`, 'g');
+    // Step 1: Rename declaration `var root =` → `var _mcp_user_root =`
+    // Also covers `var root: Type = ...` and `var root` (no initializer)
+    const declPattern = new RegExp(`^(var\\s+)${reserved}\\b`, 'g');
     for (let i = 0; i < declarationLines.length; i++) {
-      declarationLines[i] = declarationLines[i]!.replace(declPattern, `$1_mcp_user_${reserved}$2`);
+      declarationLines[i] = declarationLines[i]!.replace(declPattern, `$1_mcp_user_${reserved}`);
     }
-    // Update references in statements: standalone `root` but not `_mcp_root`, `self.root`, `.root`, `root_node` etc.
+    // Step 2: Update references in both declarationLines and statementLines.
+    // _mcp_user_root contains 'root' but is preceded by '_' so refPattern won't match it.
     const refPattern = new RegExp(`(?<![_.\\w])\\b${reserved}\\b(?!\\w)`, 'g');
+    for (let i = 0; i < declarationLines.length; i++) {
+      declarationLines[i] = declarationLines[i]!.replace(refPattern, `_mcp_user_${reserved}`);
+    }
     for (let i = 0; i < statementLines.length; i++) {
       statementLines[i] = statementLines[i]!.replace(refPattern, `_mcp_user_${reserved}`);
     }

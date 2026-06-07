@@ -138,4 +138,23 @@ describe('BUG-2: var root naming conflict in wrapSnippet', () => {
     expect(result).toContain('var my_data = 42');
     expect(result).toContain('var root_node = _mcp_get_root()');
   });
+
+  it('renames root references in declaration lines (var x = root.xxx)', () => {
+    const result = wrapSnippet('var root = _mcp_get_root()\nvar child_count = root.get_child_count()\nprint(str(child_count))');
+    expect(result).toContain('var _mcp_user_root = _mcp_get_root()');
+    expect(result).toContain('var child_count = _mcp_user_root.get_child_count()');
+  });
+
+  it('renames root references in func bodies (func that uses root)', () => {
+    const result = wrapSnippet('var root = _mcp_get_root()\nfunc get_name():\n\treturn root.name\nprint(get_name())');
+    expect(result).toContain('var _mcp_user_root = _mcp_get_root()');
+    // func body 中 root 引用也应被重命名
+    expect(result).toContain('return _mcp_user_root.name');
+  });
+
+  it('handles var root with type annotation', () => {
+    const result = wrapSnippet('var root: Node = _mcp_get_root()\nprint(root.name)');
+    expect(result).toContain('var _mcp_user_root: Node = _mcp_get_root()');
+    expect(result).toContain('print(_mcp_user_root.name)');
+  });
 });
