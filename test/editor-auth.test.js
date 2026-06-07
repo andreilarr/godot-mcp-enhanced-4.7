@@ -48,6 +48,17 @@ describe('readEditorSecret', () => {
     const result = readEditorSecret(tempDir);
     expect(result).toBe('key-abc');
   });
+
+  it('returns null when project path does not exist', () => {
+    const result = readEditorSecret(join(tmpdir(), 'nonexistent-path-xyz-999'));
+    expect(result).toBeNull();
+  });
+
+  it('returns null when .godot directory exists but key file is missing', () => {
+    mkdirSync(join(tempDir, '.godot'), { recursive: true });
+    const result = readEditorSecret(tempDir);
+    expect(result).toBeNull();
+  });
 });
 
 // ─── waitForEditorSecret ─────────────────────────────────────────────────────
