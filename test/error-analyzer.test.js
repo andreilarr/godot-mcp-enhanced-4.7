@@ -224,3 +224,47 @@ describe('error-analyzer', () => {
     });
   });
 });
+
+describe('Godot 4.6+ compatibility hints', () => {
+  it('detects get_tree() not found and adds compatibility hint', () => {
+    const output = [
+      'SCRIPT ERROR: Function \'get_tree()\' not found in base self.',
+      '  at: res://mcp_script.gd:5',
+    ];
+    const result = analyzeOutput(output);
+    expect(result.hasErrors).toBe(true);
+    const hint = result.suggestions.find(s => s.includes('self.root') && s.includes('get_tree'));
+    expect(hint).toBeDefined();
+  });
+
+  it('detects root redefined and adds compatibility hint', () => {
+    const output = [
+      'SCRIPT ERROR: Member \'root\' redefined in parent class.',
+      '  at: res://mcp_script.gd:3',
+    ];
+    const result = analyzeOutput(output);
+    expect(result.hasErrors).toBe(true);
+    const hint = result.suggestions.find(s => s.includes('root') && s.includes('SceneTree') && s.includes('冲突'));
+    expect(hint).toBeDefined();
+  });
+
+  it('does not add compatibility hint for unrelated errors', () => {
+    const output = [
+      'SCRIPT ERROR: Identifier "foo" not found in base self.',
+      '  at: res://mcp_script.gd:10',
+    ];
+    const result = analyzeOutput(output);
+    const hint = result.suggestions.find(s => s.includes('self.root') || s.includes('SceneTree.root'));
+    expect(hint).toBeUndefined();
+  });
+
+  it('matches get_tree with varied error wording', () => {
+    const output = [
+      'SCRIPT ERROR: The function get_tree() could not be found.',
+      '  at: res://mcp_script.gd:8',
+    ];
+    const result = analyzeOutput(output);
+    const hint = result.suggestions.find(s => s.includes('self.root'));
+    expect(hint).toBeDefined();
+  });
+});

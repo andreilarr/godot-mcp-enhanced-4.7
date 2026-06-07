@@ -104,6 +104,16 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     },
   },
   {
+    test: (msg) => /get_tree/.test(msg) && /not (?:be )?found/.test(msg),
+    type: 'script_error',
+    suggestion: () => 'Godot 4.6+ 兼容性提示: 在 extends SceneTree 脚本中，请使用 self.root 代替 get_tree().root，使用 quit() 代替 get_tree().quit()',
+  },
+  {
+    test: (msg) => /\broot\b/.test(msg) && /redefined/.test(msg),
+    type: 'script_error',
+    suggestion: () => "Godot 4.6+ 兼容性提示: 如果您在 extends SceneTree 脚本中，变量名 'root' 与 SceneTree.root 冲突，请改用其他名称如 scene_root 或 _root",
+  },
+  {
     test: (msg) => /texture_2d_get/.test(msg) && /null/.test(msg),
     type: 'headless_limitation',
     suggestion: () => 'SubViewport texture is null in headless mode. This is a known headless rendering limitation — the code works correctly on actual devices with a GPU. Safe to ignore when testing via run_and_verify.',
