@@ -270,10 +270,12 @@ function escapePsSingleQuote(s: string): string {
   return s.replace(/'/g, "''");
 }
 
-/** Escape single quotes for POSIX shell double-quoted strings. */
+/** Escape single quotes for POSIX shell single-quoted strings (' → '\''). */
 function escapeShellArg(s: string): string {
   return s.replace(/'/g, "'\\''");
 }
+
+const ORPHAN_SCAN_TIMEOUT_MS = 15_000;
 
 /**
  * Scan OS for orphaned Godot processes matching a project directory and kill them.
@@ -293,45 +295,90 @@ export async function killOrphanGodotProcesses(projectDir: string): Promise<numb
   if (isWin) {
     const safePath = escapePsSingleQuote(normalizedDir);
     return new Promise((resolve) => {
+      let settled = false;
       const ps = spawn('powershell', [
         '-NoProfile', '-Command',
+        // I-01 fix: use ('*'+$path+'*') instead of "*$path*" to avoid $ expansion in -like
         `$path = '${safePath}'; ` +
         `Get-CimInstance Win32_Process -Filter "Name LIKE 'Godot%'" | ` +
-        `Where-Object { $_.CommandLine -like '*--path*' -and $_.CommandLine -like "*$path*" } | ` +
+        `Where-Object { $_.CommandLine -like '*--path*' -and $_.CommandLine -like ('*' + $path + '*') } | ` +
         `Select-Object -ExpandProperty ProcessId | ForEach-Object { Write-Output $_ }`
       ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
+      // I-03 fix: 15s timeout to prevent hanging on unresponsive WMI/shell
+      const timer = setTimeout(() => {
+        if (!settled && !ps.killed) {
+          settled = true;
+          ps.kill();
+          resolve(0);
+        }
+      }, ORPHAN_SCAN_TIMEOUT_MS);
+
       let out = '';
+      let stderr = '';
       ps.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+      ps.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
       ps.on('close', () => {
+        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
         const pids = out.trim().split('\n').map(Number).filter(n => n > 0);
         for (const pid of pids) {
           try {
             spawn('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' });
           } catch { /* best effort */ }
         }
+        if (stderr) getLogger().debug('process-state', `orphan scan stderr: ${stderr.slice(0, 200)}`);
         resolve(pids.length);
       });
-      ps.on('error', () => resolve(0));
+      ps.on('error', (err) => {
+        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        getLogger().debug('process-state', `orphan scan error: ${err.message}`);
+        resolve(0);
+      });
     });
   } else {
+    // I-02 fix: use single-quoted shell argument with proper escaping
     const safeDir = escapeShellArg(normalizedDir);
     return new Promise((resolve) => {
+      let settled = false;
       const ps = spawn('sh', ['-c',
-        `pgrep -f godot | xargs -I{} sh -c 'cat /proc/{}/cmdline 2>/dev/null | tr "\\0" " " | grep -F -- "${safeDir}" && echo {}'`
+        `pgrep -f godot | xargs -I{} sh -c 'cat /proc/{}/cmdline 2>/dev/null | tr "\\0" " " | grep -F -- '${safeDir}' && echo {}'`
       ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
+      const timer = setTimeout(() => {
+        if (!settled && !ps.killed) {
+          settled = true;
+          ps.kill();
+          resolve(0);
+        }
+      }, ORPHAN_SCAN_TIMEOUT_MS);
+
       let out = '';
+      let stderr = '';
       ps.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+      ps.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
       ps.on('close', () => {
+        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
         const lines = out.trim().split('\n').filter(l => /^\d+$/.test(l.trim()));
         const pids = lines.map(Number).filter(n => n > 0);
         for (const pid of pids) {
           try { process.kill(pid, 'SIGTERM'); } catch { /* best effort */ }
         }
+        if (stderr) getLogger().debug('process-state', `orphan scan stderr: ${stderr.slice(0, 200)}`);
         resolve(pids.length);
       });
-      ps.on('error', () => resolve(0));
+      ps.on('error', (err) => {
+        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        getLogger().debug('process-state', `orphan scan error: ${err.message}`);
+        resolve(0);
+      });
     });
   }
 }

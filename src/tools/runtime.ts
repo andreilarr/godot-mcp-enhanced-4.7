@@ -177,7 +177,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     case 'stop_project': {
       if (!ctx.runningProcess) {
         // V-01 second layer: scan for orphaned Godot processes
-        const projectDir = (args.project_path as string) || ctx.projectDir || '';
+        const rawPath = args.project_path;
+        const projectDir = (typeof rawPath === 'string' && rawPath.length > 0 ? rawPath : '') || ctx.projectDir || '';
         const orphanKilled = await killOrphanGodotProcesses(projectDir);
         if (orphanKilled > 0) {
           return textResult(`Cleaned up ${orphanKilled} orphaned Godot process(es). Project directory: ${projectDir}`);
