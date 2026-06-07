@@ -4,7 +4,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { requireProjectPath, resolveWithinRoot } from '../helpers.js';
-import { executeGdscript } from '../gdscript-executor.js';
+import { executeGdscript, executeGdscriptTrusted } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, parseGdscriptResult, wrapAssertionCode, opsErrorResult, validateTimeout } from './shared.js';
 import { gdEscape } from './shared.js';
 import { batchValidateScripts } from './validation.js';
@@ -459,7 +459,9 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const maxDepth = (args.max_depth as number) || 5;
       const godot = await ctx.findGodot();
 
-      const safePath = gdEscape(scenePath);
+      // Ensure res:// prefix for load() — sandbox allows only res:// paths
+      const resPath = scenePath.startsWith('res://') ? scenePath : 'res://' + scenePath.replace(/\\/g, '/');
+      const safePath = gdEscape(resPath);
       const snapScript = `${SCENE_TREE_HEADER}
 
 func _initialize():
@@ -490,7 +492,7 @@ func _snap(node: Node, max_depth: int, depth: int) -> Dictionary:
 \treturn info
 `;
 
-      const result = await executeGdscript({
+      const result = await executeGdscriptTrusted({
         godotPath: godot,
         projectPath,
         code: snapScript,

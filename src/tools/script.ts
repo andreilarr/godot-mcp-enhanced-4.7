@@ -1,5 +1,5 @@
 import { join, basename, extname } from 'path';
-import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, statSync, renameSync, unlinkSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, statSync, renameSync, unlinkSync, copyFileSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
@@ -823,23 +823,50 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         changedFiles.push(relOf(filePath));
       }
 
-      // Phase 2: 原子写入 — 先写所有 .tmp 文件，全部成功后批量 rename
+      // Phase 2: Best-effort atomic write — backup originals, write .tmp, rename with rollback
       if (!dryRun && pendingWrites.length > 0) {
         const tmpFiles: string[] = [];
+        const bakFiles: string[] = [];
+        const renamedCount = { value: 0 };
         try {
+          // Step 1: Write all .tmp files (safe — originals untouched)
           for (const pw of pendingWrites) {
             const tmpPath = pw.filePath + '.tmp';
             writeFileSync(tmpPath, pw.finalContent, 'utf-8');
             tmpFiles.push(tmpPath);
           }
+          // Step 2: Backup originals to .bak (needed for rollback)
+          for (const pw of pendingWrites) {
+            const bakPath = pw.filePath + '.bak';
+            copyFileSync(pw.filePath, bakPath);
+            bakFiles.push(bakPath);
+          }
+          // Step 3: Rename .tmp → target
           for (let i = 0; i < pendingWrites.length; i++) {
             renameSync(tmpFiles[i]!, pendingWrites[i]!.filePath);
+            renamedCount.value++;
           }
         } catch (writeErr) {
+          // Rollback: restore .bak for already-renamed files
+          for (let i = 0; i < renamedCount.value; i++) {
+            try { renameSync(bakFiles[i]!, pendingWrites[i]!.filePath); } catch { /* best effort */ }
+          }
+          // Cleanup .tmp and remaining .bak files
           for (const tmp of tmpFiles) {
             try { if (existsSync(tmp)) unlinkSync(tmp); } catch { /* best effort */ }
           }
-          return opsErrorResult('ATOMIC_WRITE_FAILED', `Batch write failed: ${(writeErr as Error).message}. ${pendingWrites.length} files may be partially updated.`);
+          for (const bak of bakFiles) {
+            try { if (existsSync(bak)) unlinkSync(bak); } catch { /* best effort */ }
+          }
+          return opsErrorResult('ATOMIC_WRITE_FAILED', `Batch write failed: ${(writeErr as Error).message}. Rollback attempted for ${renamedCount.value} files.`);
+        }
+        // Success: cleanup .bak files
+        for (const bak of bakFiles) {
+          try { if (existsSync(bak)) unlinkSync(bak); } catch { /* best effort */ }
+        }
+        // Cleanup .tmp (already renamed, but defensive)
+        for (const tmp of tmpFiles) {
+          try { if (existsSync(tmp)) unlinkSync(tmp); } catch { /* best effort */ }
         }
       }
 

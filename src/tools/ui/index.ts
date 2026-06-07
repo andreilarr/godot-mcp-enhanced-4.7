@@ -3,7 +3,7 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../../types.js';
 import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath } from '../../helpers.js';
-import { executeGdscript } from '../../gdscript-executor.js';
+import { executeGdscriptTrusted } from '../../gdscript-executor.js';
 import { normalizeNodePath, sanitizeResPath, opsErrorResult, parseGdscriptResult, NON_PERSIST } from '../shared.js';
 import { ACTIONS, CONTROL_TYPES, ANCHOR_PRESETS, ERROR_CODES, DRAW_OP_KINDS } from './types.js';
 import type { DrawOp, UiNodeSpec } from './types.js';
@@ -401,7 +401,7 @@ export async function handleTool(
         return null;
     }
 
-    const result = await executeGdscript({
+    const result = await executeGdscriptTrusted({
       godotPath: godot,
       projectPath,
       code: script,
