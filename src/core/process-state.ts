@@ -85,7 +85,10 @@ function enqueueAsync(fn: () => Promise<void>): Promise<void> {
   const prev = _queueTail;
   let resolve!: () => void;
   _queueTail = new Promise<void>((r) => { resolve = r; });
-  return prev.then(() => fn()).finally(resolve);
+  return prev
+    .then(() => fn())
+    .catch(err => { getLogger().error('process-state', `enqueueAsync error: ${err instanceof Error ? err.message : err}`); throw err; })
+    .finally(resolve);
 }
 
 // ─── Long-running process lock ──────────────────────────────────────────────
@@ -251,7 +254,84 @@ export function resetState(): void {
   _busySince = 0;
   _shortRunningCount = 0;
   _queueTail = Promise.resolve();
+  _lastOrphanScanTime = 0;
 }
 
 // Export async queue for consumers that need serialized async operations (e.g. killProcess)
 export { enqueueAsync };
+
+// ─── Orphan process cleanup (V-01 second layer) ────────────────────────────
+
+let _lastOrphanScanTime = 0;
+const ORPHAN_SCAN_INTERVAL_MS = 30_000;
+
+/** Escape single quotes for PowerShell single-quoted strings (' → ''). */
+function escapePsSingleQuote(s: string): string {
+  return s.replace(/'/g, "''");
+}
+
+/** Escape single quotes for POSIX shell double-quoted strings. */
+function escapeShellArg(s: string): string {
+  return s.replace(/'/g, "'\\''");
+}
+
+/**
+ * Scan OS for orphaned Godot processes matching a project directory and kill them.
+ * Returns the number of processes killed. Throttled to once per 30s.
+ *
+ * Windows: uses Get-CimInstance with PowerShell variable for path parameterization.
+ * Linux/macOS: uses pgrep + grep -F for literal path matching.
+ */
+export async function killOrphanGodotProcesses(projectDir: string): Promise<number> {
+  if (Date.now() - _lastOrphanScanTime < ORPHAN_SCAN_INTERVAL_MS) return 0;
+  _lastOrphanScanTime = Date.now();
+
+  if (!projectDir) return 0;
+
+  const normalizedDir = projectDir.replace(/\\/g, '/');
+
+  if (isWin) {
+    const safePath = escapePsSingleQuote(normalizedDir);
+    return new Promise((resolve) => {
+      const ps = spawn('powershell', [
+        '-NoProfile', '-Command',
+        `$path = '${safePath}'; ` +
+        `Get-CimInstance Win32_Process -Filter "Name LIKE 'Godot%'" | ` +
+        `Where-Object { $_.CommandLine -like '*--path*' -and $_.CommandLine -like "*$path*" } | ` +
+        `Select-Object -ExpandProperty ProcessId | ForEach-Object { Write-Output $_ }`
+      ], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      let out = '';
+      ps.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+      ps.on('close', () => {
+        const pids = out.trim().split('\n').map(Number).filter(n => n > 0);
+        for (const pid of pids) {
+          try {
+            spawn('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' });
+          } catch { /* best effort */ }
+        }
+        resolve(pids.length);
+      });
+      ps.on('error', () => resolve(0));
+    });
+  } else {
+    const safeDir = escapeShellArg(normalizedDir);
+    return new Promise((resolve) => {
+      const ps = spawn('sh', ['-c',
+        `pgrep -f godot | xargs -I{} sh -c 'cat /proc/{}/cmdline 2>/dev/null | tr "\\0" " " | grep -F -- "${safeDir}" && echo {}'`
+      ], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      let out = '';
+      ps.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+      ps.on('close', () => {
+        const lines = out.trim().split('\n').filter(l => /^\d+$/.test(l.trim()));
+        const pids = lines.map(Number).filter(n => n > 0);
+        for (const pid of pids) {
+          try { process.kill(pid, 'SIGTERM'); } catch { /* best effort */ }
+        }
+        resolve(pids.length);
+      });
+      ps.on('error', () => resolve(0));
+    });
+  }
+}
