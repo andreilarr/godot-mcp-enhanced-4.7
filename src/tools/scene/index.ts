@@ -164,6 +164,7 @@ export async function handleTool(
       if (action === 'create_scene') {
         params.scene_path = normalizeUserProjectPath(args.scene_path as string);
         params.root_node_type = args.root_node_type || 'Node2D';
+        if (args.root_node_name) params.root_node_name = args.root_node_name;
       } else if (action === 'add_node') {
         params.scene_path = normalizeUserProjectPath(args.scene_path as string);
         if (!/^[A-Za-z0-9_]+$/.test(String(args.node_type ?? ''))) { releaseShortRunningSlot(); return textResult(`Error: node_type contains invalid characters: "${args.node_type}"`); }

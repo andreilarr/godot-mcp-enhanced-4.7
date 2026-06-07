@@ -195,7 +195,10 @@ func create_scene(params):
 		log_error("Failed to instantiate node of type: " + root_node_type)
 		quit(1)
 		return
-	scene_root.name = "root"
+		if params.has("root_node_name") and params.root_node_name != "":
+			scene_root.name = params.root_node_name
+		else:
+			scene_root.name = "root"
 
 	var packed_scene = PackedScene.new()
 	var result = packed_scene.pack(scene_root)
