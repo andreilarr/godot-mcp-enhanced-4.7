@@ -515,46 +515,41 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         }
       } catch (err) { getLogger().debug('validation', `precheck scripts: ${err instanceof Error ? err.message : err}`); }
 
-      try {
-        const { stdout, stderr } = await execFileAsync(godot, cmdArgs, { timeout: timeout * 1000 });
-        const allOutput = [...(stdout || '').split('\n'), ...(stderr || '').split('\n')];
-        const analysis = analyzeOutput(allOutput);
+      // V-01 fix: setProjectDir so stop_project orphan scan can find project path
+      ctx.setProjectDir(projectPath);
 
-        if (versionWarning) (analysis as ExtendedAnalysisResult).version_warning = versionWarning;
-        if (precheckErrors.length > 0) (analysis as ExtendedAnalysisResult).precheck_errors = precheckErrors;
+      const result = await spawnGodot(godot, cmdArgs, { timeoutMs: timeout * 1000 });
+      const allOutput = [...result.stdout.split('\n'), ...result.stderr.split('\n')];
+      const analysis = analyzeOutput(allOutput);
 
-        if (captureTree && scene) {
-          try {
-            const scriptsDir = dirname(ctx.opsScript);
-            const treeScript = join(scriptsDir, 'query_scene_tree.gd');
-            if (existsSync(treeScript)) {
-              const treeSpawnResult = await spawnGodot(godot, [
-                  '--headless', '--path', projectPath,
-                  '--script', treeScript,
-                  JSON.stringify({ scene_path: scene, max_depth: 3 }),
-                ], { timeoutMs: 30_000 });
-              const treeResult = treeSpawnResult.stdout;
-              if (treeResult) {
-                (analysis as ExtendedAnalysisResult).scene_tree = parseMcpScriptOutput(treeResult, 0);
-              }
-            }
-          } catch (err) { getLogger().debug('validation', `capture scene tree: ${err instanceof Error ? err.message : err}`); }
-        }
+      if (versionWarning) (analysis as ExtendedAnalysisResult).version_warning = versionWarning;
+      if (precheckErrors.length > 0) (analysis as ExtendedAnalysisResult).precheck_errors = precheckErrors;
 
-        return textResult(JSON.stringify(analysis, null, 2));
-      } catch (e: unknown) {
-        const errObj = e as Record<string, unknown>;
-        const allOutput = [...String(errObj.stdout || '').split('\n'), ...String(errObj.stderr || '').split('\n')];
-        const analysis = analyzeOutput(allOutput);
-        if (versionWarning) (analysis as ExtendedAnalysisResult).version_warning = versionWarning;
-        if (precheckErrors.length > 0) (analysis as ExtendedAnalysisResult).precheck_errors = precheckErrors;
-        if (errObj.killed) {
-          (analysis as ExtendedAnalysisResult).summary += '\nNote: Process timed out after ' + timeout + 's (this is normal for interactive projects)';
-        } else {
-          (analysis as ExtendedAnalysisResult).summary += '\nNote: Process exited with code ' + (errObj.code || 'unknown');
-        }
-        return textResult(JSON.stringify(analysis, null, 2));
+      if (result.timedOut) {
+        (analysis as ExtendedAnalysisResult).summary += '\nNote: Process timed out after ' + timeout + 's (this is normal for interactive projects)';
+      } else if (result.exitCode !== 0 && result.exitCode !== null) {
+        (analysis as ExtendedAnalysisResult).summary += '\nNote: Process exited with code ' + result.exitCode;
       }
+
+      if (captureTree && scene) {
+        try {
+          const scriptsDir = dirname(ctx.opsScript);
+          const treeScript = join(scriptsDir, 'query_scene_tree.gd');
+          if (existsSync(treeScript)) {
+            const treeSpawnResult = await spawnGodot(godot, [
+                '--headless', '--path', projectPath,
+                '--script', treeScript,
+                JSON.stringify({ scene_path: scene, max_depth: 3 }),
+              ], { timeoutMs: 30_000 });
+            const treeResult = treeSpawnResult.stdout;
+            if (treeResult) {
+              (analysis as ExtendedAnalysisResult).scene_tree = parseMcpScriptOutput(treeResult, 0);
+            }
+          }
+        } catch (err) { getLogger().debug('validation', `capture scene tree: ${err instanceof Error ? err.message : err}`); }
+      }
+
+      return textResult(JSON.stringify(analysis, null, 2));
     }
 
     case 'analyze_error': {
