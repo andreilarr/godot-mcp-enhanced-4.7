@@ -44,7 +44,11 @@ godot-mcp-enhanced 提供 130+ 工具，通过三层架构操作 Godot：
 - **完整类模式**：手写 `extends SceneTree`，适合需要 `_process()` 或复杂生命周期的场景。
 - **load_autoloads=true**：在完整项目环境中运行，可访问 DataRegistry、PlayerData 等全局单例。启动较慢（需加载整个项目），仅在确实需要 Autoload 时开启。
 - **注意**：片段模式中 `func`/`var`/`const` 声明自动放在类级别，语句行放在 `_initialize()` 体内。
-- **⚠️ 沙箱安全限制**：GDScript 沙箱扫描基于正则匹配（非语法解析），设计用于防止意外误操作，**不可防御恶意输入**。Phase 2 字符串拼接检测可捕获常见绕过模式，但仍可能有遗漏。对于不可信输入，使用 `GODOT_MCP_ALLOW_UNSAFE` 环境变量需配合容器/VM 隔离。
+- **⚠️ 沙箱安全限制（C-04 已知限制）**：GDScript 沙箱扫描基于正则匹配（非语法解析），设计用于防止**意外误操作**，**不可防御恶意/蓄意绕过**。已知绕过向量包括：
+  - 字符串拼接：`str("OS")+".cmd()"` 或 `%` 格式化构造危险 API 名
+  - 变量间接调用：通过 `call()` / `funcref()` 的非字面量参数绕过静态扫描
+  - 注释中包含危险 API 名称会导致误报拦截（安全侧失败）
+  - **适用场景**：本地单用户开发环境（信任调用者）。**不适用于多用户/远程/不可信输入场景**——后者需要容器/VM 隔离 + `GODOT_MCP_ALLOW_UNSAFE=false`
 
 ### edit_script — 脚本编辑
 
@@ -81,7 +85,7 @@ Headless 模式下 2D 场景（CanvasItem 子类，如 ColorRect/TextureRect/\_d
 1. 用 `screenshot(action=capture)` 尝试截图
 2. 如果返回 `BLANK_DETECTED` 警告，使用以下替代方案：
    - 用户手动截图（F5 运行后截图）
-   - `screenshot(action=analyze)` 分析用户提供的截图
+   - `screenshot(action=analyze)` 返回图片的 base64 数据供 AI 视觉分析（需配合 `image_path` 指定本地文件）
    - Bridge `take_screenshot`（如果游戏正在运行，渲染由 GPU 完成）
 3. 3D 场景（Node3D/MeshInstance3D 等）不受此限制影响
 
@@ -98,3 +102,4 @@ Headless 模式下 2D 场景（CanvasItem 子类，如 ColorRect/TextureRect/\_d
 - **load_autoloads autoload 层级**：`load_autoloads=true` 时 autoload 节点不直接挂在 `get_root()` 下，而是通过 autoload 系统加载。使用 `Engine.get_main_loop().get_root().get_node("autoload/Xxx")` 访问。
 - **remove_node 路径格式**：使用 `父名#子名` 格式（如 `Main#ValidationLabel`），而非 `/` 分隔路径。先用 `query_scene_tree` 确认节点名。
 - **ui_build_layout 必须传 scene_path**：不传 `scene_path` 会报错 "Failed to load scene"。所有 `ui_build_layout` 调用必须包含 `scene_path` 参数。
+- **screenshot analyze 返回格式**：`screenshot(action=analyze)` 返回图片 base64 数据（非文字描述），需配合 `image_path` 参数指定本地 PNG/JPG 文件路径。它不会自动对截图做 AI 文字分析，而是将图片数据返回给调用方做视觉检查。

@@ -512,7 +512,11 @@ export function parseTscn(content: string): ParsedScene {
   for (const node of result.nodes) {
     node.children = [];
     if (!node.parent) {
-      rootNode = node;
+      // C-01: Guard against malformed .tscn with multiple root nodes
+      // Godot enforces single root — if we see a second, skip it (preserve first)
+      if (!rootNode) {
+        rootNode = node;
+      }
       nodeMap.set(node.name, node);
     } else if (node.parent === '.') {
       const uniquePath = rootNode ? `${rootNode.name}/${node.name}` : node.name;

@@ -163,6 +163,13 @@ export class ToolDispatcher {
           return opsErrorResult('INVALID_TOKEN', 'Invalid or expired confirmation token');
         }
 
+        // I-07: Refuse execution if args were truncated — the code/data would be incomplete
+        if (pending.wasTruncated) {
+          return opsErrorResult('ARGS_TRUNCATED',
+            `Confirmation token args were truncated (exceeded 10KB limit). ` +
+            `Please call the original tool again — the server will re-generate a fresh token with the full args.`);
+        }
+
         // 二次 guard 检查
         const confirmedGuardResult = this.readOnlyGuard.check(pending.toolName);
         if (confirmedGuardResult.blocked) {
@@ -181,7 +188,13 @@ export class ToolDispatcher {
           const editorResult = await currentExecutor.execute(pending.toolName, pending.args);
           const duration = Date.now() - startTime;
           logger.toolEnd(confirmCallId, pending.toolName, duration);
-          return this.attachFallbackWarning({ ...editorResult, content: [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] });
+          // I-08: Only append _duration_ms if the editor plugin didn't already include it
+          const hasDuration = editorResult.content?.some((c: { type?: string; text?: string }) =>
+            typeof c.text === 'string' && c.text.startsWith('_duration_ms:'));
+          const content = hasDuration
+            ? editorResult.content
+            : [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }];
+          return this.attachFallbackWarning({ ...editorResult, content });
         }
         return this.attachFallbackWarning(await this.dispatchTool(pending.toolName, pending.args, startTime));
       }
@@ -210,7 +223,13 @@ export class ToolDispatcher {
         const editorResult = await currentExecutor.execute(name, args);
         const duration = Date.now() - startTime;
         logger.toolEnd(callId, name, duration);
-        return this.attachFallbackWarning({ ...editorResult, content: [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] });
+        // I-08: Only append _duration_ms if the editor plugin didn't already include it
+        const hasDuration = editorResult.content?.some((c: { type?: string; text?: string }) =>
+          typeof c.text === 'string' && c.text.startsWith('_duration_ms:'));
+        const content = hasDuration
+          ? editorResult.content
+          : [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }];
+        return this.attachFallbackWarning({ ...editorResult, content });
       }
 
       // ── 5. headless dispatch ──
@@ -241,6 +260,16 @@ export class ToolDispatcher {
     this._pendingModeSwitch = { mode: this.connectionMode, executor };
   }
 
+  /** I-04: Atomically degrade to headless mode. Avoids two separate calls to
+   *  setConnectionMode + setEditorExecutor racing on _pendingModeSwitch. */
+  degradeToHeadless(): void {
+    const currentExec = this._resolvePendingExecutor();
+    if (currentExec) {
+      currentExec.destroy();
+    }
+    this._pendingModeSwitch = { mode: 'headless', executor: null };
+  }
+
   /** Get the effective executor: pending switch takes precedence over current instance. */
   private _resolvePendingExecutor(): EditorToolExecutor | null {
     return this._pendingModeSwitch?.executor ?? this.editorExecutor;
@@ -262,7 +291,11 @@ export class ToolDispatcher {
 
   /** I-05: Convert camelCase arg keys to snake_case, recursively for nested plain objects. */
   private normalizeArgs(rawArgs: Record<string, unknown> | undefined, depth = 0): Record<string, unknown> {
-    if (!rawArgs || depth > 5) return rawArgs ?? {};
+    if (!rawArgs || depth > 5) {
+      // I-04: Warn when recursion limit is hit — nested params won't get snake_case conversion
+      if (rawArgs && depth > 5) log('normalizeArgs: depth limit (5) reached, keys beyond this depth won\'t be converted');
+      return rawArgs ?? {};
+    }
     const args: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(rawArgs)) {
       const snake = key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();

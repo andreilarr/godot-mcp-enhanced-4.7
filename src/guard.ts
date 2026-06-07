@@ -5,6 +5,8 @@ interface PendingToken {
   toolName: string;
   args: Record<string, unknown>;
   createdAt: number;
+  /** I-07: True if any arg was truncated during creation — consumer must refuse execution. */
+  wasTruncated?: boolean;
   // FUTURE: Add clientId field for multi-client isolation.
   // Currently MCP is single-client, so token-to-caller binding is unnecessary.
 }
@@ -95,8 +97,8 @@ export function createPendingToken(toolName: string, args: Record<string, unknow
   }
   const token = randomBytes(18).toString('base64url');
   // I-02: Truncate large args to prevent memory bloat (e.g. GDScript code blocks in execute_gdscript)
-  const truncatedArgs = truncateArgs(args);
-  pendingTokens.set(token, { token, toolName, args: truncatedArgs, createdAt: now });
+  const { args: truncatedArgs, truncated } = truncateArgs(args);
+  pendingTokens.set(token, { token, toolName, args: truncatedArgs, createdAt: now, wasTruncated: truncated || undefined });
   return token;
 }
 
@@ -108,7 +110,7 @@ export function createPendingToken(toolName: string, args: Record<string, unknow
  * is safe. If multi-client support is added, PendingToken needs a `clientId`
  * field and this function must verify it matches the current caller.
  */
-export function consumeToken(token: string): { toolName: string; args: Record<string, unknown> } | null {
+export function consumeToken(token: string): { toolName: string; args: Record<string, unknown>; wasTruncated?: boolean } | null {
   const pending = pendingTokens.get(token);
   if (!pending) return null;
   if (Date.now() - pending.createdAt > TOKEN_TTL_MS) {
@@ -116,7 +118,7 @@ export function consumeToken(token: string): { toolName: string; args: Record<st
     return null;
   }
   pendingTokens.delete(token);
-  return { toolName: pending.toolName, args: pending.args };
+  return { toolName: pending.toolName, args: pending.args, wasTruncated: pending.wasTruncated };
 }
 
 export function pendingCount(): number {
@@ -158,15 +160,18 @@ export function isCleanupTimerRunning(): boolean {
   return _cleanupTimer !== null;
 }
 
-/** I-02: Truncate large string values in args to cap memory usage per token. */
-function truncateArgs(args: Record<string, unknown>): Record<string, unknown> {
+/** I-02: Truncate large string values in args to cap memory usage per token.
+ *  I-07: Returns whether any value was truncated so consumer can refuse execution. */
+function truncateArgs(args: Record<string, unknown>): { args: Record<string, unknown>; truncated: boolean } {
+  let truncated = false;
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(args)) {
     if (typeof value === 'string' && value.length > MAX_ARGS_JSON_SIZE) {
       out[key] = value.substring(0, MAX_ARGS_JSON_SIZE) + `...[truncated ${value.length - MAX_ARGS_JSON_SIZE} chars]`;
+      truncated = true;
     } else {
       out[key] = value;
     }
   }
-  return out;
+  return { args: out, truncated };
 }

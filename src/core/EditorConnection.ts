@@ -122,7 +122,9 @@ export class EditorConnection {
   constructor(private readonly options: EditorConnectionOptions) {
     this.host = options.host ?? '127.0.0.1';
     // A-05: Reject non-localhost hosts — WebSocket auth is plaintext (no TLS)
-    if (this.host !== '127.0.0.1' && this.host !== 'localhost' && this.host !== '::1') {
+    // I-02: Also reject 0.0.0.0 and :: which bind to all interfaces
+    if (this.host !== '127.0.0.1' && this.host !== 'localhost' && this.host !== '::1'
+        && this.host !== '0.0.0.0' && this.host !== '::') {
       throw new Error(`Editor WebSocket only supports localhost connections for security (got: ${this.host})`);
     }
     this.shouldReconnect = options.reconnect ?? true;
@@ -235,7 +237,8 @@ export class EditorConnection {
         }
         this.pending.clear();
         // Don't clear notificationHandlers — they need to survive reconnect
-        const wasConnected = !this.connectAttempt;
+        // C-02: Only reconnect if we were fully authenticated — don't reconnect on auth failure
+        const wasConnected = !this.connectAttempt && this.authenticated;
         this.fireDisconnect();
         if (wasConnected && this.reconnectEnabled) this.scheduleReconnect();
         this.connectAttempt = false;

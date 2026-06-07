@@ -262,6 +262,9 @@ export function deleteNode(
     lines.splice(start, end - start + 1);
   }
 
+  // C-02: Decrement load_steps to stay consistent with actual section count
+  decrementLoadSteps(lines, descendantRanges.length);
+
   return {
     success: true,
     message: `Deleted node ${nodePath} and ${descendantRanges.length} section(s)`,
@@ -721,22 +724,22 @@ function findMaxSubResourceId(lines: string[]): number {
 /**
  * Remap sub_resource IDs in source lines to avoid conflicts with target.
  * Returns remapped lines and a map from old ID → new ID.
+ * I-06: Handles both numeric IDs ("123") and Godot 4.x string UIDs ("StyleBoxFlat_xb1kx").
  */
 function remapSubResourceIds(
   sourceSubResources: string[],
   targetMaxId: number,
-): { remapped: string[]; idMap: Map<number, number> } {
-  const idMap = new Map<number, number>();
+): { remapped: string[]; idMap: Map<string, number> } {
+  const idMap = new Map<string, number>();
   let nextId = targetMaxId + 1;
 
   const remapped: string[] = [];
   for (const line of sourceSubResources) {
-    // Only header lines contain id="N"
     const trimmed = line.trim();
     if (trimmed.startsWith('[sub_resource')) {
-      const idMatch = trimmed.match(/\bid="(\d+)"/);
+      const idMatch = trimmed.match(/\bid="([^"]+)"/);
       if (idMatch) {
-        const oldId = parseInt(idMatch[1]!);
+        const oldId = idMatch[1]!;
         const newId = nextId++;
         idMap.set(oldId, newId);
         remapped.push(line.replace(`id="${oldId}"`, `id="${newId}"`));
@@ -751,11 +754,11 @@ function remapSubResourceIds(
 
 /**
  * Apply sub_resource ID remapping to SubResource("N") references in a line.
+ * I-06: Also handles Godot 4.x string UID references like SubResource("StyleBoxFlat_xb1kx").
  */
-function remapSubResourceRefs(line: string, idMap: Map<number, number>): string {
+function remapSubResourceRefs(line: string, idMap: Map<string, number>): string {
   if (idMap.size === 0) return line;
-  return line.replace(/SubResource\("(\d+)"\)/g, (_match, idStr) => {
-    const oldId = parseInt(idStr);
+  return line.replace(/SubResource\("([^"]+)"\)/g, (_match, oldId) => {
     const newId = idMap.get(oldId);
     return newId !== undefined ? `SubResource("${newId}")` : _match;
   });
@@ -1060,6 +1063,24 @@ function incrementLoadSteps(lines: string[]): void {
       // Insert load_steps=2 before the closing bracket
       lines[i] = lines[i]!.replace(']', ' load_steps=2]');
     }
+    return;
+  }
+}
+
+/**
+ * Decrement load_steps in [gd_scene] header by `count`.
+ * C-02: Used by deleteNode to keep load_steps consistent with actual section count.
+ * Floor at 2 (minimum for a valid scene: header counts as 1 step).
+ */
+function decrementLoadSteps(lines: string[], count: number): void {
+  if (count <= 0) return;
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i]!.trim();
+    if (!trimmed.startsWith('[gd_scene') || !trimmed.includes('load_steps=')) continue;
+    lines[i] = lines[i]!.replace(/load_steps=\d+/, (m) => {
+      const n = parseInt(m.split('=')[1]!);
+      return `load_steps=${Math.max(2, n - count)}`;
+    });
     return;
   }
 }
@@ -1407,6 +1428,17 @@ export function addNode(
   tscnContent: string,
   params: AddNodeParams,
 ): AddNodeResult {
+  try {
+  return _addNodeInner(tscnContent, params);
+  } catch (err) {
+    return { success: false, message: `tscn-editor error: ${err instanceof Error ? err.message : String(err)}`, fallback: false };
+  }
+}
+
+function _addNodeInner(
+  tscnContent: string,
+  params: AddNodeParams,
+): AddNodeResult {
   const { parent, name, type, properties } = params;
 
   // 1. Validate name and type
@@ -1450,8 +1482,14 @@ export function addNode(
       }
     }
   } else {
-    // Find the parent node by name (parent param is just a node name like "Player")
-    parentNodeLine = findNodeByName(lines, parent);
+    // C-03: Find parent node by name, preferring path-aware match when parent contains "/".
+    // For simple names (e.g. "Player"), fall back to name-only search.
+    // For paths (e.g. "Level/Player"), use findNodeSectionLine which matches name+parent.
+    if (parent.includes('/')) {
+      parentNodeLine = findNodeSectionLine(lines, parent);
+    } else {
+      parentNodeLine = findNodeByName(lines, parent);
+    }
   }
 
   if (parentNodeLine === -1) {
@@ -1505,6 +1543,17 @@ export function addNode(
  *    through each addNode call.
  */
 export function addNodes(
+  tscnContent: string,
+  nodes: Array<AddNodeParams>,
+): AddNodeResult {
+  try {
+  return _addNodesInner(tscnContent, nodes);
+  } catch (err) {
+    return { success: false, message: `tscn-editor error: ${err instanceof Error ? err.message : String(err)}`, fallback: false };
+  }
+}
+
+function _addNodesInner(
   tscnContent: string,
   nodes: Array<AddNodeParams>,
 ): AddNodeResult {
