@@ -252,6 +252,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       // scope=full: collect all .tscn
       // A-07: Replaced inline collectScenes with scanFiles
       const sceneFiles = scanFiles(projectPath, ['.tscn'], { skipDirs: [...SKIP_DIRS] });
+      getLogger().debug('delivery', `scanFiles found ${sceneFiles.length} .tscn files in ${projectPath}`);
       scenePaths = sceneFiles.map(f => f.replace(projectPath + (process.platform === 'win32' ? '\\' : '/'), ''));
     }
 
@@ -291,6 +292,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     } else {
       // A-07: Replaced inline collectScripts with scanFiles
       const scriptFiles = scanFiles(projectPath, ['.gd'], { skipDirs: [...SKIP_DIRS] });
+      getLogger().debug('delivery', `scanFiles found ${scriptFiles.length} .gd files in ${projectPath}`);
       scriptPaths = scriptFiles.map(f => f.replace(projectPath + (process.platform === 'win32' ? '\\' : '/'), ''));
     }
 

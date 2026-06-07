@@ -371,6 +371,8 @@ func batch_add_nodes(params):
 			print("Batch add completed: %d/%d nodes added to %s" % [added_count, nodes.size(), params.scene_path])
 			if failed_count > 0:
 				log_error("Failed to add %d nodes" % failed_count)
+				for node_def in nodes:
+					log_debug("  - node: %s (%s) parent: %s" % [node_def.get("node_name", "?"), node_def.get("node_type", "?"), node_def.get("parent_node_path", "root")])
 		else:
 			log_error("Failed to save scene: " + str(save_error))
 	else:
