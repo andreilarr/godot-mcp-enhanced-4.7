@@ -24,6 +24,7 @@ export {
   isPathInAllowedRoots,
   _resetPathAllowWarned,
 } from './core/path-utils.js';
+// Note: WINDOWS_DEVICE_RE intentionally NOT re-exported — internal to path-utils
 
 export {
   parseConfigValue,
@@ -88,7 +89,14 @@ export function requireProjectPath(args: Record<string, unknown>): string {
   return resolved;
 }
 
-/** Build a sanitized environment for Godot child processes. */
+/**
+ * Build a sanitized environment for Godot child processes.
+ *
+ * SECURITY NOTE (I-04): The following user-directory variables are passed
+ * because Godot needs them to locate editor data, cache, and config:
+ * HOME, USERPROFILE, LOCALAPPDATA, APPDATA, XDG_*, DISPLAY.
+ * All other env vars are stripped to prevent credential leakage to child processes.
+ */
 export function buildSafeEnv(): NodeJS.ProcessEnv {
   return {
     PATH: process.env.PATH ?? '',

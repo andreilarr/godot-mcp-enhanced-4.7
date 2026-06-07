@@ -35,6 +35,7 @@ export function parseConfigValue(raw: string, depth = 0): unknown {
   if (raw === 'false') return false;
   if (raw === 'null') return null;
   const num = Number(raw);
+  // A-06: Use isFinite to exclude Infinity/NaN — Godot configs should never contain infinity
   if (Number.isFinite(num) && raw.trim() !== '') return num;
   if (raw.startsWith('[') && raw.endsWith(']')) {
     const inner = raw.slice(1, -1).trim();
@@ -96,6 +97,7 @@ export function parseGodotConfig(content: string): GodotConfig {
 
 // ─── MCP output parser ────────────────────────────────────────────────────────
 
+// TODO: move MARKER_RESULT/MARKER_ERROR to src/core/constants.ts to avoid core→tools dependency
 import { MARKER_RESULT, MARKER_ERROR } from '../tools/shared.js';
 
 export function parseMcpScriptOutput(rawOutput: string, exitCode: number | null, resultMarker = MARKER_RESULT, errorMarker = MARKER_ERROR): unknown {

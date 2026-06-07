@@ -14,7 +14,7 @@ import { getLogger } from './logger.js';
 const MAX_DECODE_ITERATIONS = 20;
 
 /** Windows device names that must never be used as file names (CON, PRN, AUX, NUL, COM1-9, LPT1-9) */
-export const WINDOWS_DEVICE_RE = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)/i;
+const WINDOWS_DEVICE_RE = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)/i;
 
 // ─── Iterative URL decode ─────────────────────────────────────────────────────
 
@@ -80,6 +80,15 @@ export function safeRealPath(p: string, base?: string): string {
 
 // ─── Path traversal protection ────────────────────────────────────────────────
 
+/**
+ * Resolve userPath within root, blocking traversal attacks.
+ *
+ * Security layers: UNC path reject → Windows device name reject →
+ * iterative URL decode → `..` segment reject → realpath + relative check.
+ *
+ * NOTE: TOCTOU window exists between symlink check and actual use —
+ * accepted risk for local-only scenarios.
+ */
 export function resolveWithinRoot(root: string, userPath: string): string {
   const base = safeRealPath(resolvePath(root));
 
@@ -128,6 +137,10 @@ export function getAllowedProjectPaths(): string[] {
   return env.split(';').filter(Boolean).map(p => resolvePath(p));
 }
 
+/**
+ * @deprecated since v0.16.0, removal in v0.18.0
+ * Migration: set ALLOWED_PROJECT_PATHS=/path1;/path2 instead.
+ */
 export function allowOutsideProjectPaths(): boolean {
   if (process.env.ALLOW_OUTSIDE_PROJECT_PATHS === 'true') {
     getLogger().error('security', 'ALLOW_OUTSIDE_PROJECT_PATHS is deprecated (removes in v0.18.0) — migrate to ALLOWED_PROJECT_PATHS whitelist');
@@ -142,6 +155,21 @@ function ensureSep(p: string): string {
   return p.endsWith(sep) ? p : p + sep;
 }
 
+/**
+ * Check whether a requested path is within allowed project roots.
+ *
+ * Priority (highest wins):
+ * 1. GODOT_MCP_UNRESTRICTED=true → allow everything (dev mode)
+ * 2. ALLOW_OUTSIDE_PROJECT_PATHS=true → allow everything (deprecated, removal in v0.18.0)
+ * 3. ALLOWED_PROJECT_PATHS=/path1;/path2 → allow only listed roots + children
+ * 4. No config → allow all (allow-by-default for discoverability)
+ *
+ * Why allow-by-default? This MCP server is designed for local development
+ * where the user runs it against their own projects. Restricting by default
+ * would break first-run experience and provide minimal security benefit
+ * on a single-user workstation. Users in shared environments should set
+ * ALLOWED_PROJECT_PATHS explicitly.
+ */
 export function isPathInAllowedRoots(requestedPath: string): boolean {
   if (process.env.GODOT_MCP_UNRESTRICTED === 'true') {
     if (!_pathAllowLogged.has('unrestricted')) {
