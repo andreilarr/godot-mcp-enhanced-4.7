@@ -30,13 +30,35 @@ export function launchDashboardOnce(): void {
 
   try {
     if (platform === 'win32') {
-      // Windows: 使用 start 命令在新窗口中启动
-      // start 语法: start "title" command [args...]
-      spawn('cmd', ['/c', 'start', '"godot-mcp-dashboard"', 'node', `"${dashboardPath}"`], {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: false,
-      }).unref();
+      // Windows: use powershell Start-Process for reliable new-window launch
+      const childEnv = { ...process.env, GODOT_MCP_NO_DASHBOARD: '1' };
+      try {
+        spawn('powershell.exe', [
+          '-WindowStyle', 'Hidden',
+          '-Command',
+          `Start-Process -FilePath 'node' -ArgumentList '${dashboardPath}' -WindowStyle Normal`,
+        ], {
+          detached: true,
+          stdio: 'ignore',
+          env: childEnv,
+        }).unref();
+      } catch {
+        // Fallback: cmd /c start
+        try {
+          spawn('cmd', ['/c', 'start', '"godot-mcp-dashboard"', 'node', `"${dashboardPath}"`], {
+            detached: true,
+            stdio: 'ignore',
+            windowsHide: false,
+            env: childEnv,
+          }).unref();
+        } catch {
+          spawn('node', [dashboardPath], {
+            detached: true,
+            stdio: 'ignore',
+            env: childEnv,
+          }).unref();
+        }
+      }
     } else if (platform === 'darwin') {
       // macOS: 使用 osascript 让 Terminal.app 执行
       // 用 quoted form of 防止路径中的特殊字符导致注入

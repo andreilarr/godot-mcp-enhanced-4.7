@@ -419,7 +419,7 @@ export function renderDashboard(
   }
 
   function cleanup(): void {
-    try { process.stdin.setRawMode(false); } catch { /* ignore */ }
+    try { if (process.stdin.isTTY) process.stdin.setRawMode(false); } catch { /* ignore */ }
     process.stdin.pause();
     process.stdin.removeAllListeners('data');
     process.stdout.removeAllListeners('resize');
@@ -434,8 +434,10 @@ export function renderDashboard(
   // I-03 修复：进入 alternate screen 后立即清屏
   process.stdout.write(ANSI.ALT_SCREEN_ON + ANSI.CLEAR_SCREEN + ANSI.CURSOR_HIDE);
 
-  // raw mode 键盘输入
-  process.stdin.setRawMode(true);
+  // raw mode 键盘输入 — requires TTY, skip if not available (e.g. piped stdout)
+  if (process.stdin.isTTY) {
+    process.stdin.setRawMode(true);
+  }
   process.stdin.resume();
   process.stdin.setEncoding('utf-8');
 

@@ -2,7 +2,9 @@
 // src/dashboard/index.ts
 // godot-mcp-dashboard — 独立 CLI 终端面板，实时监控 MCP 服务
 
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { resolveLogDir } from '../core/logger.js';
 import type { LogEntry } from '../core/logger.js';
 import type { LogReader } from './log-reader.js';
@@ -129,11 +131,14 @@ async function main(): Promise<void> {
   const logDir = resolveLogDir();
 
   if (!existsSync(logDir)) {
-    console.error(
-      `日志目录不存在: ${logDir}\n` +
-      '请先启动 MCP 服务（godot-mcp-enhanced），它会自动创建日志目录。'
-    );
-    process.exit(1);
+    // Auto-create log directory — MCP server may not have started yet
+    try {
+      const { mkdirSync } = await import('node:fs');
+      mkdirSync(logDir, { recursive: true });
+    } catch {
+      console.error(`无法创建日志目录: ${logDir}`);
+      process.exit(1);
+    }
   }
 
   const { LogReader: ReaderClass } = await import('./log-reader.js');
@@ -163,6 +168,24 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: Error) => {
-  console.error('Dashboard error:', err.message);
-  process.exit(1);
+  // Write crash log to file for diagnostics
+  try {
+    const crashLog = join(tmpdir(), 'godot-mcp-dashboard-crash.log');
+    writeFileSync(crashLog, `[${new Date().toISOString()}] Dashboard crashed: ${err.message}\n${err.stack}\n`);
+    console.error(`Dashboard crashed! Log: ${crashLog}`);
+    console.error(err.message);
+  } catch { /* ignore */ }
+  // Keep window open for 10 seconds so user can read the error
+  setTimeout(() => process.exit(1), 10000);
+});
+
+// Catch startup errors before main() runs (module loading etc.)
+process.on('uncaughtException', (err: Error) => {
+  try {
+    const crashLog = join(tmpdir(), 'godot-mcp-dashboard-crash.log');
+    writeFileSync(crashLog, `[${new Date().toISOString()}] Uncaught: ${err.message}\n${err.stack}\n`);
+    console.error(`Dashboard crashed! Log: ${crashLog}`);
+    console.error(err.message);
+  } catch { /* ignore */ }
+  setTimeout(() => process.exit(1), 10000);
 });

@@ -168,7 +168,7 @@ class LogReader extends EventEmitter {
       }
 
       const readSize = stat.size - offset;
-      const buf = Buffer.alloc(readSize);
+      let buf = Buffer.alloc(readSize);
       const fd = this.ensureFd(filePath);
       let totalBytes = 0;
 
@@ -183,9 +183,10 @@ class LogReader extends EventEmitter {
         if (newStat.size <= offset) {
           return { entries: [], bytesRead: 0 };
         }
+        // I-COR-02: Assign retry buffer to `buf` so downstream code reads the correct data
         const retrySize = Math.min(readSize, newStat.size - offset);
-        const retryBuf = Buffer.alloc(retrySize);
-        totalBytes = readSync(fd2, retryBuf, 0, retrySize, offset);
+        buf = Buffer.alloc(retrySize);
+        totalBytes = readSync(fd2, buf, 0, retrySize, offset);
       }
 
       if (totalBytes === 0) {
