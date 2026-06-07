@@ -526,7 +526,7 @@ func _cmd_set_node_property(params: Dictionary) -> Variant:
 	if _is_blocked_property(prop):
 		return {"error": {"code": -2, "message": "Blocked property: %s" % prop}}
 	if not _is_safe_value(value):
-		var type_info := "null" if value == null else value.get_class()
+		var type_info: String = "null" if value == null else value.get_class()
 		return {"error": {"code": -3, "message": "Value type not allowed: %s" % type_info}}
 	node.set(prop, value)
 	return {"success": true, "node": path, "property": prop}
