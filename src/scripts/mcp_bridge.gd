@@ -30,23 +30,13 @@ var _recording: bool = false
 var _recorded_events: Array = []
 var _record_start_time: int = 0
 
-# ─── Monitor state ─────────────────────────────────────────────────────
-var _monitor_active: bool = false
-var _monitor_node_path: String = ""
-var _monitor_properties: Array = []
-var _monitor_interval_frames: int = 10
-var _monitor_frame_counter: int = 0
-var _monitor_samples: Array = []
-var _monitor_max_samples: int = 500
+# ─── Per-peer Monitor/Watch states (C-07) ──────────────────────────────────
 const MONITOR_MAX_PROPERTIES := 20
+const MONITOR_DEFAULT_MAX_SAMPLES := 500
+var _monitor_states: Dictionary = {}
 
-# ─── Signal watch state ────────────────────────────────────────────────
-var _watch_active: bool = false
-var _watch_node_path: String = ""
-var _watch_signal_name: String = ""
-var _watch_events: Array = []
-var _watch_max_events: int = 1000
-var _watch_connected: bool = false
+const WATCH_DEFAULT_MAX_EVENTS := 1000
+var _watch_states: Dictionary = {}
 
 const BLOCKED_PROPERTIES := [
 	"script", "owner", "process_mode", "process_priority", "process_input",
@@ -69,6 +59,10 @@ const ALLOWED_METHODS := [
 
 func _ready() -> void:
 	if Engine.is_editor_hint():
+		return
+	# Skip Bridge startup in headless/script mode — Bridge is for runtime game control only.
+	# Headless mode means MCP is driving Godot via --headless --script, not a running game.
+	if DisplayServer.get_name() == "headless":
 		return
 	_start_server()
 
@@ -136,30 +130,41 @@ func _process(_delta: float) -> void:
 		_peer_buffers.erase("buf_" + str(pid))
 		_authenticated_peers.erase(pid)
 		_peer_last_activity.erase(pid)
+		# C-07: cleanup per-peer monitor/watch state on disconnect
+		_cleanup_peer_state(pid)
 		# Auth fail/lockout counts persist across reconnects (all connections are localhost)
 		_peers.remove_at(i)
 
-	# ─── Property monitor sampling ────────────────────────────────────────
-	if _monitor_active and _monitor_properties.size() > 0:
-		_monitor_frame_counter += 1
-		if _monitor_frame_counter >= _monitor_interval_frames:
-			_monitor_frame_counter = 0
-			var node := get_node_or_null(_monitor_node_path)
-			if node == null:
-				_monitor_active = false
-				_monitor_samples.append({"frame": Engine.get_process_frames(), "time": Time.get_ticks_msec() / 1000.0, "error": "node_lost", "stopped_reason": "node_lost"})
-			else:
-				var values: Dictionary = {}
-				for prop in _monitor_properties:
-					values[prop] = _jsonify(node.get(prop))
-				_monitor_samples.append({
-					"frame": Engine.get_process_frames(),
-					"time": Time.get_ticks_msec() / 1000.0,
-					"values": values
-				})
-				if _monitor_samples.size() >= _monitor_max_samples:
-					_monitor_samples[-1]["stopped_reason"] = "max_samples_reached"
-					_monitor_active = false
+	# ─── Property monitor sampling (C-07: per-peer) ─────────────────────────
+	var dead_monitors: Array = []
+	for peer_id in _monitor_states:
+		var ms: Dictionary = _monitor_states[peer_id]
+		if not ms.get("active", false):
+			continue
+		ms["frame_counter"] = int(ms["frame_counter"]) + 1
+		if int(ms["frame_counter"]) < int(ms["interval_frames"]):
+			continue
+		ms["frame_counter"] = 0
+		var node := get_node_or_null(str(ms["node_path"]))
+		if node == null:
+			ms["active"] = false
+			(ms["samples"] as Array).append({"frame": Engine.get_process_frames(), "time": Time.get_ticks_msec() / 1000.0, "error": "node_lost", "stopped_reason": "node_lost"})
+		else:
+			var values: Dictionary = {}
+			for prop in (ms["properties"] as Array):
+				values[prop] = _jsonify(node.get(prop))
+			(ms["samples"] as Array).append({
+				"frame": Engine.get_process_frames(),
+				"time": Time.get_ticks_msec() / 1000.0,
+				"values": values
+			})
+			if (ms["samples"] as Array).size() >= int(ms["max_samples"]):
+				(ms["samples"] as Array)[-1]["stopped_reason"] = "max_samples_reached"
+				ms["active"] = false
+		if not ms.get("active", false):
+			dead_monitors.append(peer_id)
+	for pid_key in dead_monitors:
+		_monitor_states.erase(pid_key)
 
 
 # ─── Server management ─────────────────────────────────────────────────────
@@ -174,20 +179,23 @@ func _start_server() -> void:
 		_server = null
 		return
 	print("[MCP Bridge] Listening on 127.0.0.1:%d" % PORT)
+	# C-01: Secret file MUST be in project .godot/ — never fall back to tmpdir.
+	# Writing to tmpdir (globally readable on Linux) allows local privilege escalation.
 	var proj_dir := _get_project_dir()
-	if proj_dir != "":
-		var godot_dir := proj_dir + "/.godot"
-		if not DirAccess.dir_exists_absolute(godot_dir):
-			DirAccess.make_dir_recursive_absolute(godot_dir)
-		_secret_file = godot_dir + "/mcp_bridge_%d.secret" % PORT
-		if not _write_secret_to_file(_secret_file):
-			push_warning("[MCP Bridge] Failed to write secret to .godot/, falling back to tmpdir")
-		else:
-			return
-	_secret_file = OS.get_temp_dir().path_join("mcp_bridge_%d.secret" % PORT)
-	push_warning("[MCP Bridge][SECURITY] Writing secret to tmpdir — file may be readable by other users. Prefer project .godot/ directory.")
+	if proj_dir == "":
+		push_error("[MCP Bridge][SECURITY] Cannot determine project directory — aborting Bridge startup")
+		_server.stop()
+		_server = null
+		return
+	var godot_dir := proj_dir + "/.godot"
+	if not DirAccess.dir_exists_absolute(godot_dir):
+		DirAccess.make_dir_recursive_absolute(godot_dir)
+	_secret_file = godot_dir + "/mcp_bridge_%d.secret" % PORT
 	if not _write_secret_to_file(_secret_file):
-		push_warning("[MCP Bridge] Failed to write secret to %s" % _secret_file)
+		push_error("[MCP Bridge][SECURITY] Failed to write secret to %s — aborting Bridge startup. Check directory permissions." % _secret_file)
+		_server.stop()
+		_server = null
+		return
 
 ## Compat: Godot 4.6 renamed TCPServer.accept() to take_connection()
 func _server_take_connection() -> StreamPeerTCP:
@@ -322,12 +330,12 @@ func _process_buffer_bytes(peer: StreamPeerTCP, pid: int) -> bool:
 				peer.disconnect_from_host()
 				_peer_buffers[key] = raw
 				return true
-		var response := _handle_message(line)
+		var response := _handle_message(line, pid)
 		peer.put_data((response + "\n").to_utf8_buffer())
 	_peer_buffers[key] = raw
 	return false
 
-func _handle_message(raw: String) -> String:
+func _handle_message(raw: String, pid: int) -> String:
 	var parsed: Variant
 	parsed = JSON.parse_string(raw)
 	if parsed == null or not (parsed is Dictionary):
@@ -379,17 +387,17 @@ func _handle_message(raw: String) -> String:
 		"recording.stop":
 			result = _cmd_recording_stop()
 		"monitor.start":
-			result = _cmd_monitor_start(params)
+			result = _cmd_monitor_start(params, pid)
 		"monitor.stop":
-			result = _cmd_monitor_stop()
+			result = _cmd_monitor_stop(pid)
 		"monitor.poll":
-			result = _cmd_monitor_poll()
+			result = _cmd_monitor_poll(pid)
 		"watch.start":
-			result = _cmd_watch_start(params)
+			result = _cmd_watch_start(params, pid)
 		"watch.stop":
-			result = _cmd_watch_stop()
+			result = _cmd_watch_stop(pid)
 		"watch.poll":
-			result = _cmd_watch_poll()
+			result = _cmd_watch_poll(pid)
 		"find_ui_elements":
 			result = _cmd_find_ui_elements(params)
 		"click_button":
@@ -768,7 +776,7 @@ func _cmd_recording_stop() -> Variant:
 
 # ─── Monitor commands ───────────────────────────────────────────────────
 
-func _cmd_monitor_start(params: Dictionary) -> Variant:
+func _cmd_monitor_start(params: Dictionary, pid: int) -> Variant:
 	var node_path: String = str(params.get("node_path", ""))
 	var properties = params.get("properties", [])
 	var interval: int = int(params.get("interval_frames", 10))
@@ -797,15 +805,18 @@ func _cmd_monitor_start(params: Dictionary) -> Variant:
 		return {"error": {"code": -7, "message": "All requested properties are blocked"}}
 
 	var previous_samples: Array = []
-	if _monitor_active:
-		previous_samples = _monitor_samples.duplicate(true)
+	if _monitor_states.has(pid) and _monitor_states[pid].get("active", false):
+		previous_samples = (_monitor_states[pid]["samples"] as Array).duplicate(true)
 
-	_monitor_active = true
-	_monitor_node_path = node_path
-	_monitor_properties = filtered_props
-	_monitor_interval_frames = interval
-	_monitor_frame_counter = 0
-	_monitor_samples = []
+	_monitor_states[pid] = {
+		"active": true,
+		"node_path": node_path,
+		"properties": filtered_props,
+		"interval_frames": interval,
+		"frame_counter": 0,
+		"samples": [],
+		"max_samples": MONITOR_DEFAULT_MAX_SAMPLES,
+	}
 
 	var result_dict: Dictionary = {
 		"monitoring": true,
@@ -818,10 +829,13 @@ func _cmd_monitor_start(params: Dictionary) -> Variant:
 	return result_dict
 
 
-func _cmd_monitor_stop() -> Variant:
-	if not _monitor_active:
-		# I-03: monitor may have auto-stopped (node_lost/max_samples); return reason + samples
-		var old_samples := _monitor_samples.duplicate(true)
+func _cmd_monitor_stop(pid: int) -> Variant:
+	if not _monitor_states.has(pid):
+		return {"monitoring": false, "samples": [], "sample_count": 0, "message": "No active monitor for this peer"}
+	var ms: Dictionary = _monitor_states[pid]
+	if not ms.get("active", false):
+		# I-03: monitor may have auto-stopped; return reason + samples
+		var old_samples := (ms["samples"] as Array).duplicate(true)
 		var reason := ""
 		if old_samples.size() > 0:
 			var last: Dictionary = old_samples[-1]
@@ -830,11 +844,10 @@ func _cmd_monitor_stop() -> Variant:
 		var msg := "No active monitor"
 		if reason != "":
 			msg = "Monitor stopped: %s" % reason
-		_monitor_samples = []
-		_monitor_properties = []
+		_monitor_states.erase(pid)
 		return {"monitoring": false, "samples": old_samples, "sample_count": old_samples.size(), "stopped_reason": reason, "message": msg}
-	_monitor_active = false
-	var samples := _monitor_samples.duplicate(true)
+	ms["active"] = false
+	var samples := (ms["samples"] as Array).duplicate(true)
 	var duration := 0.0
 	if samples.size() > 0:
 		duration = samples[samples.size() - 1].get("time", 0.0) - samples[0].get("time", 0.0)
@@ -853,98 +866,107 @@ func _cmd_monitor_stop() -> Variant:
 	}
 	if stopped_reason != "":
 		result_dict["stopped_reason"] = stopped_reason
-	_monitor_samples = []
-	_monitor_properties = []
+	_monitor_states.erase(pid)
 	return result_dict
 
 
-func _cmd_monitor_poll() -> Variant:
-	if not _monitor_active:
+func _cmd_monitor_poll(pid: int) -> Variant:
+	if not _monitor_states.has(pid):
+		return {"monitoring": false, "samples": [], "message": "No active monitor for this peer"}
+	var ms: Dictionary = _monitor_states[pid]
+	if not ms.get("active", false):
 		# I-03: return last stopped_reason
 		var last_reason: String = ""
-		if _monitor_samples.size() > 0:
-			var last: Dictionary = _monitor_samples[-1]
+		if (ms["samples"] as Array).size() > 0:
+			var last: Dictionary = (ms["samples"] as Array)[-1]
 			if last.has("stopped_reason"):
 				last_reason = last["stopped_reason"]
 		var msg := "No active monitor"
 		if last_reason != "":
 			msg = "Monitor stopped: %s" % last_reason
 		return {"monitoring": false, "samples": [], "stopped_reason": last_reason, "message": msg}
-	var samples := _monitor_samples.duplicate(true)
+	var samples := (ms["samples"] as Array).duplicate(true)
 	return {
 		"monitoring": true,
-		"node_path": _monitor_node_path,
+		"node_path": str(ms["node_path"]),
 		"samples": samples,
 		"sample_count": samples.size(),
 	}
 
 
-# ─── Signal watch commands ──────────────────────────────────────────────
+# --- Signal watch commands (C-07: per-peer) ---
 
-func _on_watched_signal_0() -> void:
-	_record_watch_event([])
+func _on_watched_signal_0(pid: int) -> void:
+	_record_watch_event([], pid)
 
-func _on_watched_signal_1(arg0: Variant) -> void:
-	_record_watch_event([arg0])
+func _on_watched_signal_1(arg0: Variant, pid: int) -> void:
+	_record_watch_event([arg0], pid)
 
-func _on_watched_signal_2(arg0: Variant, arg1: Variant) -> void:
-	_record_watch_event([arg0, arg1])
+func _on_watched_signal_2(arg0: Variant, arg1: Variant, pid: int) -> void:
+	_record_watch_event([arg0, arg1], pid)
 
-func _on_watched_signal_3(arg0: Variant, arg1: Variant, arg2: Variant) -> void:
-	_record_watch_event([arg0, arg1, arg2])
+func _on_watched_signal_3(arg0: Variant, arg1: Variant, arg2: Variant, pid: int) -> void:
+	_record_watch_event([arg0, arg1, arg2], pid)
 
-func _on_watched_signal_4(arg0: Variant, arg1: Variant, arg2: Variant, arg3: Variant) -> void:
-	_record_watch_event([arg0, arg1, arg2, arg3])
+func _on_watched_signal_4(arg0: Variant, arg1: Variant, arg2: Variant, arg3: Variant, pid: int) -> void:
+	_record_watch_event([arg0, arg1, arg2, arg3], pid)
 
 
-func _record_watch_event(raw_args: Array) -> void:
-	if not _watch_active:
+func _record_watch_event(raw_args: Array, peer_id: int) -> void:
+	if not _watch_states.has(peer_id):
+		return
+	var ws: Dictionary = _watch_states[peer_id]
+	if not ws.get("active", false):
 		return
 	var safe_args: Array = []
 	for arg in raw_args:
 		safe_args.append(_jsonify(arg))
-	_watch_events.append({
+	(ws["events"] as Array).append({
 		"frame": Engine.get_process_frames(),
 		"time": Time.get_ticks_msec() / 1000.0,
 		"args": safe_args,
 	})
-	if _watch_events.size() >= _watch_max_events:
-		_do_watch_disconnect()
-		_watch_active = false
+	if (ws["events"] as Array).size() >= int(ws["max_events"]):
+		_do_watch_disconnect(peer_id)
+		ws["active"] = false
 
 
-func _do_watch_disconnect() -> void:
-	if not _watch_connected:
+func _do_watch_disconnect(peer_id: int) -> void:
+	if not _watch_states.has(peer_id):
 		return
-	var node := get_node_or_null(_watch_node_path)
+	var ws: Dictionary = _watch_states[peer_id]
+	if not ws.get("connected", false):
+		return
+	var node := get_node_or_null(str(ws.get("node_path", "")))
 	if node != null:
-		var callable := _get_watch_callable()
-		if node.has_signal(_watch_signal_name) and node.is_connected(_watch_signal_name, callable):
-			node.disconnect(_watch_signal_name, callable)
-	_watch_connected = false
+		var callable := _get_watch_callable(peer_id)
+		var signal_name: String = str(ws.get("signal_name", ""))
+		if node.has_signal(signal_name) and node.is_connected(signal_name, callable):
+			node.disconnect(signal_name, callable)
+	ws["connected"] = false
 
 
-func _get_watch_callable() -> Callable:
-	# Pick the right lambda based on signal argument count
-	# We connect with the matching arity to avoid Godot type errors
+func _get_watch_callable(peer_id: int) -> Callable:
+	var ws: Dictionary = _watch_states.get(peer_id, {})
 	var sig_list := []
-	var node := get_node_or_null(_watch_node_path)
-	if node != null and node.has_signal(_watch_signal_name):
+	var node := get_node_or_null(str(ws.get("node_path", "")))
+	var signal_name: String = str(ws.get("signal_name", ""))
+	if node != null and node.has_signal(signal_name):
 		sig_list = node.get_signal_list()
 	for sig_info in sig_list:
-		if sig_info.get("name", "") == _watch_signal_name:
+		if sig_info.get("name", "") == signal_name:
 			var arg_count: int = sig_info.get("args", []).size()
 			match arg_count:
-				0: return _on_watched_signal_0
-				1: return _on_watched_signal_1
-				2: return _on_watched_signal_2
-				3: return _on_watched_signal_3
-				4: return _on_watched_signal_4
-				_: return _on_watched_signal_0
-	return _on_watched_signal_0
+				0: return _on_watched_signal_0.bind(peer_id)
+				1: return _on_watched_signal_1.bind(peer_id)
+				2: return _on_watched_signal_2.bind(peer_id)
+				3: return _on_watched_signal_3.bind(peer_id)
+				4: return _on_watched_signal_4.bind(peer_id)
+				_: return _on_watched_signal_0.bind(peer_id)
+	return _on_watched_signal_0.bind(peer_id)
 
 
-func _cmd_watch_start(params: Dictionary) -> Variant:
+func _cmd_watch_start(params: Dictionary, pid: int) -> Variant:
 	var node_path: String = str(params.get("node_path", ""))
 	var signal_name: String = str(params.get("signal_name", ""))
 	var max_events: int = int(params.get("max_events", 1000))
@@ -964,29 +986,32 @@ func _cmd_watch_start(params: Dictionary) -> Variant:
 	if not node.has_signal(signal_name):
 		return {"error": {"code": -4, "message": "Signal not found: %s on %s" % [signal_name, node_path]}}
 
-	# If already watching, disconnect first
-	if _watch_active:
-		_do_watch_disconnect()
+	# If this peer already watching, disconnect first
+	if _watch_states.has(pid) and _watch_states[pid].get("active", false):
+		_do_watch_disconnect(pid)
 
 	var previous_events: Array = []
-	if _watch_events.size() > 0:
-		previous_events = _watch_events.duplicate(true)
+	if _watch_states.has(pid) and (_watch_states[pid].get("events") as Array).size() > 0:
+		previous_events = (_watch_states[pid]["events"] as Array).duplicate(true)
 
-	# Temporarily set path/name so _get_watch_callable can resolve
-	_watch_node_path = node_path
-	_watch_signal_name = signal_name
+	# Set state before resolving callable
+	_watch_states[pid] = {
+		"active": false,
+		"node_path": node_path,
+		"signal_name": signal_name,
+		"events": [],
+		"max_events": max_events,
+		"connected": false,
+	}
 
-	var callable := _get_watch_callable()
+	var callable := _get_watch_callable(pid)
 	var err := node.connect(signal_name, callable)
 	if err != OK:
-		_watch_connected = false
-		_watch_active = false
+		_watch_states.erase(pid)
 		return {"error": {"code": -5, "message": "Failed to connect signal: %s (error %d)" % [signal_name, err]}}
 
-	_watch_active = true
-	_watch_connected = true
-	_watch_max_events = max_events
-	_watch_events = []
+	_watch_states[pid]["active"] = true
+	_watch_states[pid]["connected"] = true
 
 	var result_dict: Dictionary = {
 		"watching": true,
@@ -999,38 +1024,49 @@ func _cmd_watch_start(params: Dictionary) -> Variant:
 	return result_dict
 
 
-func _cmd_watch_stop() -> Variant:
-	if not _watch_active:
-		return {"watching": false, "events": [], "message": "No active watch"}
-	_do_watch_disconnect()
-	_watch_active = false
-	var events := _watch_events.duplicate(true)
+func _cmd_watch_stop(pid: int) -> Variant:
+	if not _watch_states.has(pid):
+		return {"watching": false, "events": [], "event_count": 0, "message": "No active watch for this peer"}
+	var ws: Dictionary = _watch_states[pid]
+	_do_watch_disconnect(pid)
+	ws["active"] = false
+	var events := (ws["events"] as Array).duplicate(true)
 	var duration := 0.0
 	if events.size() > 0:
 		duration = events[events.size() - 1].get("time", 0.0) - events[0].get("time", 0.0)
 	var result_dict: Dictionary = {
 		"watching": false,
-		"node_path": _watch_node_path,
-		"signal_name": _watch_signal_name,
 		"events": events,
 		"event_count": events.size(),
+		"node_path": str(ws.get("node_path", "")),
+		"signal_name": str(ws.get("signal_name", "")),
 		"duration_seconds": duration,
 	}
-	_watch_events = []
+	_watch_states.erase(pid)
 	return result_dict
 
 
-func _cmd_watch_poll() -> Variant:
-	if not _watch_active:
-		return {"watching": false, "events": [], "message": "No active watch"}
-	var events := _watch_events.duplicate(true)
+func _cmd_watch_poll(pid: int) -> Variant:
+	if not _watch_states.has(pid) or not _watch_states[pid].get("active", false):
+		return {"watching": false, "events": [], "message": "No active watch for this peer"}
+	var ws: Dictionary = _watch_states[pid]
+	var events := (ws["events"] as Array).duplicate(true)
 	return {
 		"watching": true,
-		"node_path": _watch_node_path,
-		"signal_name": _watch_signal_name,
+		"node_path": str(ws.get("node_path", "")),
+		"signal_name": str(ws.get("signal_name", "")),
 		"events": events,
 		"event_count": events.size(),
 	}
+
+
+# C-07: cleanup per-peer state on disconnect
+func _cleanup_peer_state(pid: int) -> void:
+	if _watch_states.has(pid):
+		_do_watch_disconnect(pid)
+		_watch_states.erase(pid)
+	if _monitor_states.has(pid):
+		_monitor_states.erase(pid)
 
 
 # ─── UI discovery commands ──────────────────────────────────────────────

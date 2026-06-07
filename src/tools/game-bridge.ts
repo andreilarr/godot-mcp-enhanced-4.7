@@ -1,7 +1,7 @@
 import { createConnection, Socket } from 'net';
 import { readFileSync, writeFileSync, existsSync, copyFileSync, unlinkSync, chmodSync, statSync, lstatSync, renameSync } from 'fs';
 import { join, dirname } from 'path';
-import { tmpdir } from 'os';
+import { tmpdir, userInfo } from 'os';
 import { execFileSync } from 'child_process';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
@@ -76,8 +76,9 @@ function readBridgeSecret(): string | null {
     // Tighten permissions: owner-only read
     if (process.platform === 'win32') {
       try {
-        const username = process.env.USERNAME;
-        if (username && /^[A-Za-z0-9_\-\\]+$/.test(username)) {
+        // C-ARC-01: Use os.userInfo().username (no env spoofing), strict regex (no backslash)
+        const username = userInfo().username;
+        if (username && /^[A-Za-z0-9_-]+$/.test(username)) {
           execFileSync('icacls', [secretPath, '/inheritance:r', '/grant:r', `${username}:R`], { stdio: 'ignore' });
         }
       } catch (err) { getLogger().debug('bridge', `restrict Windows file permissions: ${err}`); }
