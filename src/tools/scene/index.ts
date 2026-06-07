@@ -312,6 +312,8 @@ export async function handleTool(
 
     default: return null;
   }
+  // Unreachable for well-formed action strings, but satisfies TS control flow
+  return null;
 }
 
 

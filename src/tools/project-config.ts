@@ -151,7 +151,7 @@ export function projectWriteConfig(content: string, key: string, value: string):
   //    key like "application/config/name" → section "[application]", prop "config/name"
   //    key like "autoload/GameMgr" → section "[autoload]", prop "GameMgr"
   const isAutoload = key.startsWith(AUTOLOAD_PREFIX)
-  const sectionName = isAutoload ? 'autoload' : key.split('/')[0]
+  const sectionName = isAutoload ? 'autoload' : key.split('/')[0]!
   const propName = isAutoload ? key.slice(AUTOLOAD_PREFIX.length) : key.slice(sectionName.length + 1)
 
   // 4. Format the line
@@ -175,14 +175,14 @@ export function projectWriteConfig(content: string, key: string, value: string):
   let propFound = false
 
   for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim()
+    const trimmed = lines[i]!.trim()
 
     // Detect section headers
     if (trimmed === `[${sectionName}]`) {
       sectionIndex = i
       // Look for the property within this section
       for (let j = i + 1; j < lines.length; j++) {
-        const inner = lines[j].trim()
+        const inner = lines[j]!.trim()
         // Stop at next section
         if (inner.startsWith('[') && inner.endsWith(']')) break
         // Match existing property line (exact prop name before =)
@@ -201,7 +201,7 @@ export function projectWriteConfig(content: string, key: string, value: string):
         // Find the last non-empty line in this section
         let lastInSection = i
         for (let j = i + 1; j < lines.length; j++) {
-          const inner = lines[j].trim()
+          const inner = lines[j]!.trim()
           if (inner.startsWith('[') && inner.endsWith(']')) break
           lastInSection = j
         }

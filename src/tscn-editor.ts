@@ -1509,7 +1509,7 @@ export function addNodes(
   nodes: Array<AddNodeParams>,
 ): AddNodeResult {
   if (nodes.length === 0) {
-    return { success: true, fallback: false, scene: tscnContent };
+    return { success: true, fallback: false, scene: tscnContent, message: 'No nodes to add' };
   }
 
   // Pre-check: if any node has unsupported properties, fall back entirely

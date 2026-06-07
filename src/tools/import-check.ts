@@ -108,22 +108,25 @@ export async function runImport(
       { stdio: ['ignore', 'pipe', 'pipe'] },
     );
 
-    let stdout = '';
-    let stderr = '';
+    // C-PERF-01: Use Buffer[] to avoid O(n²) string concatenation
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
 
     proc.stdout?.on('data', (data: Buffer) => {
-      stdout += data.toString();
+      stdoutChunks.push(data);
     });
 
     proc.stderr?.on('data', (data: Buffer) => {
-      stderr += data.toString();
+      stderrChunks.push(data);
     });
 
     const timer = setTimeout(() => {
       forceKillTree(proc);
+      const stdoutTail = Buffer.concat(stdoutChunks).toString('utf-8').slice(-500);
+      const stderrTail = Buffer.concat(stderrChunks).toString('utf-8').slice(-500);
       reject(new Error(
         `Import warmup timed out after ${timeoutMs}ms for ${projectPath}. ` +
-        `stdout: ${stdout.slice(-500) || '(empty)'}; stderr: ${stderr.slice(-500) || '(empty)'}`,
+        `stdout: ${stdoutTail || '(empty)'}; stderr: ${stderrTail || '(empty)'}`,
       ));
     }, timeoutMs);
 
@@ -134,6 +137,8 @@ export async function runImport(
 
     proc.on('close', (code) => {
       clearTimeout(timer);
+      const stdout = Buffer.concat(stdoutChunks).toString('utf-8');
+      const stderr = Buffer.concat(stderrChunks).toString('utf-8');
       if (code === 0) {
         // Update cache to reflect the fresh import
         const latestMtime = scanLatestMtime(projectPath);

@@ -678,8 +678,14 @@ export async function executeGdscript(
 
   // Spawn Godot process
   return new Promise<ExecuteGdscriptResult>((resolve, reject) => {
-    let stdout = '';
-    let stderr = '';
+    // C-PERF-01: Use Buffer[] to avoid O(n²) string concatenation.
+    // Each += on a string copies the entire contents; with 10MB of output
+    // this becomes catastrophically slow. Buffers collect chunks and
+    // are joined once at close time.
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
 
     const MAX_OUTPUT_BYTES = 10 * 1024 * 1024; // 10MB output limit
     let outputExceeded = false;
@@ -691,19 +697,21 @@ export async function executeGdscript(
 
     proc.stdout?.on('data', (d: Buffer) => {
       if (outputExceeded) return;
-      stdout += d.toString();
-      if (Buffer.byteLength(stdout, 'utf-8') > MAX_OUTPUT_BYTES) {
+      stdoutChunks.push(d);
+      stdoutBytes += d.byteLength;
+      if (stdoutBytes > MAX_OUTPUT_BYTES) {
         outputExceeded = true;
-        stdout += '\n[OUTPUT TRUNCATED: exceeded 10MB limit]';
+        stdoutChunks.push(Buffer.from('\n[OUTPUT TRUNCATED: exceeded 10MB limit]'));
         forceKillTree(proc);
       }
     });
     proc.stderr?.on('data', (d: Buffer) => {
       if (outputExceeded) return;
-      stderr += d.toString();
-      if (Buffer.byteLength(stderr, 'utf-8') > MAX_OUTPUT_BYTES) {
+      stderrChunks.push(d);
+      stderrBytes += d.byteLength;
+      if (stderrBytes > MAX_OUTPUT_BYTES) {
         outputExceeded = true;
-        stderr += '\n[OUTPUT TRUNCATED: exceeded 10MB limit]';
+        stderrChunks.push(Buffer.from('\n[OUTPUT TRUNCATED: exceeded 10MB limit]'));
         forceKillTree(proc);
       }
     });
@@ -716,6 +724,8 @@ export async function executeGdscript(
 
     proc.on('close', (exitCode) => {
       clearTimeout(timer);
+      const stdout = Buffer.concat(stdoutChunks).toString('utf-8');
+      const stderr = Buffer.concat(stderrChunks).toString('utf-8');
       releaseShortRunningSlot();
       // Cleanup session directory (fire-and-forget async)
       rm(sessionDir, { recursive: true, force: true }).catch(() => {});

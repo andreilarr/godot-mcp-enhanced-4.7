@@ -83,7 +83,8 @@ function extractBalancedParenContent(input: string, typeName: string): string | 
  * unescape "" sequences — they pass through unchanged in the split result.
  * All unescaping of Godot's "" → " string escaping happens HERE, exactly once.
  */
-function parseValue(raw: string, maxDepth: number = 50): unknown {
+function parseValue(raw: string, maxDepth: number = 20): unknown {
+  if (!checkParseBudget()) return raw; // C-PERF-03: budget exhausted, return raw
   const trimmed = raw.trim();
 
   // String — Godot uses "" (two double-quotes) to escape a literal " inside strings.
@@ -132,6 +133,8 @@ function parseValue(raw: string, maxDepth: number = 50): unknown {
   if (colorMatch) {
     const inner = extractBalancedParenContent(trimmed, 'Color');
     if (inner !== null) return { __type: 'Color', value: inner };
+    // C-PAR-01: Malformed constructor (unbalanced parens) — return raw string, don't fall through
+    return trimmed;
   }
 
   // Vector2(x, y) — handle nested parentheses
@@ -139,6 +142,7 @@ function parseValue(raw: string, maxDepth: number = 50): unknown {
   if (v2Match) {
     const inner = extractBalancedParenContent(trimmed, 'Vector2');
     if (inner !== null) return { __type: 'Vector2', value: inner };
+    return trimmed;
   }
 
   // Vector3(x, y, z) — handle nested parentheses
@@ -146,12 +150,14 @@ function parseValue(raw: string, maxDepth: number = 50): unknown {
   if (v3Match) {
     const inner = extractBalancedParenContent(trimmed, 'Vector3');
     if (inner !== null) return { __type: 'Vector3', value: inner };
+    return trimmed;
   }
 
-  // Number (int or float)
+  // Number (int or float) — Number.isFinite rejects NaN, Infinity, and
+  // Number("") == 0 is excluded by the trimmed !== '' guard above.
   if (trimmed !== '') {
     const num = Number(trimmed);
-    if (!isNaN(num)) return num;
+    if (Number.isFinite(num)) return num;
   }
 
   // Fallback: raw string
@@ -164,21 +170,35 @@ function parseValue(raw: string, maxDepth: number = 50): unknown {
  */
 const MAX_SPLIT_ELEMENTS = 10000;
 const MAX_TSCN_INPUT_SIZE = 10 * 1024 * 1024; // 10MB
+// C-PERF-03: Global operation budget prevents pathological recursion.
+// Even with maxDepth=20 and 10k element limit, worst case is 200k recursive calls.
+// This counter is reset at each parseTscn() entry and decremented on every parseValue call.
+const MAX_PARSE_OPERATIONS = 1_000_000;
+let _parseOpsRemaining = MAX_PARSE_OPERATIONS;
+function checkParseBudget(): boolean {
+  return --_parseOpsRemaining >= 0;
+}
+function resetParseBudget(): void {
+  _parseOpsRemaining = MAX_PARSE_OPERATIONS;
+}
 
 function splitTopLevel(input: string): string[] {
   const parts: string[] = [];
   let depth = 0;
-  let current = '';
+  // C-PERF-02: Use char array instead of string concatenation to avoid O(n²).
+  // Each += on a string copies the entire buffer; for large .tscn property
+  // values (e.g. 1MB PackedStringArray) this means millions of copies.
+  const currentChars: string[] = [];
   let inString = false;
 
   for (let i = 0; i < input.length; i++) {
     if (parts.length >= MAX_SPLIT_ELEMENTS) break;
-    const ch = input[i];
+    const ch = input[i]!;
     if (inString) {
-      current += ch;
+      currentChars.push(ch);
       if (ch === '"') {
         if (i + 1 < input.length && input[i + 1] === '"') {
-          current += '"';
+          currentChars.push('"');
           i++;
         } else {
           inString = false;
@@ -187,22 +207,25 @@ function splitTopLevel(input: string): string[] {
     } else {
       if (ch === '"') {
         inString = true;
-        current += ch;
+        currentChars.push(ch);
       } else if (ch === '[' || ch === '{' || ch === '(') {
         depth++;
-        current += ch;
+        currentChars.push(ch);
       } else if (ch === ']' || ch === '}' || ch === ')') {
         depth--;
-        current += ch;
+        currentChars.push(ch);
       } else if (ch === ',' && depth === 0) {
-        parts.push(current.trim());
-        current = '';
+        parts.push(currentChars.join('').trim());
+        currentChars.length = 0;
       } else {
-        current += ch;
+        currentChars.push(ch);
       }
     }
   }
-  if (current.trim() && parts.length < MAX_SPLIT_ELEMENTS) parts.push(current.trim());
+  if (currentChars.length > 0 && parts.length < MAX_SPLIT_ELEMENTS) {
+    const tail = currentChars.join('').trim();
+    if (tail) parts.push(tail);
+  }
   return parts;
 }
 
@@ -265,6 +288,7 @@ function splitLines(content: string): string[] {
 }
 
 export function parseTscn(content: string): ParsedScene {
+  resetParseBudget(); // C-PERF-03: reset per-file budget
   if (content.length > MAX_TSCN_INPUT_SIZE) {
     throw new Error(`tscn input too large: ${content.length} bytes exceeds ${MAX_TSCN_INPUT_SIZE} byte limit`);
   }
