@@ -1,10 +1,10 @@
 /**
  * Process state management for Godot MCP Enhanced.
  *
- * C-04: All state-mutating operations are serialized through an async queue
- * (`enqueue`). Reads are still direct (no queueing) since they're atomic
- * in the Node.js single-threaded model. This prevents race conditions when
- * MCP clients introduce parallel tool calls.
+ * C-04: Async state-mutating operations are serialized through `enqueueAsync`.
+ * Reads are still direct (no queueing) since they're atomic in the Node.js
+ * single-threaded model. This prevents race conditions when MCP clients
+ * introduce parallel tool calls.
  */
 
 import type { ChildProcess } from 'child_process';
@@ -78,13 +78,6 @@ let _shortRunningCount = 0;
 
 // ─── C-04: Async queue for serializing state mutations ────────────────────────
 let _queueTail: Promise<void> = Promise.resolve();
-
-/** Serialize a synchronous state-mutating operation. Runs immediately if queue is idle,
- *  otherwise waits for prior operations. Returns the result. */
-function enqueue<T>(fn: () => T): T {
-  const result = fn();
-  return result;
-}
 
 /** Serialize an async state-mutating operation. Ensures only one async mutation
  *  is in-flight at a time. Useful for killProcess and other async operations. */

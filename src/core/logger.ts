@@ -157,6 +157,7 @@ function createLogger(opts: LoggerOptions = {}): Logger {
   let currentDate = todayStr();
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let closed = false;
+  let _lastCleanupDate = ''; // I-PERF-01: only run cleanup once per day
   const pendingTools = new Map<string, PendingTool>();
 
   // ---- 文件管理 ----
@@ -259,8 +260,12 @@ function createLogger(opts: LoggerOptions = {}): Logger {
       buffer = [];
     }
 
-    // 首次刷盘时清理旧文件
-    cleanupOldFiles();
+    // I-PERF-01: Only run cleanup once per day instead of every flush
+    const today = todayStr();
+    if (_lastCleanupDate !== today) {
+      cleanupOldFiles();
+      _lastCleanupDate = today;
+    }
   }
 
   /** 检查超时未配对的 toolStart */

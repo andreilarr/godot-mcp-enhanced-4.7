@@ -68,6 +68,8 @@ export async function startMcpServer(args: string[]): Promise<void> {
   server.run().catch((error: unknown) => {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     getLogger().error('godot-mcp', 'Failed to run server', { error: msg });
+    // I-CQ-01: Graceful cleanup before exit
+    getLogger().close();
     process.exit(1);
   });
 

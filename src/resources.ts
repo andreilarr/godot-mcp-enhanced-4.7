@@ -6,7 +6,7 @@
 import { existsSync, readFileSync, statSync } from 'fs';
 import { resolve, join, extname, sep, basename } from 'path';
 import { parseTscnSummary } from './tscn-parser.js';
-import { parseConfigValue, safeRealPath, scanFiles, iterativeDecode, isPathInAllowedRoots } from './helpers.js';
+import { parseConfigValue, safeRealPath, scanFiles, iterativeDecode, isPathInAllowedRoots, resolveWithinRoot } from './helpers.js';
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB — reject files larger than this
 
@@ -349,7 +349,11 @@ function readProjectConfig(projectPath: string): McpResourceContent {
 }
 
 function readSceneResource(projectPath: string, scenePath: string): McpResourceContent {
-  const fullPath = join(projectPath, scenePath);
+  // I-SEC-07: Use resolveWithinRoot instead of join for path traversal protection
+  let fullPath: string;
+  try { fullPath = resolveWithinRoot(projectPath, scenePath); } catch {
+    return { uri: `godot://scene/${scenePath}`, mimeType: 'text/plain', text: `Access denied: ${scenePath}` };
+  }
   if (!existsSync(fullPath)) {
     return { uri: `godot://scene/${scenePath}`, mimeType: 'text/plain', text: `ERROR: Scene file not found: ${scenePath}` };
   }
@@ -359,7 +363,11 @@ function readSceneResource(projectPath: string, scenePath: string): McpResourceC
 }
 
 function readScriptResource(projectPath: string, scriptPath: string): McpResourceContent {
-  const fullPath = join(projectPath, scriptPath);
+  // I-SEC-07: Use resolveWithinRoot instead of join for path traversal protection
+  let fullPath: string;
+  try { fullPath = resolveWithinRoot(projectPath, scriptPath); } catch {
+    return { uri: `godot://script/${scriptPath}`, mimeType: 'text/plain', text: `Access denied: ${scriptPath}` };
+  }
   if (!existsSync(fullPath)) {
     return { uri: `godot://script/${scriptPath}`, mimeType: 'text/plain', text: `ERROR: Script file not found: ${scriptPath}` };
   }
@@ -371,7 +379,11 @@ function readScriptResource(projectPath: string, scriptPath: string): McpResourc
 }
 
 function readFileResource(projectPath: string, filePath: string): McpResourceContent {
-  const fullPath = join(projectPath, filePath);
+  // I-SEC-07: Use resolveWithinRoot instead of join for path traversal protection
+  let fullPath: string;
+  try { fullPath = resolveWithinRoot(projectPath, filePath); } catch {
+    return { uri: `godot://file/${filePath}`, mimeType: 'text/plain', text: `Access denied: ${filePath}` };
+  }
   if (!existsSync(fullPath)) {
     return { uri: `godot://file/${filePath}`, mimeType: 'text/plain', text: `ERROR: File not found: ${filePath}` };
   }

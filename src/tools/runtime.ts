@@ -217,7 +217,13 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         return textResult(`Error: Not a Godot project (no project.godot found): ${p}`);
       }
       if (!acquireShortRunningSlot()) return textResult('Error: too many concurrent headless operations (max 3). Please wait and retry.');
-      const testScript = (args.test_script as string) || 'res://test/';
+      const rawTestScript = (args.test_script as string) || 'res://test/';
+      // I-SEC-08: Validate test_script starts with res:// to prevent filesystem traversal
+      if (!rawTestScript.startsWith('res://')) {
+        releaseShortRunningSlot();
+        return textResult(`Error: test_script must start with "res://", got: "${rawTestScript}"`);
+      }
+      const testScript = rawTestScript;
       const godot = await ctx.findGodot();
 
       return new Promise((resolve) => {

@@ -155,24 +155,43 @@ export class GodotServer {
     });
   }
 
+  // I-PERF-07: Cache detectProjectPath result (30s TTL — path rarely changes mid-session)
+  private _cachedProjectPath: string | undefined;
+  private _cachedProjectPathTime = 0;
+  private static readonly CACHE_TTL_MS = 30_000;
+
   private detectProjectPath(): string | undefined {
+    const now = Date.now();
+    if (this._cachedProjectPathTime > 0 && now - this._cachedProjectPathTime < GodotServer.CACHE_TTL_MS) {
+      return this._cachedProjectPath;
+    }
     // Allow explicit override via environment variable
     const envPath = process.env.GODOT_PROJECT_PATH;
     if (envPath) {
-      if (existsSync(join(envPath, 'project.godot'))) return envPath;
+      if (existsSync(join(envPath, 'project.godot'))) {
+        this._cachedProjectPath = envPath;
+        this._cachedProjectPathTime = now;
+        return envPath;
+      }
       getLogger().warn('godot-mcp', `GODOT_PROJECT_PATH="${envPath}" does not contain project.godot, ignoring`);
     }
     // I-06: 增加上限到 30 层 + 添加诊断日志帮助用户定位
     let dir = process.cwd();
     const searchedPaths: string[] = [];
     for (let i = 0; i < 30; i++) {
-      if (existsSync(join(dir, 'project.godot'))) return dir;
+      if (existsSync(join(dir, 'project.godot'))) {
+        this._cachedProjectPath = dir;
+        this._cachedProjectPathTime = now;
+        return dir;
+      }
       searchedPaths.push(dir);
       const parent = join(dir, '..');
       if (parent === dir) break;
       dir = parent;
     }
     getLogger().debug('godot-mcp', `detectProjectPath: no project.godot found. Searched: ${searchedPaths.join(' → ')}`);
+    this._cachedProjectPath = undefined;
+    this._cachedProjectPathTime = now;
     return undefined;
   }
 
@@ -194,6 +213,8 @@ export class GodotServer {
         getLogger().warn('auth', 'No editor secret found — plugin may not be running');
         if (this.noFallback) {
           getLogger().error('auth', 'Editor auth required but no secret available. Install the editor plugin.');
+          // I-CQ-01: Graceful cleanup before exit
+          getLogger().close();
           process.exit(1);
         }
         getLogger().warn('godot-mcp', 'Running in Headless mode (no editor auth).');

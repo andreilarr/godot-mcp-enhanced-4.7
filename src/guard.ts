@@ -16,6 +16,9 @@ const MAX_ARGS_JSON_SIZE = 10_000; // I-02: Truncate args JSON to prevent memory
 const pendingTokens = new Map<string, PendingToken>();
 let _recentCreations: number[] = []; // timestamps of recent createPendingToken calls
 
+// I-CQ-06: Prevent timer restart after explicit cleanup/shutdown
+let _shutdown = false;
+
 let _cleanupTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
   const now = Date.now();
   for (const [key, pending] of pendingTokens) {
@@ -27,6 +30,7 @@ if (_cleanupTimer.unref) _cleanupTimer.unref();
 
 /** Restart the background cleanup interval if it isn't running. */
 function ensureCleanupTimer(): void {
+  if (_shutdown) return; // I-CQ-06: Don't restart after explicit cleanup
   if (_cleanupTimer !== null) return;
   _cleanupTimer = setInterval(() => {
     const now = Date.now();
@@ -127,6 +131,7 @@ export function pendingCount(): number {
 export function resetState(): void {
   pendingTokens.clear();
   _recentCreations = [];
+  _shutdown = false; // Allow restart after test reset
   if (_cleanupTimer !== null) {
     clearInterval(_cleanupTimer);
     _cleanupTimer = null;
@@ -139,7 +144,13 @@ export function resetState(): void {
  * the next `createPendingToken()` call.
  */
 export function cleanup(): void {
-  resetState();
+  _shutdown = true; // I-CQ-06: Prevent timer restart after graceful shutdown
+  pendingTokens.clear();
+  _recentCreations = [];
+  if (_cleanupTimer !== null) {
+    clearInterval(_cleanupTimer);
+    _cleanupTimer = null;
+  }
 }
 
 /** @internal Exposed for testing — check whether the cleanup timer is active. */
