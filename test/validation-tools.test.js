@@ -23,6 +23,16 @@ vi.mock('../src/gdscript-executor.js', () => ({
   })),
 }));
 
+vi.mock('../src/tools/spawn-helper.js', () => ({
+  spawnGodot: vi.fn(async () => ({
+    stdout: 'Godot Engine v4.6.2.stable\nMCP output here\n',
+    stderr: '',
+    output: 'Godot Engine v4.6.2.stable\nMCP output here\n',
+    exitCode: 0,
+    timedOut: false,
+  })),
+}));
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function makeCtx(overrides = {}) {
@@ -125,5 +135,48 @@ describe('validation-tools: isErrorFalsePositive additional cases', () => {
   it('returns false for real identifier not found', () => {
     const line = 'SCRIPT ERROR: Parse Error: Identifier "my_custom_func" not found in the current scope.';
     expect(isErrorFalsePositive(line)).toBe(false);
+  });
+});
+
+// ─── run_and_verify: spawnGodot path (V-01 fix) ─────────────────────────────
+
+describe('run_and_verify: spawnGodot path (V-01 fix)', () => {
+  it('calls ctx.setProjectDir before spawnGodot', async () => {
+    const ctx = makeCtx();
+    const args = { action: 'run_and_verify', project_path: '/fake/project' };
+    await handleTool('validation', args, ctx);
+    expect(ctx.setProjectDir).toHaveBeenCalledWith('/fake/project');
+  });
+
+  it('returns analysis with timed out message when spawnGodot times out', async () => {
+    const { spawnGodot } = await import('../src/tools/spawn-helper.js');
+    vi.mocked(spawnGodot).mockResolvedValueOnce({
+      stdout: 'some output\n',
+      stderr: '',
+      output: 'some output\n',
+      exitCode: null,
+      timedOut: true,
+    });
+    const ctx = makeCtx();
+    const args = { action: 'run_and_verify', project_path: '/fake/project', timeout: 5 };
+    const result = await handleTool('validation', args, ctx);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.summary).toContain('timed out');
+  });
+
+  it('returns analysis with exit code message when spawnGodot exits non-zero', async () => {
+    const { spawnGodot } = await import('../src/tools/spawn-helper.js');
+    vi.mocked(spawnGodot).mockResolvedValueOnce({
+      stdout: '',
+      stderr: 'SCRIPT ERROR: something broke\n',
+      output: 'SCRIPT ERROR: something broke\n',
+      exitCode: 1,
+      timedOut: false,
+    });
+    const ctx = makeCtx();
+    const args = { action: 'run_and_verify', project_path: '/fake/project' };
+    const result = await handleTool('validation', args, ctx);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.summary).toContain('exited with code 1');
   });
 });
