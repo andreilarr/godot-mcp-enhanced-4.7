@@ -6,7 +6,7 @@ import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
-import { generateCommitScript } from './scene-commit.js';
+import { generateCommitScript, type CommitOperation } from './scene-commit.js';
 import { acquireShortRunningSlot, releaseShortRunningSlot } from '../core/process-state.js';
 import { opsErrorResult } from './shared.js';
 
@@ -74,7 +74,7 @@ export async function handleTool(
   const resPath = `res://${scenePath.replace(/\\/g, '/')}`;
   const script = generateCommitScript(
     resPath,
-    operations as any,
+    operations as unknown as CommitOperation[],
     save,
     stopOnError,
   );

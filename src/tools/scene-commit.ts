@@ -211,8 +211,8 @@ ${errAction}
 }
 
 function serializeGdValue(value: unknown): string {
-  // I-03: Escape backslash, quote, newline for GDScript string safety
-  if (typeof value === 'string') return `"${value.replace(/\\/g, '\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
+  // I-03, C-01: Escape backslash, quote, newline for GDScript string safety
+  if (typeof value === 'string') return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
   if (typeof value === 'number') return String(value);
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (value === null || value === undefined) return 'null';
@@ -272,6 +272,7 @@ function serializeGdValue(value: unknown): string {
     }
 
     // C-02: Strip _type from fallback to avoid leaking meta-field into GDScript
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { _type: _ignored, ...sanitized } = obj;
     return JSON.stringify(sanitized);
   }

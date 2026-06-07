@@ -22,6 +22,13 @@ export async function startMcpServer(args: string[]): Promise<void> {
     }
   }
 
+  // C-08: Warn when path restrictions are not configured (allow-by-default)
+  if (!process.env.ALLOWED_PROJECT_PATHS && !process.env.GODOT_MCP_UNRESTRICTED) {
+    const logger = getLogger();
+    logger.warn('security', 'ALLOWED_PROJECT_PATHS is not set — all project paths are allowed by default. ' +
+      'Set ALLOWED_PROJECT_PATHS=/path1;/path2 to restrict access, or GODOT_MCP_UNRESTRICTED=true to suppress this warning.');
+  }
+
   // --profile=<name> or GODOT_MCP_PROFILE for fine-grained tool selection
   const profileArg = args.find(a => a.startsWith('--profile='));
   const profileFromArg = profileArg ? profileArg.split('=')[1] : null;
@@ -29,7 +36,7 @@ export async function startMcpServer(args: string[]): Promise<void> {
 
   const activeProfile = profileFromArg || profileFromEnv;
 
-  const toolMode = activeProfile ? activeProfile
+  const toolMode = activeProfile ? activeProfile as 'full' | 'lite' | 'minimal'
     : args.includes('--minimal') ? 'minimal'
     : args.includes('--lite') ? 'lite'
     : process.env.GODOT_MCP_MODE === 'minimal' ? 'minimal'
@@ -54,10 +61,11 @@ export async function startMcpServer(args: string[]): Promise<void> {
     const logger = getLogger();
     logger.info('godot-mcp', `Received ${signal}, shutting down...`);
     try {
-      logger.close(); // flush 缓冲区 + 关闭文件句柄
-      await server.close();
+      await server.close();    // 先关闭服务器（内部会记录 killProcess 等日志）
+      logger.close();          // 最后 flush 缓冲区 + 关闭文件句柄
     } catch (err) {
-      logger.error('godot-mcp', `Error during shutdown: ${err instanceof Error ? err.message : err}`);
+      // logger 可能已关闭，用 console 兜底
+      console.error(`Error during shutdown: ${err instanceof Error ? err.message : err}`);
     }
     process.exit(0);
   }

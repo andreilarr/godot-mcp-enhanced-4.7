@@ -136,8 +136,23 @@ export async function handleTool(
       });
 
       if (result.success && result.fallback) {
-        // Unsupported properties — fall through to spawnGodot path below
-        break;
+        // Unsupported property types — fall back to spawnGodot
+        if (!acquireShortRunningSlot()) return opsErrorResult('CONCURRENCY_LIMIT', 'too many concurrent headless operations (max 3). Please wait and retry.');
+        let godot: string;
+        try { godot = await ctx.findGodot(); } catch (e) { releaseShortRunningSlot(); throw e; }
+        const fallbackParams: Record<string, unknown> = {
+          scene_path: sceneRelPath,
+          node_type: String(args.node_type),
+          node_name: String(args.node_name),
+          parent_node_path: String(args.parent_node_path || 'root'),
+        };
+        if (args.properties) fallbackParams.properties = args.properties;
+        const spawnResult = await spawnGodot(godot, ['--headless', '--path', p, '--script', ctx.opsScript, 'add_node', JSON.stringify(fallbackParams)]);
+        releaseShortRunningSlot();
+        if (spawnResult.timedOut) return { content: [{ type: 'text', text: 'add_node timed out.' }] };
+        if (spawnResult.exitCode === -1 && spawnResult.stdout.startsWith('SPAWN_FAILED:')) return opsErrorResult('SPAWN_FAILED', `Failed to spawn Godot: ${spawnResult.stdout.replace('SPAWN_FAILED: ', '')}`);
+        if (spawnResult.exitCode !== 0) return { content: [{ type: 'text', text: `add_node failed (exit code ${spawnResult.exitCode}):\n${spawnResult.stdout}${spawnResult.stderr ? '\n' + spawnResult.stderr : ''}` }] };
+        return { content: [{ type: 'text', text: spawnResult.stdout.trim() || 'add_node completed successfully.' }] };
       }
 
       if (!result.success) {
@@ -152,7 +167,6 @@ export async function handleTool(
     }
 
     case 'create_scene':
-    case 'add_node':
     case 'save_scene':
     case 'load_sprite': {
       if (!acquireShortRunningSlot()) return opsErrorResult('CONCURRENCY_LIMIT', 'too many concurrent headless operations (max 3). Please wait and retry.');
@@ -165,13 +179,6 @@ export async function handleTool(
         params.scene_path = normalizeUserProjectPath(args.scene_path as string);
         params.root_node_type = args.root_node_type || 'Node2D';
         if (args.root_node_name) params.root_node_name = args.root_node_name;
-      } else if (action === 'add_node') {
-        params.scene_path = normalizeUserProjectPath(args.scene_path as string);
-        if (!/^[A-Za-z0-9_]+$/.test(String(args.node_type ?? ''))) { releaseShortRunningSlot(); return textResult(`Error: node_type contains invalid characters: "${args.node_type}"`); }
-        if (!String(args.node_name ?? '') || /[\]["/:\\]/.test(String(args.node_name))) { releaseShortRunningSlot(); return textResult(`Error: node_name contains invalid characters: "${args.node_name}"`); }
-        params.node_type = args.node_type; params.node_name = args.node_name;
-        params.parent_node_path = args.parent_node_path || 'root';
-        if (args.properties) params.properties = args.properties;
       } else if (action === 'save_scene') {
         params.scene_path = normalizeUserProjectPath(args.scene_path as string);
         if (args.new_path) { try { const np = normalizeUserProjectPath(String(args.new_path)); resolveWithinRoot(p, np); params.new_path = np; } catch { releaseShortRunningSlot(); return opsErrorResult('INVALID_PATH', 'new_path contains path traversal'); } }

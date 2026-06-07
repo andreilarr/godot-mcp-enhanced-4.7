@@ -1164,7 +1164,6 @@ export function addSubResource(
 
   // 1. Find max numeric suffix among sub_resource entries with the same type
   let maxSuffix = 0;
-  const typePattern = `[sub_resource type="${type}" id="${type}_`;
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('[sub_resource')) continue;
@@ -1335,6 +1334,7 @@ export function formatPropertyValue(value: unknown): string {
       return `Vector2(${obj.x}, ${obj.y})`;
     }
     // C-02: Strip _type from fallback to avoid leaking meta-field into .tscn
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { _type: _ignored, ...sanitized } = obj;
     return formatTscnValue(JSON.stringify(sanitized));
   }
