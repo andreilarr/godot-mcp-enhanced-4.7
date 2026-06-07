@@ -104,7 +104,7 @@ func handle_instance_scene(params: Dictionary) -> Dictionary:
 		var val = properties[key]
 		if val is Object:
 			continue
-		if _property_exists_and_type_ok(instance, key, val):
+		if CommandHelpers.property_exists_and_type_ok(instance, key, val):
 			instance.set(key, val)
 
 	var ei = Engine.get_singleton("EditorInterface") as EditorInterface
@@ -112,7 +112,7 @@ func handle_instance_scene(params: Dictionary) -> Dictionary:
 	if root == null:
 		instance.queue_free()
 		return {"error": {"code": -32003, "message": "No edited scene"}}
-	var parent = _find_node_by_path(root, parent_path)
+	var parent = CommandHelpers.find_node(root, parent_path)
 	if parent == null:
 		parent = root
 
@@ -147,7 +147,7 @@ func handle_set_instance_property(params: Dictionary) -> Dictionary:
 	var root = ei.get_edited_scene_root()
 	if root == null:
 		return {"error": {"code": -32003, "message": "No edited scene"}}
-	var target = _find_node_by_path(root, node_path)
+	var target = CommandHelpers.find_node(root, node_path)
 	if target == null:
 		return {"error": {"code": -32002, "message": "Node not found: " + node_path}}
 
@@ -167,7 +167,7 @@ func handle_set_instance_property(params: Dictionary) -> Dictionary:
 		return {"error": {"code": -32004, "message": "INVALID_PROPERTY_NAME: " + prop_name}}
 	if prop_value is Object:
 		return {"error": {"code": -32004, "message": "OBJECT_VALUES_NOT_ALLOWED"}}
-	if not _property_exists_and_type_ok(target, prop_name, prop_value):
+	if not CommandHelpers.property_exists_and_type_ok(target, prop_name, prop_value):
 		return {"error": {"code": -32004, "message": "PROPERTY_TYPE_MISMATCH: " + prop_name}}
 
 	# UndoRedo: 记录旧值
@@ -186,21 +186,6 @@ func handle_set_instance_property(params: Dictionary) -> Dictionary:
 	return {"result": {"node": str(target.name), "property": prop_name}}
 
 
-func _find_node_by_path(root: Node, path: String) -> Node:
-	if path.is_empty() or path == "root":
-		return root
-	var clean: String = path
-	if clean.begins_with("root/"):
-		clean = clean.substr(5)
-	while clean.begins_with("/"):
-		clean = clean.substr(1)
-	if clean.is_empty():
-		return root
-	if root.has_node(clean):
-		return root.get_node(clean)
-	return null
-
-
 func _normalize_project_path(path: String) -> String:
 	# Issue 5: 复用 editor_guards.normalize_path
 	if _editor_guards != null:
@@ -210,28 +195,3 @@ func _normalize_project_path(path: String) -> String:
 	if path.begins_with("res://") or path.begins_with("user://"):
 		return path.simplify_path()
 	return ProjectSettings.localize_path(path).simplify_path()
-
-
-# SYNC: identical copy in ui_commands.gd — keep both in sync
-func _property_exists_and_type_ok(obj: Object, prop_name: String, val) -> bool:
-	var found = false
-	for p in obj.get_property_list():
-		if p["name"] == prop_name:
-			found = true
-			break
-	if not found:
-		return false
-	var current = obj.get(prop_name)
-	if current == null:
-		return val == null
-	var current_type = typeof(current)
-	var val_type = typeof(val)
-	if current_type == val_type:
-		return true
-	if (current_type == TYPE_INT or current_type == TYPE_FLOAT) and (val_type == TYPE_INT or val_type == TYPE_FLOAT):
-		return true
-	if (current_type == TYPE_STRING or current_type == TYPE_STRING_NAME) and (val_type == TYPE_STRING or val_type == TYPE_STRING_NAME):
-		return true
-	if (current_type == TYPE_BOOL and val_type == TYPE_INT) or (current_type == TYPE_INT and val_type == TYPE_BOOL):
-		return true
-	return false

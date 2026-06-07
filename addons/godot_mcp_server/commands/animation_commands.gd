@@ -10,12 +10,12 @@ func setup(plugin: EditorPlugin, undo_manager: Node = null) -> void:
 # ─── animation_track ────────────────────────────────────────────────────────
 
 func handle_animation_track(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var player = _find_node(root, node_path)
+	var player = CommandHelpers.find_node(root, node_path)
 	if player == null:
 		return {"error": {"code": -32002, "message": "AnimationPlayer not found: " + node_path}}
 	if not (player is AnimationPlayer):
@@ -116,12 +116,12 @@ func handle_animation_track(params: Dictionary) -> Dictionary:
 # ─── animation_keyframe ─────────────────────────────────────────────────────
 
 func handle_animation_keyframe(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var player = _find_node(root, node_path)
+	var player = CommandHelpers.find_node(root, node_path)
 	if player == null:
 		return {"error": {"code": -32002, "message": "AnimationPlayer not found: " + node_path}}
 	if not (player is AnimationPlayer):
@@ -244,12 +244,12 @@ func handle_animation_keyframe(params: Dictionary) -> Dictionary:
 # Issue 3: 补充 UndoRedo
 
 func handle_animation_curve(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var player = _find_node(root, node_path)
+	var player = CommandHelpers.find_node(root, node_path)
 	if player == null:
 		return {"error": {"code": -32002, "message": "AnimationPlayer not found: " + node_path}}
 	if not (player is AnimationPlayer):
@@ -309,12 +309,12 @@ func handle_animation_curve(params: Dictionary) -> Dictionary:
 # ─── animation_blend ────────────────────────────────────────────────────────
 
 func handle_animation_blend(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var player = _find_node(root, node_path)
+	var player = CommandHelpers.find_node(root, node_path)
 	if player == null:
 		return {"error": {"code": -32002, "message": "AnimationPlayer not found: " + node_path}}
 	if not (player is AnimationPlayer):
@@ -337,39 +337,6 @@ func handle_animation_blend(params: Dictionary) -> Dictionary:
 	return {"result": {"animation": anim_name, "blend_time": float(blend_time), "speed": speed_val, "status": "blending"}}
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
-
-func _get_edited_scene_root() -> Node:
-	if _plugin != null:
-		var ei = _plugin.get_editor_interface()
-		if ei != null:
-			var edited = ei.get_edited_scene_root()
-			if edited != null:
-				return edited
-	var ml = Engine.get_main_loop()
-	if ml == null or not (ml is SceneTree):
-		return null
-	var st = ml as SceneTree
-	if st == null or st.root == null:
-		return null
-	if st.root.get_child_count() > 0:
-		return st.root.get_child(0)
-	return null
-
-func _find_node(root: Node, path: String) -> Node:
-	if path == "" or path == "root":
-		return root
-	var p = path
-	while p.begins_with("/"):
-		p = p.substr(1)
-	if p.begins_with("root/"):
-		p = p.substr(5)
-	if p.begins_with(root.name + "/"):
-		p = p.substr(root.name.length() + 1)
-	elif p == root.name:
-		return root
-	if p == "":
-		return root
-	return root.get_node_or_null(p)
 
 ## Issue 2: 精确查找指定时间点的关键帧索引
 func _find_key_at_time(anim: Animation, track_index: int, time: float) -> int:

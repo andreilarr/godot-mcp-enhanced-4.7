@@ -6,7 +6,7 @@ func setup(plugin: EditorPlugin) -> void:
 	_plugin = plugin
 
 func handle_particles_create(params: Dictionary, request_id: int) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
@@ -16,7 +16,7 @@ func handle_particles_create(params: Dictionary, request_id: int) -> Dictionary:
 
 	var node_name: String = params.get("name", "Particles")
 	var parent_path: String = params.get("parent", "")
-	var parent_node: Node = _find_node(root, parent_path) if parent_path != "" else root
+	var parent_node: Node = CommandHelpers.find_node(root, parent_path) if parent_path != "" else root
 	if parent_node == null:
 		return {"error": {"code": -32002, "message": "Parent not found: " + parent_path}}
 
@@ -38,12 +38,12 @@ func handle_particles_create(params: Dictionary, request_id: int) -> Dictionary:
 	return {"result": {"node_path": str(cls.get_path()), "type": node_type, "status": "created"}}
 
 func handle_particles_set_emission(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var node = _find_node(root, node_path)
+	var node = CommandHelpers.find_node(root, node_path)
 	if node == null:
 		return {"error": {"code": -32002, "message": "Node not found: " + node_path}}
 	if not (node is GPUParticles2D or node is GPUParticles3D):
@@ -93,12 +93,12 @@ func handle_particles_set_emission(params: Dictionary) -> Dictionary:
 	return {"result": {"node": node_path, "status": "emission_set"}}
 
 func handle_particles_set_process(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var node = _find_node(root, node_path)
+	var node = CommandHelpers.find_node(root, node_path)
 	if node == null:
 		return {"error": {"code": -32002, "message": "Node not found: " + node_path}}
 	if not (node is GPUParticles2D or node is GPUParticles3D):
@@ -138,12 +138,12 @@ func handle_particles_set_process(params: Dictionary) -> Dictionary:
 	return {"result": {"node": node_path, "status": "process_set"}}
 
 func handle_particles_load_preset(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var node = _find_node(root, node_path)
+	var node = CommandHelpers.find_node(root, node_path)
 	if node == null:
 		return {"error": {"code": -32002, "message": "Node not found: " + node_path}}
 	if not (node is GPUParticles2D or node is GPUParticles3D):
@@ -185,12 +185,12 @@ func handle_particles_load_preset(params: Dictionary) -> Dictionary:
 	return {"result": {"node": node_path, "preset": preset, "status": "preset_loaded"}}
 
 func handle_particles_set_material(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var node = _find_node(root, node_path)
+	var node = CommandHelpers.find_node(root, node_path)
 	if node == null:
 		return {"error": {"code": -32002, "message": "Node not found: " + node_path}}
 	if not (node is GPUParticles2D or node is GPUParticles3D):
@@ -200,36 +200,3 @@ func handle_particles_set_material(params: Dictionary) -> Dictionary:
 	node.process_material = mat
 
 	return {"result": {"node": node_path, "material_type": "ParticleProcessMaterial", "status": "material_set"}}
-
-func _get_edited_scene_root() -> Node:
-	if _plugin != null:
-		var ei = _plugin.get_editor_interface()
-		if ei != null:
-			var edited = ei.get_edited_scene_root()
-			if edited != null:
-				return edited
-	var ml = Engine.get_main_loop()
-	if ml == null or not (ml is SceneTree):
-		return null
-	var st = ml as SceneTree
-	if st == null or st.root == null:
-		return null
-	if st.root.get_child_count() > 0:
-		return st.root.get_child(0)
-	return null
-
-func _find_node(root: Node, path: String) -> Node:
-	if path == "" or path == "root":
-		return root
-	var p = path
-	while p.begins_with("/"):
-		p = p.substr(1)
-	if p.begins_with("root/"):
-		p = p.substr(5)
-	if p.begins_with(root.name + "/"):
-		p = p.substr(root.name.length() + 1)
-	elif p == root.name:
-		return root
-	if p == "":
-		return root
-	return root.get_node_or_null(p)

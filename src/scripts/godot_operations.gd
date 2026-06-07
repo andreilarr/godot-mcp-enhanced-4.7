@@ -3,6 +3,44 @@ extends SceneTree
 
 var debug_mode = false
 
+# ── Inline safe-value check (mirrors safe_values.gd, used when running outside project context) ──
+const _SAFE_MAX_DEPTH := 10
+
+func _is_safe_value(val: Variant, depth: int = 0) -> bool:
+	if depth > _SAFE_MAX_DEPTH:
+		return false
+	if val == null:
+		return true
+	if val is bool or val is int or val is float or val is String:
+		return true
+	if val is Vector2 or val is Vector2i or val is Vector3 or val is Vector3i:
+		return true
+	if val is Color or val is Rect2 or val is Rect2i:
+		return true
+	if val is Transform2D or val is Transform3D or val is Basis or val is Quaternion:
+		return true
+	if val is Plane or val is AABB:
+		return true
+	if val is PackedByteArray or val is PackedInt32Array or val is PackedInt64Array:
+		return true
+	if val is PackedFloat32Array or val is PackedFloat64Array or val is PackedStringArray:
+		return true
+	if val is PackedVector2Array or val is PackedVector3Array or val is PackedColorArray:
+		return true
+	if val is Array:
+		for item in val:
+			if not _is_safe_value(item, depth + 1):
+				return false
+		return true
+	if val is Dictionary:
+		for key in val:
+			if not _is_safe_value(key, depth + 1):
+				return false
+			if not _is_safe_value(val[key], depth + 1):
+				return false
+		return true
+	return false
+
 func _init():
 	var args = OS.get_cmdline_args()
 	debug_mode = "--debug-godot" in args
@@ -112,6 +150,12 @@ func instantiate_class(name_of_class: String):
 		log_error("Cannot instantiate class: name is empty")
 		return null
 
+	# I-S3: Block dangerous non-Node engine classes (FileAccess, Thread, etc.)
+	var blocked_prefixes := ["File", "Thread", "Mutex", "Semaphore", "OS", "IP", "StreamPeer", "TCP", "UDP", "HTTP", "TLS", "Crypto", "Hash", "RegEx", "XML", "JSONParser", "ResourceLoader", "ResourceSaver", "PackedData", "TranslationServer", "PhysicsServer", "RenderingServer", "AudioServer", "NavigationServer", "DisplayServer"]
+	for prefix in blocked_prefixes:
+		if name_of_class.begins_with(prefix):
+			log_error(String("Class %s is blocked for security reasons") % name_of_class)
+			return null
 	if ClassDB.class_exists(name_of_class):
 		if ClassDB.can_instantiate(name_of_class):
 			var result = ClassDB.instantiate(name_of_class)
@@ -235,7 +279,7 @@ func add_node(params):
 	if params.has("properties"):
 		var properties = params.properties
 		for property in properties:
-			if _is_safe_property(property) and SafeValues.is_safe(properties[property]):
+			if _is_safe_property(property) and _is_safe_value(properties[property]):
 				new_node.set(property, properties[property])
 
 	parent.add_child(new_node)
@@ -308,7 +352,7 @@ func batch_add_nodes(params):
 		if node_def.has("properties"):
 			var properties = node_def.properties
 			for property in properties:
-				if _is_safe_property(property) and SafeValues.is_safe(properties[property]):
+				if _is_safe_property(property) and _is_safe_value(properties[property]):
 					new_node.set(property, properties[property])
 
 		parent.add_child(new_node)

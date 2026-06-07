@@ -6,13 +6,13 @@ func setup(plugin: EditorPlugin) -> void:
 	_plugin = plugin
 
 func handle_animtree_create(params: Dictionary, request_id: int) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_name: String = params.get("name", "AnimationTree")
 	var parent_path: String = params.get("parent", "")
-	var parent_node: Node = _find_node(root, parent_path) if parent_path != "" else root
+	var parent_node: Node = CommandHelpers.find_node(root, parent_path) if parent_path != "" else root
 	if parent_node == null:
 		return {"error": {"code": -32002, "message": "Parent not found: " + parent_path}}
 
@@ -47,12 +47,12 @@ func handle_animtree_create(params: Dictionary, request_id: int) -> Dictionary:
 	return {"result": {"node_path": str(tree.get_path()), "root_type": tree_root_type, "status": "created"}}
 
 func handle_animtree_add_state(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var tree = _find_node(root, node_path)
+	var tree = CommandHelpers.find_node(root, node_path)
 	if tree == null:
 		return {"error": {"code": -32002, "message": "AnimationTree not found: " + node_path}}
 	if not (tree is AnimationTree):
@@ -78,12 +78,12 @@ func handle_animtree_add_state(params: Dictionary) -> Dictionary:
 	return {"result": {"state": state_name, "animation": animation, "status": "added"}}
 
 func handle_animtree_add_transition(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var tree = _find_node(root, node_path)
+	var tree = CommandHelpers.find_node(root, node_path)
 	if tree == null:
 		return {"error": {"code": -32002, "message": "AnimationTree not found: " + node_path}}
 	if not (tree is AnimationTree):
@@ -114,12 +114,12 @@ func handle_animtree_add_transition(params: Dictionary) -> Dictionary:
 	return {"result": {"from": from_state, "to": to_state, "xfade": transition.xfade_time, "status": "transition_added"}}
 
 func handle_animtree_set_blend(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var tree = _find_node(root, node_path)
+	var tree = CommandHelpers.find_node(root, node_path)
 	if tree == null:
 		return {"error": {"code": -32002, "message": "AnimationTree not found: " + node_path}}
 	if not (tree is AnimationTree):
@@ -143,12 +143,12 @@ func handle_animtree_set_blend(params: Dictionary) -> Dictionary:
 	return {"result": {"parameter": param_name, "status": "blend_set"}}
 
 func handle_animtree_play(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var tree = _find_node(root, node_path)
+	var tree = CommandHelpers.find_node(root, node_path)
 	if tree == null:
 		return {"error": {"code": -32002, "message": "AnimationTree not found: " + node_path}}
 	if not (tree is AnimationTree):
@@ -165,36 +165,3 @@ func handle_animtree_play(params: Dictionary) -> Dictionary:
 	playback.travel(state_name)
 
 	return {"result": {"state": state_name, "status": "playing"}}
-
-func _get_edited_scene_root() -> Node:
-	if _plugin != null:
-		var ei = _plugin.get_editor_interface()
-		if ei != null:
-			var edited = ei.get_edited_scene_root()
-			if edited != null:
-				return edited
-	var ml = Engine.get_main_loop()
-	if ml == null or not (ml is SceneTree):
-		return null
-	var st = ml as SceneTree
-	if st == null or st.root == null:
-		return null
-	if st.root.get_child_count() > 0:
-		return st.root.get_child(0)
-	return null
-
-func _find_node(root: Node, path: String) -> Node:
-	if path == "" or path == "root":
-		return root
-	var p = path
-	while p.begins_with("/"):
-		p = p.substr(1)
-	if p.begins_with("root/"):
-		p = p.substr(5)
-	if p.begins_with(root.name + "/"):
-		p = p.substr(root.name.length() + 1)
-	elif p == root.name:
-		return root
-	if p == "":
-		return root
-	return root.get_node_or_null(p)

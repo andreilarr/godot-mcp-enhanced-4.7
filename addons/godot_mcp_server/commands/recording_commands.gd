@@ -86,7 +86,7 @@ func handle_recording_play(params: Dictionary) -> Dictionary:
 	var played_count = 0
 	# Schedule events with time offsets using a Timer for proper delays
 	if events.size() == 0:
-		return {"result": {"events_played": 0, "speed": speed_val, "status": "playback_complete"}}
+		return {"result": {"events_queued": 0, "speed": speed_val, "status": "playback_complete"}}
 
 	# Build a sorted schedule of (delay_ms, event) pairs
 	var schedule: Array = []
@@ -105,7 +105,7 @@ func handle_recording_play(params: Dictionary) -> Dictionary:
 	# Start playback via timer
 	_schedule_next_event()
 
-	return {"result": {"events_played": events.size(), "speed": speed_val, "status": "playback_started"}}
+	return {"result": {"events_queued": events.size(), "speed": speed_val, "status": "playback_started"}}
 
 var _playback_schedule: Array = []
 var _playback_index: int = 0

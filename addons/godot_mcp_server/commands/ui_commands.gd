@@ -14,14 +14,14 @@ func setup(plugin: EditorPlugin) -> void:
 # ─── ui_create_control ──────────────────────────────────────────────────────
 
 func handle_ui_create_control(params: Dictionary, request_id: int) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_type: String = params.get("node_type", "Label")
 	var node_name: String = params.get("node_name", "Control")
 	var parent_path: String = params.get("parent_node_path", "")
-	var parent_node: Node = _find_node(root, parent_path) if parent_path != "" else root
+	var parent_node: Node = CommandHelpers.find_node(root, parent_path) if parent_path != "" else root
 	if parent_node == null:
 		return {"error": {"code": -32002, "message": "Parent not found: " + parent_path}}
 
@@ -45,7 +45,7 @@ func handle_ui_create_control(params: Dictionary, request_id: int) -> Dictionary
 			var val = properties[key]
 			if val is Object:
 				continue
-			if _property_exists_and_type_ok(node, key, val):
+			if CommandHelpers.property_exists_and_type_ok(node, key, val):
 				node.set(key, val)
 
 	parent_node.add_child(node)
@@ -56,12 +56,12 @@ func handle_ui_create_control(params: Dictionary, request_id: int) -> Dictionary
 # ─── ui_set_layout ──────────────────────────────────────────────────────────
 
 func handle_ui_set_layout(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var node = _find_node(root, node_path)
+	var node = CommandHelpers.find_node(root, node_path)
 	if node == null:
 		return {"error": {"code": -32002, "message": "Node not found: " + node_path}}
 	if not (node is Control):
@@ -126,12 +126,12 @@ func handle_ui_set_layout(params: Dictionary) -> Dictionary:
 # ─── ui_get_layout ──────────────────────────────────────────────────────────
 
 func handle_ui_get_layout(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var node = _find_node(root, node_path)
+	var node = CommandHelpers.find_node(root, node_path)
 	if node == null:
 		return {"error": {"code": -32002, "message": "Node not found: " + node_path}}
 	if not (node is Control):
@@ -156,12 +156,12 @@ func handle_ui_get_layout(params: Dictionary) -> Dictionary:
 # ─── ui_anchor_preset ───────────────────────────────────────────────────────
 
 func handle_ui_anchor_preset(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var node = _find_node(root, node_path)
+	var node = CommandHelpers.find_node(root, node_path)
 	if node == null:
 		return {"error": {"code": -32002, "message": "Node not found: " + node_path}}
 	if not (node is Control):
@@ -197,12 +197,12 @@ func handle_ui_anchor_preset(params: Dictionary) -> Dictionary:
 # ─── ui_set_theme ───────────────────────────────────────────────────────────
 
 func handle_ui_set_theme(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var node = _find_node(root, node_path)
+	var node = CommandHelpers.find_node(root, node_path)
 	if node == null:
 		return {"error": {"code": -32002, "message": "Node not found: " + node_path}}
 	if not (node is Control):
@@ -256,12 +256,12 @@ func handle_ui_set_theme(params: Dictionary) -> Dictionary:
 # ─── ui_container_add ───────────────────────────────────────────────────────
 
 func handle_ui_container_add(params: Dictionary, request_id: int) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var container = _find_node(root, node_path)
+	var container = CommandHelpers.find_node(root, node_path)
 	if container == null:
 		return {"error": {"code": -32002, "message": "Container node not found: " + node_path}}
 
@@ -287,7 +287,7 @@ func handle_ui_container_add(params: Dictionary, request_id: int) -> Dictionary:
 			var cval = child_properties[key]
 			if cval is Object:
 				continue
-			if _property_exists_and_type_ok(child, key, cval):
+			if CommandHelpers.property_exists_and_type_ok(child, key, cval):
 				child.set(key, cval)
 
 	container.add_child(child)
@@ -298,7 +298,7 @@ func handle_ui_container_add(params: Dictionary, request_id: int) -> Dictionary:
 # ─── theme_create ───────────────────────────────────────────────────────────
 
 func handle_theme_create(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
@@ -310,7 +310,7 @@ func handle_theme_create(params: Dictionary) -> Dictionary:
 			theme = Theme.new()
 		"extract":
 			var source_path: String = params.get("source_node_path", "")
-			var source = _find_node(root, source_path)
+			var source = CommandHelpers.find_node(root, source_path)
 			if source == null:
 				return {"error": {"code": -32002, "message": "Source node not found: " + source_path}}
 			if not (source is Control):
@@ -333,12 +333,12 @@ func handle_theme_create(params: Dictionary) -> Dictionary:
 # ─── theme_set_property ─────────────────────────────────────────────────────
 
 func handle_theme_set_property(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var theme_node_path: String = params.get("theme_node_path", "")
-	var node = _find_node(root, theme_node_path)
+	var node = CommandHelpers.find_node(root, theme_node_path)
 	if node == null:
 		return {"error": {"code": -32002, "message": "Node not found: " + theme_node_path}}
 
@@ -373,62 +373,3 @@ func handle_theme_set_property(params: Dictionary) -> Dictionary:
 			return {"error": {"code": -32004, "message": "Invalid item_type: " + item_type + ". Must be: default_font, color, constant, stylebox"}}
 
 	return {"result": {"node": theme_node_path, "item_type": item_type, "name": prop_name, "status": "property_set"}}
-
-# ─── Helpers ─────────────────────────────────────────────────────────────────
-
-func _get_edited_scene_root() -> Node:
-	if _plugin != null:
-		var ei = _plugin.get_editor_interface()
-		if ei != null:
-			var edited = ei.get_edited_scene_root()
-			if edited != null:
-				return edited
-	var ml = Engine.get_main_loop()
-	if ml == null or not (ml is SceneTree):
-		return null
-	var st = ml as SceneTree
-	if st == null or st.root == null:
-		return null
-	if st.root.get_child_count() > 0:
-		return st.root.get_child(0)
-	return null
-
-func _find_node(root: Node, path: String) -> Node:
-	if path == "" or path == "root":
-		return root
-	var p = path
-	while p.begins_with("/"):
-		p = p.substr(1)
-	if p.begins_with("root/"):
-		p = p.substr(5)
-	if p.begins_with(root.name + "/"):
-		p = p.substr(root.name.length() + 1)
-	elif p == root.name:
-		return root
-	if p == "":
-		return root
-	return root.get_node_or_null(p)
-
-# SYNC: identical copy in scene_commands.gd — keep both in sync
-func _property_exists_and_type_ok(obj: Object, prop_name: String, val) -> bool:
-	var found = false
-	for p in obj.get_property_list():
-		if p["name"] == prop_name:
-			found = true
-			break
-	if not found:
-		return false
-	var current = obj.get(prop_name)
-	if current == null:
-		return val == null
-	var current_type = typeof(current)
-	var val_type = typeof(val)
-	if current_type == val_type:
-		return true
-	if (current_type == TYPE_INT or current_type == TYPE_FLOAT) and (val_type == TYPE_INT or val_type == TYPE_FLOAT):
-		return true
-	if (current_type == TYPE_STRING or current_type == TYPE_STRING_NAME) and (val_type == TYPE_STRING or val_type == TYPE_STRING_NAME):
-		return true
-	if (current_type == TYPE_BOOL and val_type == TYPE_INT) or (current_type == TYPE_INT and val_type == TYPE_BOOL):
-		return true
-	return false

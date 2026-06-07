@@ -6,13 +6,13 @@ func setup(plugin: EditorPlugin) -> void:
 	_plugin = plugin
 
 func handle_nav_create_region(params: Dictionary, request_id: int) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_name: String = params.get("name", "NavRegion")
 	var parent_path: String = params.get("parent", "")
-	var parent_node: Node = _find_node(root, parent_path) if parent_path != "" else root
+	var parent_node: Node = CommandHelpers.find_node(root, parent_path) if parent_path != "" else root
 	if parent_node == null:
 		return {"error": {"code": -32002, "message": "Parent not found: " + parent_path}}
 
@@ -38,12 +38,12 @@ func handle_nav_create_region(params: Dictionary, request_id: int) -> Dictionary
 	return {"result": {"node_path": str(nav.get_path()), "type": "NavigationRegion3D", "baked": bake_result}}
 
 func handle_nav_bake_mesh(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var node = _find_node(root, node_path)
+	var node = CommandHelpers.find_node(root, node_path)
 	if node == null:
 		return {"error": {"code": -32002, "message": "Node not found: " + node_path}}
 	if not (node is NavigationRegion3D):
@@ -54,13 +54,13 @@ func handle_nav_bake_mesh(params: Dictionary) -> Dictionary:
 	return {"result": {"node": node_path, "success": success, "status": "bake_completed"}}
 
 func handle_nav_create_agent(params: Dictionary, request_id: int) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_name: String = params.get("name", "NavAgent")
 	var parent_path: String = params.get("parent", "")
-	var parent_node: Node = _find_node(root, parent_path) if parent_path != "" else root
+	var parent_node: Node = CommandHelpers.find_node(root, parent_path) if parent_path != "" else root
 	if parent_node == null:
 		return {"error": {"code": -32002, "message": "Parent not found: " + parent_path}}
 
@@ -81,12 +81,12 @@ func handle_nav_create_agent(params: Dictionary, request_id: int) -> Dictionary:
 	return {"result": {"node_path": str(agent.get_path()), "type": "NavigationAgent3D"}}
 
 func handle_nav_set_params(params: Dictionary) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_path: String = params.get("node_path", "")
-	var node = _find_node(root, node_path)
+	var node = CommandHelpers.find_node(root, node_path)
 	if node == null:
 		return {"error": {"code": -32002, "message": "Node not found: " + node_path}}
 	if not (node is NavigationAgent3D):
@@ -133,13 +133,13 @@ func handle_nav_set_params(params: Dictionary) -> Dictionary:
 	return {"result": {"node": node_path, "updated": updated, "status": "params_set"}}
 
 func handle_nav_create_link(params: Dictionary, request_id: int) -> Dictionary:
-	var root = _get_edited_scene_root()
+	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
 
 	var node_name: String = params.get("name", "NavLink")
 	var parent_path: String = params.get("parent", "")
-	var parent_node: Node = _find_node(root, parent_path) if parent_path != "" else root
+	var parent_node: Node = CommandHelpers.find_node(root, parent_path) if parent_path != "" else root
 	if parent_node == null:
 		return {"error": {"code": -32002, "message": "Parent not found: " + parent_path}}
 
@@ -160,36 +160,3 @@ func handle_nav_create_link(params: Dictionary, request_id: int) -> Dictionary:
 	link.owner = root
 
 	return {"result": {"node_path": str(link.get_path()), "type": "NavigationLink3D", "bidirectional": link.bidirectional}}
-
-func _get_edited_scene_root() -> Node:
-	if _plugin != null:
-		var ei = _plugin.get_editor_interface()
-		if ei != null:
-			var edited = ei.get_edited_scene_root()
-			if edited != null:
-				return edited
-	var ml = Engine.get_main_loop()
-	if ml == null or not (ml is SceneTree):
-		return null
-	var st = ml as SceneTree
-	if st == null or st.root == null:
-		return null
-	if st.root.get_child_count() > 0:
-		return st.root.get_child(0)
-	return null
-
-func _find_node(root: Node, path: String) -> Node:
-	if path == "" or path == "root":
-		return root
-	var p = path
-	while p.begins_with("/"):
-		p = p.substr(1)
-	if p.begins_with("root/"):
-		p = p.substr(5)
-	if p.begins_with(root.name + "/"):
-		p = p.substr(root.name.length() + 1)
-	elif p == root.name:
-		return root
-	if p == "":
-		return root
-	return root.get_node_or_null(p)
