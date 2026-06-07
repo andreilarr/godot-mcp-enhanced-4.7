@@ -27,3 +27,7 @@ closed_skills.txt
 
 # TypeScript incremental build info
 tsconfig.tsbuildinfo
+
+# E2E test generated files
+test/e2e-scene/.godot/
+test/e2e-scene/*.png
