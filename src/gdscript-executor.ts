@@ -317,6 +317,11 @@ function classifyLines(code: string): { declarationLines: string[]; statementLin
       if (/^(static )?func /.test(trimmed)) {
         inFuncBody = true;
       }
+      // Multi-line lambda: var x = func(): / var x = func(args):
+      // Body lines must stay with the declaration, not go to _initialize().
+      if (/=\s*func\s*\(.*\)\s*:\s*$/.test(trimmed)) {
+        inFuncBody = true;
+      }
       continue;
     }
 
@@ -338,7 +343,47 @@ function classifyLines(code: string): { declarationLines: string[]; statementLin
     statementLines.push(line);
   }
 
+  // Normalize leading spaces → tabs so wrapper's \t prefix doesn't create mixed indentation
+  _normalizeIndentToTabs(declarationLines);
+  _normalizeIndentToTabs(statementLines);
+
   return { declarationLines, statementLines };
+}
+
+/**
+ * Convert leading spaces to tabs in an array of source lines.
+ * Detects the smallest nonzero leading-space count as the indent unit,
+ * then replaces each group of that many spaces with one tab.
+ * This prevents "Mixed use of tabs and spaces" when the wrapper
+ * prepends \t to lines that already have space-based indentation.
+ */
+function _normalizeIndentToTabs(lines: string[]): void {
+  // Find the minimum nonzero leading-space count across all lines
+  let indentUnit = 0;
+  for (const line of lines) {
+    const m = line.match(/^( +)\S/);
+    if (m) {
+      const len = m[1]!.length;
+      if (indentUnit === 0 || len < indentUnit) {
+        indentUnit = len;
+      }
+    }
+  }
+  if (indentUnit === 0) return; // no space-indented lines
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    // Count leading spaces (skip lines that start with tab or non-whitespace)
+    let leadingSpaces = 0;
+    while (leadingSpaces < line.length && line[leadingSpaces] === ' ') {
+      leadingSpaces++;
+    }
+    if (leadingSpaces === 0) continue;
+
+    const tabs = Math.floor(leadingSpaces / indentUnit);
+    const remainder = leadingSpaces % indentUnit;
+    lines[i] = '\t'.repeat(tabs) + ' '.repeat(remainder) + line.slice(leadingSpaces);
+  }
 }
 
 /**

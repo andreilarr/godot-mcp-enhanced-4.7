@@ -28,18 +28,18 @@ function drawOpToGd(op: DrawOp): string {
     case 'rect': {
       const pos = numArr(op.position, 2);
       const sz = numArr(op.size, 2);
-      return `\tdraw_rect(Rect2(${pos[0]}, ${pos[1]}, ${sz[0]}, ${sz[1]}), ${col(op.color)})`;
+      return `\tnode.draw_rect(Rect2(${pos[0]}, ${pos[1]}, ${sz[0]}, ${sz[1]}), ${col(op.color)})`;
     }
     case 'circle': {
       const ctr = numArr(op.center, 2);
       const r = op.radius as number;
-      return `\tdraw_circle(Vector2(${ctr[0]}, ${ctr[1]}), ${r}, ${col(op.color)})`;
+      return `\tnode.draw_circle(Vector2(${ctr[0]}, ${ctr[1]}), ${r}, ${col(op.color)})`;
     }
     case 'line': {
       const from = numArr(op.from, 2);
       const to = numArr(op.to, 2);
       const w = op.width as number | undefined;
-      return `\tdraw_line(Vector2(${from[0]}, ${from[1]}), Vector2(${to[0]}, ${to[1]}), ${col(op.color)}${w != null ? `, ${w}` : ''})`;
+      return `\tnode.draw_line(Vector2(${from[0]}, ${from[1]}), Vector2(${to[0]}, ${to[1]}), ${col(op.color)}${w != null ? `, ${w}` : ''})`;
     }
     case 'arc': {
       const ctr = numArr(op.center, 2);
@@ -48,29 +48,29 @@ function drawOpToGd(op: DrawOp): string {
       const ea = op.end_angle as number;
       const pointCount = (op.point_count as number) ?? 32;
       const w = op.width as number | undefined;
-      return `\tdraw_arc(Vector2(${ctr[0]}, ${ctr[1]}), ${r}, ${sa}, ${ea}, ${pointCount}, ${col(op.color)}${w != null ? `, ${w}` : ''})`;
+      return `\tnode.draw_arc(Vector2(${ctr[0]}, ${ctr[1]}), ${r}, ${sa}, ${ea}, ${pointCount}, ${col(op.color)}${w != null ? `, ${w}` : ''})`;
     }
     case 'polygon': {
       const pts = validatePointArray(op.points, 'polygon');
       const packedPts = pts.map(p => `Vector2(${p[0]}, ${p[1]})`).join(', ');
       const filled = op.filled !== false;
       if (filled) {
-        return `\tdraw_colored_polygon(PackedVector2Array([${packedPts}]), ${col(op.color)})`;
+        return `\tnode.draw_colored_polygon(PackedVector2Array([${packedPts}]), ${col(op.color)})`;
       }
       const w = op.width as number | undefined;
-      return `\tdraw_polyline(PackedVector2Array([${packedPts}]), ${col(op.color)}${w != null ? `, ${w}` : ''})`;
+      return `\tnode.draw_polyline(PackedVector2Array([${packedPts}]), ${col(op.color)}${w != null ? `, ${w}` : ''})`;
     }
     case 'polyline': {
       const pts = validatePointArray(op.points, 'polyline');
       const packedPts = pts.map(p => `Vector2(${p[0]}, ${p[1]})`).join(', ');
       const w = op.width as number | undefined;
-      return `\tdraw_polyline(PackedVector2Array([${packedPts}]), ${col(op.color)}${w != null ? `, ${w}` : ''})`;
+      return `\tnode.draw_polyline(PackedVector2Array([${packedPts}]), ${col(op.color)}${w != null ? `, ${w}` : ''})`;
     }
     case 'string': {
       const text = String(op.text ?? '');
       const pos = op.position as number[];
       const fs = (op.font_size as number) ?? 16;
-      return `\tdraw_string(ThemeDB.fallback_font, Vector2(${pos[0]}, ${pos[1]}), "${gdEscape(text)}", HORIZONTAL_ALIGNMENT_LEFT, -1, ${fs}, ${col(op.color)})`;
+      return `\tnode.draw_string(ThemeDB.fallback_font, Vector2(${pos[0]}, ${pos[1]}), "${gdEscape(text)}", HORIZONTAL_ALIGNMENT_LEFT, -1, ${fs}, ${col(op.color)})`;
     }
     default:
       throw new Error(`Unknown draw op kind: "${op.kind}". Must be one of: ${DRAW_OP_KINDS.join(', ')}`);
@@ -86,7 +86,9 @@ export function genUiDrawRecipeScript(
     throw new Error(`Maximum ${MAX_DRAW_OPS} draw ops allowed, got ${ops.length}`);
   }
 
-  const drawLines = ops.map(op => drawOpToGd(op)).join('\n');
+  // Each drawOpToGd line already has one \t; add another \t because lines
+  // are inside a lambda body that itself is inside _initialize().
+  const drawLines = ops.map(op => '\t' + drawOpToGd(op)).join('\n');
 
   return `${SCENE_TREE_HEADER}
 func _initialize():

@@ -277,7 +277,7 @@ describe('particles handleTool — particles_set_process', () => {
     }, ctx);
 
     const callArgs = executeGdscript.mock.calls[0][0];
-    expect(callArgs.code).toContain('Vector3(0, -9.8, 0)');
+    expect(callArgs.code).toContain('Vector3(0.0, -9.8, 0.0)');
   });
 
   it('generates process script with lifetime and speed_scale', async () => {

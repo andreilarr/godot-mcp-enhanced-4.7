@@ -6,6 +6,9 @@ import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult, no
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
+/** Ensure a number is emitted as float literal for Godot strict typing. */
+const ff = (n: number) => Number.isInteger(n) ? `${n}.0` : `${n}`;
+
 const NAV_ERROR_CODES = {
   INVALID_PATH: 'INVALID_PATH',
   NODE_NOT_FOUND: 'NODE_NOT_FOUND',
@@ -47,11 +50,10 @@ func _initialize():
 \t\treturn
 \tvar _nav = NavigationRegion3D.new()
 \t_nav.name = "${gdEscape(nodeName)}"
-\t_nav.position = Vector3(${position.x}, ${position.y}, ${position.z})
+\t_nav.position = Vector3(${ff(position.x)}, ${ff(position.y)}, ${ff(position.z)})
 \tparent.add_child(_nav)
 \t_nav.set_owner(_mcp_get_root())
 \tvar _mesh = NavigationMesh.new()
-\t_mesh.geometry_parsed_collision_mask = 0xFFFFFFFF
 \t_nav.navigation_mesh = _mesh
 ${bakeBlock}
 \t_mcp_output("created", {"name": "${gdEscape(nodeName)}", "type": "NavigationRegion3D", "parent": "${gdEscape(parentPath)}", "baked": ${bake}})

@@ -24,6 +24,7 @@ export function gdEscape(s: string): string {
 }
 
 export function normalizeNodePath(input: string): string {
+  if (typeof input !== 'string') throw new Error('NodePath is required and must be a string');
   const trimmed = input.trim();
   if (!trimmed) throw new Error('NodePath cannot be empty');
   if (trimmed.startsWith('res://')) throw new Error('NodePath must be a scene tree path (root/...), not a resource path (res://...)');

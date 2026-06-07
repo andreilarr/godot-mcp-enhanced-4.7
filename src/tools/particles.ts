@@ -6,6 +6,9 @@ import { normalizeNodePath, gdEscape, validateVector3, clampParam, SCENE_TREE_HE
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
+/** Ensure a number is emitted as float literal (e.g. 2 → "2.0") for Godot strict typing. */
+const ff = (n: number) => Number.isInteger(n) ? `${n}.0` : `${n}`;
+
 const ACTIONS = [
   'particles_create',
   'particles_set_emission',
@@ -121,14 +124,14 @@ function genSetEmissionScript(
     lines += `\n\tif mat_d == null:`;
     lines += `\n\t\tmat_d = ParticleProcessMaterial.new()`;
     lines += `\n\t\tnode.process_material = mat_d`;
-    lines += `\n\tmat_d.direction = Vector3(${direction.x}, ${direction.y}, ${direction.z})`;
+    lines += `\n\tmat_d.direction = Vector3(${ff(direction.x)}, ${ff(direction.y)}, ${ff(direction.z)})`;
   }
   if (spread !== undefined) {
     lines += `\n\tvar mat_s = node.process_material`;
     lines += `\n\tif mat_s == null:`;
     lines += `\n\t\tmat_s = ParticleProcessMaterial.new()`;
     lines += `\n\t\tnode.process_material = mat_s`;
-    lines += `\n\tmat_s.spread = ${spread}`;
+    lines += `\n\tmat_s.spread = ${ff(spread)}`;
   }
 
   return `${SCENE_TREE_HEADER}
@@ -163,26 +166,26 @@ function genSetProcessScript(
     lines += `\n\tif mat_g == null:`;
     lines += `\n\t\tmat_g = ParticleProcessMaterial.new()`;
     lines += `\n\t\tnode.process_material = mat_g`;
-    lines += `\n\tmat_g.gravity = Vector3(${gravity.x}, ${gravity.y}, ${gravity.z})`;
+    lines += `\n\tmat_g.gravity = Vector3(${ff(gravity.x)}, ${ff(gravity.y)}, ${ff(gravity.z)})`;
   }
   if (speedScale !== undefined) {
     lines += `\n\tnode.speed_scale = ${speedScale}`;
   }
   if (explosiveness !== undefined) {
-    lines += `\n\tnode.explosiveness = ${explosiveness}`;
+    lines += `\n\tnode.explosiveness = ${ff(explosiveness)}`;
   }
   if (randomness !== undefined) {
-    lines += `\n\tnode.randomness = ${randomness}`;
+    lines += `\n\tnode.randomness = ${ff(randomness)}`;
   }
   if (lifetime !== undefined) {
-    lines += `\n\tnode.lifetime = ${lifetime}`;
+    lines += `\n\tnode.lifetime = ${ff(lifetime)}`;
   }
   if (damping !== undefined) {
     lines += `\n\tvar mat_d = node.process_material`;
     lines += `\n\tif mat_d == null:`;
     lines += `\n\t\tmat_d = ParticleProcessMaterial.new()`;
     lines += `\n\t\tnode.process_material = mat_d`;
-    lines += `\n\tmat_d.damping = ${damping}`;
+    lines += `\n\tmat_d.damping = Vector2(${ff(damping)}, ${ff(damping)})`;
   }
 
   return `${SCENE_TREE_HEADER}
@@ -208,9 +211,9 @@ function genLoadPresetScript(nodePath: string, preset: string): string {
 
   let lines = '';
   lines += `\n\tnode.amount = ${cfg.amount}`;
-  lines += `\n\tnode.lifetime = ${cfg.lifetime}`;
-  lines += `\n\tnode.explosiveness = ${cfg.explosiveness ?? 0}`;
-  lines += `\n\tnode.randomness = ${cfg.randomness ?? 0}`;
+  lines += `\n\tnode.lifetime = ${ff(cfg.lifetime as number)}`;
+  lines += `\n\tnode.explosiveness = ${ff((cfg.explosiveness ?? 0) as number)}`;
+  lines += `\n\tnode.randomness = ${ff((cfg.randomness ?? 0) as number)}`;
 
   if (cfg.one_shot) {
     lines += `\n\tnode.one_shot = true`;
@@ -223,20 +226,20 @@ function genLoadPresetScript(nodePath: string, preset: string): string {
 
   const gravity = cfg.gravity as { x: number; y: number; z: number } | undefined;
   if (gravity) {
-    lines += `\n\tmat.gravity = Vector3(${gravity.x}, ${gravity.y}, ${gravity.z})`;
+    lines += `\n\tmat.gravity = Vector3(${ff(gravity.x)}, ${ff(gravity.y)}, ${ff(gravity.z)})`;
   }
 
   if (cfg.spread !== undefined) {
-    lines += `\n\tmat.spread = ${cfg.spread}`;
+    lines += `\n\tmat.spread = ${ff(cfg.spread as number)}`;
   }
 
   if (cfg.damping !== undefined) {
-    lines += `\n\tmat.damping = ${cfg.damping}`;
+    lines += `\n\tmat.damping = Vector2(${ff(cfg.damping as number)}, ${ff(cfg.damping as number)})`;
   }
 
   const direction = cfg.direction as { x: number; y: number; z: number } | undefined;
   if (direction) {
-    lines += `\n\tmat.direction = Vector3(${direction.x}, ${direction.y}, ${direction.z})`;
+    lines += `\n\tmat.direction = Vector3(${ff(direction.x)}, ${ff(direction.y)}, ${ff(direction.z)})`;
   }
 
   return `${SCENE_TREE_HEADER}
@@ -403,20 +406,20 @@ export async function handleTool(
           const cfg = PRESET_CONFIGS[preset]!;
           let lines = '';
           lines += `\n\tnode.amount = ${cfg.amount}`;
-          lines += `\n\tnode.lifetime = ${cfg.lifetime}`;
-          lines += `\n\tnode.explosiveness = ${cfg.explosiveness ?? 0}`;
-          lines += `\n\tnode.randomness = ${cfg.randomness ?? 0}`;
+          lines += `\n\tnode.lifetime = ${ff(cfg.lifetime as number)}`;
+          lines += `\n\tnode.explosiveness = ${ff((cfg.explosiveness ?? 0) as number)}`;
+          lines += `\n\tnode.randomness = ${ff((cfg.randomness ?? 0) as number)}`;
           if (cfg.one_shot) lines += `\n\tnode.one_shot = true`;
           lines += `\n\tvar mat = node.process_material`;
           lines += `\n\tif mat == null:`;
           lines += `\n\t\tmat = ParticleProcessMaterial.new()`;
           lines += `\n\t\tnode.process_material = mat`;
           const gravity = cfg.gravity as { x: number; y: number; z: number } | undefined;
-          if (gravity) lines += `\n\tmat.gravity = Vector3(${gravity.x}, ${gravity.y}, ${gravity.z})`;
-          if (cfg.spread !== undefined) lines += `\n\tmat.spread = ${cfg.spread}`;
-          if (cfg.damping !== undefined) lines += `\n\tmat.damping = ${cfg.damping}`;
+          if (gravity) lines += `\n\tmat.gravity = Vector3(${ff(gravity.x)}, ${ff(gravity.y)}, ${ff(gravity.z)})`;
+          if (cfg.spread !== undefined) lines += `\n\tmat.spread = ${ff(cfg.spread as number)}`;
+          if (cfg.damping !== undefined) lines += `\n\tmat.damping = Vector2(${ff(cfg.damping as number)}, ${ff(cfg.damping as number)})`;
           const direction = cfg.direction as { x: number; y: number; z: number } | undefined;
-          if (direction) lines += `\n\tmat.direction = Vector3(${direction.x}, ${direction.y}, ${direction.z})`;
+          if (direction) lines += `\n\tmat.direction = Vector3(${ff(direction.x)}, ${ff(direction.y)}, ${ff(direction.z)})`;
           presetLines = lines;
         }
         script = genParticlesCreateScript(nodeType, nodeName, parentPath, position, presetLines);
