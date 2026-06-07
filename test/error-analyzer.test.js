@@ -248,6 +248,10 @@ describe('Godot 4.6+ compatibility hints', () => {
     expect(hint).toBeDefined();
   });
 
+  // NOTE: This test relies on ERROR_PATTERNS order — "Identifier not found" (line 64)
+  // matches before the get_tree compatibility pattern (line 107), so the compatibility
+  // hint is never triggered. If patterns are reordered, add a guard to the get_tree
+  // pattern's test function to exclude Identifier-style errors.
   it('does not add compatibility hint for unrelated errors', () => {
     const output = [
       'SCRIPT ERROR: Identifier "foo" not found in base self.',

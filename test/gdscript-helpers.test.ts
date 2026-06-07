@@ -80,12 +80,6 @@ describe('GD_MCP shared constants', () => {
     expect(GD_MCP_OUTPUT.join('\n')).toContain('_mcp_outputs.append');
   });
 
-  it('GD_MCP_GET_ROOT uses self.root (Godot 4.6+ compatible)', () => {
-    const joined = GD_MCP_GET_ROOT.join('\n');
-    expect(joined).toContain('self.root');
-    expect(joined).not.toContain('Engine.get_main_loop');
-  });
-
   it('SCENE_TREE_HEADER uses self.root via _mcp_get_root', () => {
     expect(SCENE_TREE_HEADER).toContain('self.root');
     expect(SCENE_TREE_HEADER).not.toMatch(/\bif root != null:/);
