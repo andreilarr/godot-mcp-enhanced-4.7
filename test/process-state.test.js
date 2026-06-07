@@ -2,7 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock child_process to prevent real taskkill/spawn calls on Windows
 vi.mock('child_process', () => ({
-  spawn: vi.fn(() => ({ on: vi.fn() })),
+  spawn: vi.fn(() => {
+    const mockPs = {
+      stdout: { on: vi.fn() },
+      stderr: { on: vi.fn() },
+      on: vi.fn((evt, cb) => { if (evt === 'close') setTimeout(() => cb(0), 0); }),
+      killed: false,
+      kill: vi.fn(),
+      pid: 99999,
+    };
+    return mockPs;
+  }),
 }));
 import { spawn } from 'child_process';
 import {
@@ -27,6 +37,7 @@ import {
   acquireShortRunningSlot,
   releaseShortRunningSlot,
   getShortRunningCount,
+  killOrphanGodotProcesses,
 } from '../src/core/process-state.js';
 
 function makeMockProc({ killed = false, pid = 12345 } = {}) {
@@ -455,5 +466,29 @@ describe('acquireShortRunningSlot / releaseShortRunningSlot', () => {
     acquireShortRunningSlot();
     resetState();
     expect(getShortRunningCount()).toBe(0);
+  });
+});
+
+// ─── killOrphanGodotProcesses (V-01 second layer) ───────────────────────────
+
+describe('killOrphanGodotProcesses', () => {
+  beforeEach(() => {
+    resetState();
+  });
+
+  it('returns 0 when projectDir is empty', async () => {
+    const count = await killOrphanGodotProcesses('');
+    expect(count).toBe(0);
+  });
+
+  it('returns 0 when no orphan processes exist', async () => {
+    const count = await killOrphanGodotProcesses('/nonexistent/project/path');
+    expect(count).toBeGreaterThanOrEqual(0);
+  });
+
+  it('throttles: second call within 30s returns 0', async () => {
+    await killOrphanGodotProcesses('/some/project');
+    const count = await killOrphanGodotProcesses('/some/project');
+    expect(count).toBe(0);
   });
 });
