@@ -356,6 +356,7 @@ export function wrapSnippet(code: string, resultMarker = MARKER_RESULT_SHARED): 
     '## Use Variant type for variables to avoid "Cannot infer type" errors',
     '',
     'var _mcp_outputs: Array = []',
+    '# Note: _mcp_root named to avoid collision with SceneTree.root (Godot 4.6+)',
     'var _mcp_root: Node = null',
     '',
     ...GD_MCP_GET_ROOT,

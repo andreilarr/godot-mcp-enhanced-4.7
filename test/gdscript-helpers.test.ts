@@ -41,7 +41,8 @@ describe('GD_MCP shared constants', () => {
   it('GD_MCP_GET_ROOT contains expected function signature', () => {
     expect(GD_MCP_GET_ROOT).toBeInstanceOf(Array);
     expect(GD_MCP_GET_ROOT[0]).toBe('func _mcp_get_root() -> Node:');
-    expect(GD_MCP_GET_ROOT.join('\n')).toContain('_mcp_root = ml.root');
+    expect(GD_MCP_GET_ROOT.join('\n')).toContain('self.root');
+    expect(GD_MCP_GET_ROOT.join('\n')).not.toContain('Engine.get_main_loop');
   });
 
   it('GD_MCP_GET_NODE uses precise version (not simplified)', () => {

@@ -6,17 +6,15 @@ exports[`GDScript helpers - baseline snapshots > wrapSnippet with func declarati
 ## Use Variant type for variables to avoid "Cannot infer type" errors
 
 var _mcp_outputs: Array = []
+# Note: _mcp_root named to avoid collision with SceneTree.root (Godot 4.6+)
 var _mcp_root: Node = null
 
 func _mcp_get_root() -> Node:
 	if _mcp_root != null:
 		return _mcp_root
-	if root != null:
-		_mcp_root = root
-		return _mcp_root
-	var ml: Variant = Engine.get_main_loop()
-	if ml != null and ml is SceneTree and ml.root != null:
-		_mcp_root = ml.root
+	# Godot 4.6+: self.root is required (extends SceneTree — root is native property)
+	if self.root != null:
+		_mcp_root = self.root
 		return _mcp_root
 	return null
 
@@ -85,17 +83,15 @@ exports[`GDScript helpers - baseline snapshots > wrapSnippet("var x = 1") baseli
 ## Use Variant type for variables to avoid "Cannot infer type" errors
 
 var _mcp_outputs: Array = []
+# Note: _mcp_root named to avoid collision with SceneTree.root (Godot 4.6+)
 var _mcp_root: Node = null
 
 func _mcp_get_root() -> Node:
 	if _mcp_root != null:
 		return _mcp_root
-	if root != null:
-		_mcp_root = root
-		return _mcp_root
-	var ml: Variant = Engine.get_main_loop()
-	if ml != null and ml is SceneTree and ml.root != null:
-		_mcp_root = ml.root
+	# Godot 4.6+: self.root is required (extends SceneTree — root is native property)
+	if self.root != null:
+		_mcp_root = self.root
 		return _mcp_root
 	return null
 
