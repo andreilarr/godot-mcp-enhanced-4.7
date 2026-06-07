@@ -70,6 +70,15 @@ export async function startMcpServer(args: string[]): Promise<void> {
     getLogger().error('godot-mcp', 'Failed to run server', { error: msg });
     process.exit(1);
   });
+
+  // Auto-launch Dashboard TUI in a new terminal window
+  import('./dashboard/launcher.js').then(({ launchDashboardOnce }) => {
+    getLogger().info('godot-mcp', 'Auto-launching Dashboard TUI...');
+    launchDashboardOnce();
+  }).catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    getLogger().warn('godot-mcp', `Dashboard auto-launch skipped: ${msg}`);
+  });
 }
 
 // ── 入口分流 ──────────────────────────────────────────────

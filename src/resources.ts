@@ -6,7 +6,7 @@
 import { existsSync, readFileSync, statSync } from 'fs';
 import { resolve, join, extname, sep, basename } from 'path';
 import { parseTscnSummary } from './tscn-parser.js';
-import { parseConfigValue, safeRealPath, scanFiles, iterativeDecode } from './helpers.js';
+import { parseConfigValue, safeRealPath, scanFiles, iterativeDecode, isPathInAllowedRoots } from './helpers.js';
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB — reject files larger than this
 
@@ -385,9 +385,9 @@ function readFileResource(projectPath: string, filePath: string): McpResourceCon
 // ─── Resource listing ─────────────────────────────────────────────────────────
 
 export function listResources(projectPath: string | undefined): McpResource[] {
-  if (!projectPath) {
+  if (!projectPath || !isPathInAllowedRoots(projectPath)) {
     return [
-      { uri: 'godot://help', name: 'Help', description: 'No project path available. Use templates to read specific files.', mimeType: 'text/plain' },
+      { uri: 'godot://help', name: 'Help', description: 'No project path available or path not in allowed roots.', mimeType: 'text/plain' },
     ];
   }
 
@@ -474,6 +474,10 @@ export function listResourceTemplates(): McpResourceTemplate[] {
 export function readResource(uri: string, projectPath: string | undefined): McpResourceContent {
   if (!projectPath) {
     return { uri, mimeType: 'text/plain', text: 'ERROR: No project path available.' };
+  }
+  // I-03: Verify project path is in allowed roots before reading
+  if (!isPathInAllowedRoots(projectPath)) {
+    return { uri, mimeType: 'text/plain', text: 'ERROR: Project path not in allowed roots.' };
   }
 
   if (!uri.startsWith('godot://')) {

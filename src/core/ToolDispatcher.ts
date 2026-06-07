@@ -301,10 +301,10 @@ export class ToolDispatcher {
 
   private validatePathArgs(args: Record<string, unknown>): ToolResult | null {
     if (typeof args.project_path === 'string' && !isPathInAllowedRoots(args.project_path)) {
-      return opsErrorResult('PATH_NOT_ALLOWED', `Path not in ALLOWED_PROJECT_PATHS: ${args.project_path}`);
+      return opsErrorResult('PATH_NOT_ALLOWED', `Path not in ALLOWED_PROJECT_PATHS: ${args.project_path}. Check your ALLOWED_PROJECT_PATHS setting.`);
     }
     if (typeof args.search_dir === 'string' && !isPathInAllowedRoots(args.search_dir)) {
-      return opsErrorResult('PATH_NOT_ALLOWED', `Search directory not in ALLOWED_PROJECT_PATHS: ${args.search_dir}. Set ALLOWED_PROJECT_PATHS or GODOT_MCP_UNRESTRICTED=true.`);
+      return opsErrorResult('PATH_NOT_ALLOWED', `Search directory not in ALLOWED_PROJECT_PATHS: ${args.search_dir}. Check your ALLOWED_PROJECT_PATHS setting.`);
     }
     return null;
   }

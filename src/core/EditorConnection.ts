@@ -147,7 +147,9 @@ export class EditorConnection {
     return new Promise((resolve, reject) => {
       const url = `ws://${this.host}:${this.options.port}`;
       this.connectAttempt = true;
+      let settled = false; // I-05: Guard against double reject/resolve
       const timer = setTimeout(() => {
+        if (settled) return; settled = true;
         ws.removeAllListeners();
         ws.terminate();
         reject(new Error(`Connection timeout to ${url}`));
@@ -155,7 +157,7 @@ export class EditorConnection {
 
       const ws = new WebSocket(url);
       ws.on('open', async () => {
-        clearTimeout(timer);
+        if (settled) return; clearTimeout(timer);
         this.ws = ws;
         this.connected = true;
         this.connectAttempt = false;
@@ -171,7 +173,7 @@ export class EditorConnection {
             this.ws = null;
             ws.removeAllListeners();
             ws.terminate();
-            reject(new Error(`Auth locked out: too many failures. Retry in ${remaining}s`));
+            if (!settled) { settled = true; reject(new Error(`Auth locked out: too many failures. Retry in ${remaining}s`)); }
             return;
           }
           // Reset failure counter if lockout has expired
@@ -189,13 +191,15 @@ export class EditorConnection {
               getLogger().error('auth', `Locked out for ${AUTH_LOCKOUT_MS / 1000}s after ${MAX_AUTH_FAILURES} failures`);
             }
             this.connected = false;
-            // I-09: Don't set connectAttempt = true here — it's already true from connect() entry.
-            // Setting it again would cause ws.on('close') to see wasConnected=false,
-            // preventing reconnect even though the connection was previously established.
+            // I-04: Prevent reconnect loop after auth failure.
+            // connectAttempt was set to false in 'open' handler (line ~163),
+            // so close handler sees wasConnected=true and would call scheduleReconnect.
+            // Setting reconnectEnabled=false blocks that cycle.
+            this.reconnectEnabled = false;
             this.ws = null;
             ws.removeAllListeners();
             ws.terminate();
-            reject(authErr);
+            if (!settled) { settled = true; reject(authErr); }
             return;
           }
         } else {
@@ -204,7 +208,7 @@ export class EditorConnection {
           this.ws = null;
           ws.removeAllListeners();
           ws.terminate();
-          reject(new Error('Editor auth required but no secret configured. Install the editor plugin.'));
+          if (!settled) { settled = true; reject(new Error('Editor auth required but no secret configured. Install the editor plugin.')); }
           return;
         }
         const isReconnect = this.reconnectAttempt > 0;
@@ -212,10 +216,11 @@ export class EditorConnection {
         if (isReconnect) {
           this.fireReconnect();
         }
-        resolve();
+        if (!settled) { settled = true; resolve(); }
       });
 
       ws.on('error', (err) => {
+        if (settled) return; settled = true;
         clearTimeout(timer);
         reject(new Error(`Connection failed: ${err.message}`));
       });
@@ -446,12 +451,12 @@ export class EditorConnection {
       this.maxReconnectMs,
     );
     this.reconnectAttempt++;
-    getLogger().error('editor', `Reconnecting in ${delay}ms (attempt ${this.reconnectAttempt})`);
+    getLogger().warn('editor', `Reconnecting in ${delay}ms (attempt ${this.reconnectAttempt})`);
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
       try {
         await this.connect();
-        getLogger().error('editor', 'Reconnected');
+        getLogger().info('editor', 'Reconnected');
       } catch (err) {
         getLogger().warn('editor', `reconnect failed: ${err}`);
       }

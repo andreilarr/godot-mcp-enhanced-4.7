@@ -2,6 +2,7 @@
 import { readFileSync, chmodSync, statSync } from 'fs';
 import { join } from 'path';
 import { execFileSync } from 'child_process';
+import { userInfo } from 'os';
 import { getLogger } from './logger.js';
 
 const SECRET_FILE_NAME = 'mcp_editor.key';
@@ -10,23 +11,21 @@ let _permWarned = false;
 /** On Windows, use icacls to restrict file to current user only. Returns true if ACL was applied successfully. */
 function restrictFileWindows(filePath: string): boolean {
   try {
-    const username = process.env.USERNAME;
-    if (!username) return false;
-    // Validate username format (letters, digits, hyphens, underscores, backslash for domain)
-    if (!/^[A-Za-z0-9_\-\\]+$/.test(username)) {
+    // C-ARC-01: Use os.userInfo().username (no environment variable spoofing)
+    // and strictly validate format — no backslashes (rejects DOMAIN\user injection).
+    const username = userInfo().username;
+    if (!username || !/^[A-Za-z0-9_-]+$/.test(username)) {
       if (!_permWarned) {
         _permWarned = true;
-        getLogger().error('security', `Cannot set ACL: USERNAME "${username}" contains unexpected characters.`);
+        getLogger().error('security', `Cannot set ACL: username "${username}" contains unexpected characters.`);
       }
       return false;
     }
-    // Extract simple username from DOMAIN\user format to avoid icacls backslash misinterpretation
-    const effectiveUser = username.includes('\\') ? username.split('\\').pop()! : username;
-    execFileSync('icacls', [filePath, '/inheritance:r', '/grant:r', `${effectiveUser}:R`], { stdio: 'ignore' });
+    execFileSync('icacls', [filePath, '/inheritance:r', '/grant:r', `${username}:R`], { stdio: 'ignore' });
     // Verify the ACL was applied by reading it back
     const output = execFileSync('icacls', [filePath], { encoding: 'utf-8' });
     // Case-insensitive match — Windows usernames are case-insensitive
-    if (!output.toLowerCase().includes(effectiveUser.toLowerCase())) {
+    if (!output.toLowerCase().includes(username.toLowerCase())) {
       if (!_permWarned) {
         _permWarned = true;
         getLogger().error('security', `ACL verification failed for ${filePath}: ${output.trim()}`);

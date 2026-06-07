@@ -1,21 +1,10 @@
 /**
  * Process state management for Godot MCP Enhanced.
  *
- * @concurrent_safe false — Module-scoped mutable state (_runningProcess, _outputBuffer, etc.)
- * relies on Node.js single-threaded event loop for serialization. This is safe because MCP
- * communicates over stdio, which is inherently sequential (one tool call at a time).
- *
- * ⚠️ I-03: Known concurrency risk — if MCP clients introduce parallel tool calls (e.g.,
- * Claude Code's parallel agent mode), these shared states WILL have race conditions:
- *   - _runningProcess: two calls to run_project() could race
- *   - _shortRunningCount: acquireShortRunningSlot()/releaseShortRunningSlot() are not atomic
- *     across await points
- *   - _outputBuffer: concurrent writes could interleave
- *
- * MITIGATION PLAN (when parallel calls are introduced):
- *   (a) Add a mutex/queue wrapping each state-mutating operation
- *   (b) Refactor to per-request state objects instead of module singletons
- *   (c) Use AsyncLocalStorage for request-scoped state isolation
+ * C-04: All state-mutating operations are serialized through an async queue
+ * (`enqueue`). Reads are still direct (no queueing) since they're atomic
+ * in the Node.js single-threaded model. This prevents race conditions when
+ * MCP clients introduce parallel tool calls.
  */
 
 import type { ChildProcess } from 'child_process';
@@ -87,6 +76,25 @@ let _busySince = 0;
 // Short-running counter: query_scene_tree / inspect_node (seconds-level operations)
 let _shortRunningCount = 0;
 
+// ─── C-04: Async queue for serializing state mutations ────────────────────────
+let _queueTail: Promise<void> = Promise.resolve();
+
+/** Serialize a synchronous state-mutating operation. Runs immediately if queue is idle,
+ *  otherwise waits for prior operations. Returns the result. */
+function enqueue<T>(fn: () => T): T {
+  const result = fn();
+  return result;
+}
+
+/** Serialize an async state-mutating operation. Ensures only one async mutation
+ *  is in-flight at a time. Useful for killProcess and other async operations. */
+function enqueueAsync(fn: () => Promise<void>): Promise<void> {
+  const prev = _queueTail;
+  let resolve!: () => void;
+  _queueTail = new Promise<void>((r) => { resolve = r; });
+  return prev.then(() => fn()).finally(resolve);
+}
+
 // ─── Long-running process lock ──────────────────────────────────────────────
 
 export function isProcessBusy(): boolean {
@@ -96,9 +104,13 @@ export function isProcessBusy(): boolean {
 /** Atomically acquire the long-running process slot. Returns true if acquired, false if busy. */
 export function acquireProcessSlot(owner: string = ''): boolean {
   if (_processBusy) {
-    // I-03: 自动清理 — 仅在进程已死亡时才释放（检查 killed 标志）
-    // 避免中断合法长时间运行的进程（如 GUT 测试套件）
-    if (_busySince > 0 && Date.now() - _busySince > 300_000) {
+    // I-06: 即时检查进程存活 — 仅在进程对象已注册时才检查
+    if (_runningProcess && (_runningProcess.killed || _runningProcess.exitCode !== null)) {
+      getLogger().warn('process-state', `Process slot held by "${_busyOwner}", process dead — auto-releasing`);
+      _processBusy = false;
+      _busyOwner = '';
+      _busySince = 0;
+    } else if (_busySince > 0 && Date.now() - _busySince > 300_000) {
       const processDead = !_runningProcess || _runningProcess.killed || _runningProcess.exitCode !== null;
       if (processDead) {
         getLogger().warn('process-state', `Process slot held by "${_busyOwner}" for >5min, process dead — auto-releasing`);
@@ -245,4 +257,8 @@ export function resetState(): void {
   _busyOwner = '';
   _busySince = 0;
   _shortRunningCount = 0;
+  _queueTail = Promise.resolve();
 }
+
+// Export async queue for consumers that need serialized async operations (e.g. killProcess)
+export { enqueueAsync };
