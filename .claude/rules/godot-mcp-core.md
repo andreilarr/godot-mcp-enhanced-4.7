@@ -44,6 +44,7 @@ godot-mcp-enhanced 提供 130+ 工具，通过三层架构操作 Godot：
 - **完整类模式**：手写 `extends SceneTree`，适合需要 `_process()` 或复杂生命周期的场景。
 - **load_autoloads=true**：在完整项目环境中运行，可访问 DataRegistry、PlayerData 等全局单例。启动较慢（需加载整个项目），仅在确实需要 Autoload 时开启。
 - **注意**：片段模式中 `func`/`var`/`const` 声明自动放在类级别，语句行放在 `_initialize()` 体内。
+- **⚠️ 沙箱安全限制**：GDScript 沙箱扫描基于正则匹配（非语法解析），设计用于防止意外误操作，**不可防御恶意输入**。Phase 2 字符串拼接检测可捕获常见绕过模式，但仍可能有遗漏。对于不可信输入，使用 `GODOT_MCP_ALLOW_UNSAFE` 环境变量需配合容器/VM 隔离。
 
 ### edit_script — 脚本编辑
 
@@ -92,3 +93,8 @@ Headless 模式下 2D 场景（CanvasItem 子类，如 ColorRect/TextureRect/\_d
 - **load_autoloads 性能开销**：仅在需要 Autoload 单例时开启，否则启动时间增加 3-5 倍。
 - **Bridge 密钥过期**：Bridge 密钥有 5 分钟 TTL 缓存，长时间未操作后首次调用可能稍慢。
 - **2D 截图空白**：Headless 模式无法渲染 2D CanvasItem，使用 Bridge 或手动截图替代。
+- **run_and_verify 可能残留进程**：headless 模式下交互式场景（不自动退出）可能残留 Godot 进程。如果后续 `run_project` 报 "another Godot process is running"，先调用 `stop_project` 清理残留进程。
+- **load_autoloads=true 片段模式差异**：`load_autoloads=true` 时片段包装为 `extends Node`（非 `extends SceneTree`），`get_root()` 不可用。需要手写 `extends SceneTree` 完整类模式来访问 SceneTree API。
+- **load_autoloads autoload 层级**：`load_autoloads=true` 时 autoload 节点不直接挂在 `get_root()` 下，而是通过 autoload 系统加载。使用 `Engine.get_main_loop().get_root().get_node("autoload/Xxx")` 访问。
+- **remove_node 路径格式**：使用 `父名#子名` 格式（如 `Main#ValidationLabel`），而非 `/` 分隔路径。先用 `query_scene_tree` 确认节点名。
+- **ui_build_layout 必须传 scene_path**：不传 `scene_path` 会报错 "Failed to load scene"。所有 `ui_build_layout` 调用必须包含 `scene_path` 参数。
