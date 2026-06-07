@@ -349,6 +349,22 @@ function classifyLines(code: string): { declarationLines: string[]; statementLin
 export function wrapSnippet(code: string, resultMarker = MARKER_RESULT_SHARED): string {
   const { declarationLines, statementLines } = classifyLines(code);
 
+  // BUG-2 fix: SceneTree has a built-in `root` property (Window).
+  // User `var root = ...` at class level collides with it.
+  // Rename user's `var root` → `var _mcp_user_root` and update references.
+  const ST_RESERVED = ['root'];
+  for (const reserved of ST_RESERVED) {
+    const declPattern = new RegExp(`^(var\\s+)${reserved}(\\s*=)`, 'g');
+    for (let i = 0; i < declarationLines.length; i++) {
+      declarationLines[i] = declarationLines[i]!.replace(declPattern, `$1_mcp_user_${reserved}$2`);
+    }
+    // Update references in statements: standalone `root` but not `_mcp_root`, `self.root`, `.root`, `root_node` etc.
+    const refPattern = new RegExp(`(?<![_.\\w])\\b${reserved}\\b(?!\\w)`, 'g');
+    for (let i = 0; i < statementLines.length; i++) {
+      statementLines[i] = statementLines[i]!.replace(refPattern, `_mcp_user_${reserved}`);
+    }
+  }
+
   // Build via array join — prevents JS template interpolation of user code
   const scriptLines: string[] = [
     'extends SceneTree',

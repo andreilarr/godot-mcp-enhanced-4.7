@@ -107,3 +107,29 @@ describe('SCENE_TREE_HEADER bugfix', () => {
     expect(SCENE_TREE_HEADER.match(/func _mcp_output/g)).toHaveLength(1);
   });
 });
+
+describe('BUG-2: var root naming conflict in wrapSnippet', () => {
+  it('renames user var root to avoid SceneTree.root collision', () => {
+    const result = wrapSnippet('var root = _mcp_get_root()\nprint(root.name)');
+    // 不应在类级别出现裸 "var root ="
+    expect(result).not.toMatch(/^var root\s*=/m);
+    // 应重命名为 _mcp_user_root
+    expect(result).toContain('var _mcp_user_root = _mcp_get_root()');
+    // 引用也应更新
+    expect(result).toContain('print(_mcp_user_root.name)');
+    expect(result).toContain('extends SceneTree');
+  });
+
+  it('wrapSnippetAsNode does NOT rename var root (Node has no root prop)', () => {
+    const result = wrapSnippetAsNode('var root = _mcp_get_root()\nprint(root.name)');
+    expect(result).toContain('extends Node');
+    // Node 没有 root 属性，var root 安全
+    expect(result).toContain('var root = _mcp_get_root()');
+  });
+
+  it('does not rename non-conflicting variables like root_node', () => {
+    const result = wrapSnippet('var my_data = 42\nvar root_node = _mcp_get_root()\nprint(str(my_data))');
+    expect(result).toContain('var my_data = 42');
+    expect(result).toContain('var root_node = _mcp_get_root()');
+  });
+});
