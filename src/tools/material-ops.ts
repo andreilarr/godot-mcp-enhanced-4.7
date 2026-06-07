@@ -206,11 +206,13 @@ func _initialize():
 \t\t_mcp_output("error", "Node not found: ${gdEscape(nodePath)}")
 \t\t_mcp_done()
 \t\treturn
-\tvar mat = node.material
-\tif mat == null:
+\tvar mat = node.get("material")
+\tif mat == null and node.has_method("get_surface_override_material"):
 \t\tmat = node.get_surface_override_material(${materialIndex})
-\tif mat == null and node.mesh != null:
-\t\tmat = node.mesh.surface_get_material(${materialIndex})
+\tif mat == null:
+\t\tvar _mesh = node.get("mesh")
+\t\tif _mesh != null and _mesh.has_method("surface_get_material"):
+\t\t\tmat = _mesh.surface_get_material(${materialIndex})
 \tif mat == null:
 \t\t_mcp_output("error", "No material on node")
 \t\t_mcp_done()
@@ -278,11 +280,13 @@ func _initialize():
 \t\t_mcp_output("error", "Node not found: ${gdEscape(nodePath)}")
 \t\t_mcp_done()
 \t\treturn
-\tvar mat = node.material
-\tif mat == null:
+\tvar mat = node.get("material")
+\tif mat == null and node.has_method("get_surface_override_material"):
 \t\tmat = node.get_surface_override_material(${materialIndex})
-\tif mat == null and node.mesh != null:
-\t\tmat = node.mesh.surface_get_material(${materialIndex})
+\tif mat == null:
+\t\tvar _mesh = node.get("mesh")
+\t\tif _mesh != null and _mesh.has_method("surface_get_material"):
+\t\t\tmat = _mesh.surface_get_material(${materialIndex})
 \tif mat == null:
 \t\t_mcp_output("error", "No material on node")
 \t\t_mcp_done()
@@ -324,11 +328,13 @@ func _initialize():
 \t\t_mcp_output("error", "Node not found: ${gdEscape(nodePath)}")
 \t\t_mcp_done()
 \t\treturn
-\tvar mat = node.material
-\tif mat == null:
+\tvar mat = node.get("material")
+\tif mat == null and node.has_method("get_surface_override_material"):
 \t\tmat = node.get_surface_override_material(${materialIndex})
-\tif mat == null and node.mesh != null:
-\t\tmat = node.mesh.surface_get_material(${materialIndex})
+\tif mat == null:
+\t\tvar _mesh = node.get("mesh")
+\t\tif _mesh != null and _mesh.has_method("surface_get_material"):
+\t\t\tmat = _mesh.surface_get_material(${materialIndex})
 \tif mat == null:
 \t\t_mcp_output("error", "No material on node")
 \t\t_mcp_done()
@@ -381,11 +387,13 @@ func _initialize():
 \t\t_mcp_output("error", "Node not found: ${gdEscape(nodePath)}")
 \t\t_mcp_done()
 \t\treturn
-\tvar mat = node.material
-\tif mat == null:
+\tvar mat = node.get("material")
+\tif mat == null and node.has_method("get_surface_override_material"):
 \t\tmat = node.get_surface_override_material(${materialIndex})
-\tif mat == null and node.mesh != null:
-\t\tmat = node.mesh.surface_get_material(${materialIndex})
+\tif mat == null:
+\t\tvar _mesh = node.get("mesh")
+\t\tif _mesh != null and _mesh.has_method("surface_get_material"):
+\t\t\tmat = _mesh.surface_get_material(${materialIndex})
 \tif mat == null:
 \t\t_mcp_output("error", "No material on node")
 \t\t_mcp_done()
@@ -415,11 +423,13 @@ func _initialize():
 \t\t_mcp_output("error", "Node not found: ${gdEscape(nodePath)}")
 \t\t_mcp_done()
 \t\treturn
-\tvar mat = node.material
-\tif mat == null:
+\tvar mat = node.get("material")
+\tif mat == null and node.has_method("get_surface_override_material"):
 \t\tmat = node.get_surface_override_material(${materialIndex})
-\tif mat == null and node.mesh != null:
-\t\tmat = node.mesh.surface_get_material(${materialIndex})
+\tif mat == null:
+\t\tvar _mesh = node.get("mesh")
+\t\tif _mesh != null and _mesh.has_method("surface_get_material"):
+\t\t\tmat = _mesh.surface_get_material(${materialIndex})
 \tif mat == null:
 \t\t_mcp_output("error", "No material on node")
 \t\t_mcp_done()
@@ -458,11 +468,13 @@ func _initialize():
 \t\t_mcp_output("error", "Node not found: ${gdEscape(nodePath)}")
 \t\t_mcp_done()
 \t\treturn
-\tvar mat = node.material
-\tif mat == null:
+\tvar mat = node.get("material")
+\tif mat == null and node.has_method("get_surface_override_material"):
 \t\tmat = node.get_surface_override_material(${materialIndex})
-\tif mat == null and node.mesh != null:
-\t\tmat = node.mesh.surface_get_material(${materialIndex})
+\tif mat == null:
+\t\tvar _mesh = node.get("mesh")
+\t\tif _mesh != null and _mesh.has_method("surface_get_material"):
+\t\t\tmat = _mesh.surface_get_material(${materialIndex})
 \tif mat == null:
 \t\t_mcp_output("error", "No material on node")
 \t\t_mcp_done()
@@ -517,11 +529,13 @@ func _initialize():
 \t\t_mcp_output("error", "Node not found: ${gdEscape(nodePath)}")
 \t\t_mcp_done()
 \t\treturn
-\tvar mat = node.material
-\tif mat == null:
+\tvar mat = node.get("material")
+\tif mat == null and node.has_method("get_surface_override_material"):
 \t\tmat = node.get_surface_override_material(${materialIndex})
-\tif mat == null and node.mesh != null:
-\t\tmat = node.mesh.surface_get_material(${materialIndex})
+\tif mat == null:
+\t\tvar _mesh = node.get("mesh")
+\t\tif _mesh != null and _mesh.has_method("surface_get_material"):
+\t\t\tmat = _mesh.surface_get_material(${materialIndex})
 \tif mat == null:
 \t\t_mcp_output("error", "No material on node")
 \t\t_mcp_done()

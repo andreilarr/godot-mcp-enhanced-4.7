@@ -59,7 +59,10 @@ function tilemapBranch(tileMapBody: string, layerBody: string, returnOnError = t
   const elseBlock = returnOnError
     ? '\t\t_mcp_output("error", "Not a TileMap or TileMapLayer: " + node.get_class())\n\t\t_mcp_done()\n\t\treturn'
     : '\t\t_mcp_output("error", "Not a TileMap or TileMapLayer: " + node.get_class())';
-  return `\tif node.get_class() == "TileMap":\n${tileMapBody}\telif node.get_class() == "TileMapLayer":\n${layerBody}\telse:\n${elseBlock}`;
+  // Ensure each body ends with \n so elif/else starts on its own line
+  const tmBody = tileMapBody.endsWith('\n') ? tileMapBody : tileMapBody + '\n';
+  const lyBody = layerBody.endsWith('\n') ? layerBody : layerBody + '\n';
+  return `\tif node.get_class() == "TileMap":\n${tmBody}\telif node.get_class() == "TileMapLayer":\n${lyBody}\telse:\n${elseBlock}`;
 }
 
 /** Generate a single API call that differs only by the layer prefix arg. */
