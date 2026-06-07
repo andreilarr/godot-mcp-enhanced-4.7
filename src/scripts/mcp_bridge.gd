@@ -206,15 +206,18 @@ func _server_take_connection() -> StreamPeerTCP:
 
 # DUPLICATE: Keep in sync with addons/godot_mcp_server/websocket_server.gd:_constant_time_compare
 # Cannot share because editor plugin and game autoload have separate script contexts.
+# C-05: Fixed-length comparison (always 32 bytes) to prevent timing side-channel.
 func _constant_time_compare(a: String, b: String) -> bool:
+	const SECRET_LEN := 32
 	var result := 0
-	if a.length() != b.length():
-		result = 1
-	var max_len := maxi(a.length(), b.length())
-	for i in range(max_len):
+	# Always compare exactly SECRET_LEN bytes regardless of input length
+	for i in range(SECRET_LEN):
 		var ca := ord(a[i]) if i < a.length() else 0
 		var cb := ord(b[i]) if i < b.length() else 0
 		result = result | (ca ^ cb)
+	# Reject if either input length differs from expected
+	if a.length() != SECRET_LEN or b.length() != SECRET_LEN:
+		return false
 	return result == 0
 
 # DUPLICATE: Keep in sync with addons/godot_mcp_server/websocket_server.gd:_generate_secret
@@ -712,6 +715,9 @@ func _cmd_wait_for_property(params: Dictionary) -> Variant:
 	if _is_blocked_property(prop):
 		return {"error": {"code": -2, "message": "Blocked property: %s" % prop}}
 	var current: Variant = node.get(prop)
+	# I-07: Safety check on read value to prevent leaking complex types (Resource, Script, etc.)
+	if not _is_safe_value(current):
+		return {"match": false, "property": prop, "current": "<unsupported type>", "expected": _jsonify(expected)}
 	var match_result: bool = str(current) == str(expected)
 	return {"match": match_result, "property": prop, "current": _jsonify(current), "expected": _jsonify(expected)}
 
@@ -1191,11 +1197,11 @@ func _input(event: InputEvent) -> void:
 		return
 	var time_ms: int = Time.get_ticks_msec() - _record_start_time
 	if event is InputEventKey:
-		_recorded_events.append({"type": "key", "keycode": event.keycode, "pressed": event.pressed, "shift": event.shift_pressed, "ctrl": event.ctrl_pressed, "alt": event.alt_pressed, "time_ms": time_ms})
+		_recorded_events.append({"type": "key", "keycode": event.keycode, "pressed": event.pressed, "shift": event.shift_pressed, "ctrl": event.ctrl_pressed, "alt": event.alt_pressed, "time_offset": time_ms})
 	elif event is InputEventMouseButton:
-		_recorded_events.append({"type": "mouse_click", "position": [event.position.x, event.position.y], "button": event.button_index, "pressed": event.pressed, "time_ms": time_ms})
+		_recorded_events.append({"type": "mouse_click", "position": [event.position.x, event.position.y], "button": event.button_index, "pressed": event.pressed, "time_offset": time_ms})
 	elif event is InputEventMouseMotion:
-		_recorded_events.append({"type": "mouse_move", "position": [event.position.x, event.position.y], "time_ms": time_ms})
+		_recorded_events.append({"type": "mouse_move", "position": [event.position.x, event.position.y], "time_offset": time_ms})
 
 
 ## 内联安全类型检查（替代 SafeValues 类引用，autoload 环境无法引用 safe_values.gd）

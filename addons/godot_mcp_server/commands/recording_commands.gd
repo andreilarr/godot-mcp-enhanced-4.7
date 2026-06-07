@@ -94,7 +94,7 @@ func handle_recording_play(params: Dictionary) -> Dictionary:
 	for evt in events:
 		if not (evt is Dictionary):
 			continue
-		var offset: float = float(evt.get("time_offset", 0.0)) / speed_val
+		var offset: float = float(evt.get("time_offset", evt.get("time_ms", 0.0))) / speed_val
 		schedule.append({"delay": offset - base_offset, "event": evt})
 		base_offset = offset
 

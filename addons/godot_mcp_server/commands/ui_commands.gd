@@ -55,7 +55,7 @@ func handle_ui_create_control(params: Dictionary, request_id: int) -> Dictionary
 
 # ─── ui_set_layout ──────────────────────────────────────────────────────────
 
-func handle_ui_set_layout(params: Dictionary) -> Dictionary:
+func handle_ui_set_layout(params: Dictionary, request_id: int = 0) -> Dictionary:
 	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
@@ -155,7 +155,7 @@ func handle_ui_get_layout(params: Dictionary) -> Dictionary:
 
 # ─── ui_anchor_preset ───────────────────────────────────────────────────────
 
-func handle_ui_anchor_preset(params: Dictionary) -> Dictionary:
+func handle_ui_anchor_preset(params: Dictionary, request_id: int = 0) -> Dictionary:
 	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}

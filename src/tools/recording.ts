@@ -1,7 +1,7 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { requireProjectPath, resolveWithinRoot } from '../helpers.js';
-import { executeGdscript, executeGdscriptTrusted } from '../gdscript-executor.js';
+import { executeGdscriptTrusted } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult, gdEscape } from './shared.js';
 import { sendToBridge, setBridgeProjectDir } from './game-bridge.js';
 
@@ -24,6 +24,24 @@ const ACTIONS = [
   'recording_load',
   'recording_play',
 ] as const;
+
+// ─── Keycode → Bridge key string mapping ────────────────────────────────────
+
+// Reverse mapping of Godot keycodes to the key strings accepted by Bridge's _cmd_send_key.
+// Based on mcp_bridge.gd _key_from_string mapping.
+const KEYCODE_TO_STRING: Record<number, string> = {
+  4: 'a', 5: 'b', 6: 'c', 7: 'd', 8: 'e', 9: 'f', 10: 'g', 11: 'h', 12: 'i',
+  13: 'j', 14: 'k', 15: 'l', 16: 'm', 17: 'n', 18: 'o', 19: 'p', 20: 'q',
+  21: 'r', 22: 's', 23: 't', 24: 'u', 25: 'v', 26: 'w', 27: 'x', 28: 'y', 29: 'z',
+  30: '0', 31: '1', 32: '2', 33: '3', 34: '4', 35: '5', 36: '6', 37: '7', 38: '8', 39: '9',
+  41: 'escape', 42: 'tab', 44: 'enter', 45: 'space',
+  46: 'up', 47: 'down', 48: 'left', 49: 'right',
+  50: 'shift', 51: 'ctrl', 52: 'alt',
+};
+
+function keycodeToBridgeKey(keycode: number): string | null {
+  return KEYCODE_TO_STRING[keycode] ?? null;
+}
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -112,76 +130,6 @@ func _initialize():
 \t\treturn
 \t_mcp_output("recording", parsed)
 \t_mcp_done()
-`;
-}
-
-export function genRecordingPlayScript(eventsJsonEscaped: string, speed: number): string {
-  const speedStr = speed % 1 === 0 ? `${speed}.0` : String(speed);
-  return `${SCENE_TREE_HEADER}
-
-var _mcp_play_events: Array = []
-var _mcp_play_index: int = 0
-var _mcp_play_speed: float = ${speedStr}
-var _mcp_play_timer: Timer = null
-
-func _mcp_play_next_event() -> void:
-\tif _mcp_play_index >= _mcp_play_events.size():
-\t\tif _mcp_play_timer != null:
-\t\t\t_mcp_play_timer.stop()
-\t\t_mcp_output("playback_complete", {"events_played": _mcp_play_events.size()})
-\t\t_mcp_done()
-\t\treturn
-\tvar evt: Dictionary = _mcp_play_events[_mcp_play_index]
-\tvar evt_type: String = str(evt.get("type", ""))
-\tif evt_type == "key":
-\t\tvar ie: InputEventKey = InputEventKey.new()
-\t\tie.keycode = int(evt.get("keycode", 0))
-\t\tie.pressed = bool(evt.get("pressed", true))
-\t\tie.shift_pressed = bool(evt.get("shift", false))
-\t\tie.ctrl_pressed = bool(evt.get("ctrl", false))
-\t\tie.alt_pressed = bool(evt.get("alt", false))
-\t\tInput.parse_input_event(ie)
-\telif evt_type == "mouse_click":
-\t\tvar ie: InputEventMouseButton = InputEventMouseButton.new()
-\t\tvar pos: Array = evt.get("position", [0.0, 0.0])
-\t\tie.position = Vector2(float(pos[0]), float(pos[1]))
-\t\tie.button_index = int(evt.get("button", 1))
-\t\tie.pressed = bool(evt.get("pressed", true))
-\t\tInput.parse_input_event(ie)
-\telif evt_type == "mouse_move":
-\t\tvar ie: InputEventMouseMotion = InputEventMouseMotion.new()
-\t\tvar pos: Array = evt.get("position", [0.0, 0.0])
-\t\tie.position = Vector2(float(pos[0]), float(pos[1]))
-\t\tInput.parse_input_event(ie)
-\t_mcp_play_index += 1
-\tif _mcp_play_index < _mcp_play_events.size():
-\t\tvar current_time: float = float(_mcp_play_events[_mcp_play_index].get("time_ms", 0))
-\t\tvar prev_time: float = float(_mcp_play_events[_mcp_play_index - 1].get("time_ms", 0))
-\t\tvar delay: float = (current_time - prev_time) / _mcp_play_speed
-\t\t_mcp_play_timer.wait_time = clampf(delay / 1000.0, 0.016, 10.0)
-\t\t_mcp_play_timer.start()
-\telse:
-\t\t_mcp_play_next_event()
-
-func _initialize():
-\t_mcp_load_main_scene()
-\tvar parsed: Variant = JSON.parse_string("${eventsJsonEscaped}")
-\tif parsed == null:
-\t\t_mcp_output("error", "Invalid events JSON")
-\t\t_mcp_done()
-\t\treturn
-\t_mcp_play_events = parsed.get("events", [])
-\tif _mcp_play_events.size() == 0:
-\t\t_mcp_output("playback_complete", {"events_played": 0})
-\t\t_mcp_done()
-\t\treturn
-\t_mcp_play_speed = ${speedStr}
-\t_mcp_play_timer = Timer.new()
-\troot.add_child(_mcp_play_timer)
-\t_mcp_play_timer.one_shot = true
-\t_mcp_play_timer.connect("timeout", Callable(self, "_mcp_play_next_event"))
-\t_mcp_play_index = 0
-\t_mcp_play_next_event()
 `;
 }
 
@@ -309,7 +257,7 @@ export async function handleTool(
         // Path safety: validate resolved path stays within project
         resolveWithinRoot(projectPath, `recordings/${safeName}`);
         const script = genRecordingLoadScript(safeName);
-        const result = await executeGdscript({
+        const result = await executeGdscriptTrusted({
           godotPath: godot,
           projectPath,
           code: script,
@@ -328,8 +276,9 @@ export async function handleTool(
         if (!eventsJson || typeof eventsJson !== 'string') {
           return opsErrorResult('INVALID_RECORDING_FORMAT', 'events_json must be a non-empty JSON string');
         }
+        let validated: ReturnType<typeof validateEventsJson>;
         try {
-          validateEventsJson(eventsJson);
+          validated = validateEventsJson(eventsJson);
         } catch (e) {
           return opsErrorResult('INVALID_RECORDING_FORMAT', (e as Error).message);
         }
@@ -338,22 +287,75 @@ export async function handleTool(
             suggestion: 'Recording playback requires an active game bridge. Run game_bridge_install first, then start the game with run_project or F5.',
           });
         }
+        if (ctx.projectDir) {
+          setBridgeProjectDir(ctx.projectDir);
+        }
         const speed = typeof args.speed === 'number' && args.speed > 0 ? args.speed : 1.0;
-        const escapedJson = gdEscape(eventsJson);
-        const script = genRecordingPlayScript(escapedJson, speed);
-        const result = await executeGdscript({
-          godotPath: godot,
-          projectPath,
-          code: script,
-          timeout: 30,
-          loadAutoloads,
-        });
-        const errorMapper = (msg: string) => {
-          if (msg.includes('not found') || msg.includes('File not found')) return ERROR_CODES.RECORDING_FILE_NOT_FOUND;
-          if (msg.includes('Invalid JSON') || msg.includes('Invalid')) return ERROR_CODES.INVALID_RECORDING_FORMAT;
-          return ERROR_CODES.SCRIPT_EXEC_FAILED;
+        const events = validated.events as Array<Record<string, unknown>>;
+        if (events.length === 0) {
+          return { content: [{ type: 'text', text: JSON.stringify({ status: 'ok', events_played: 0, message: 'No events to play' }) }], isError: false };
+        }
+        // Play events through Bridge one-by-one with proper timing
+        let played = 0;
+        const errors: string[] = [];
+        let lastTime = 0;
+        for (const evt of events) {
+          if (!evt) continue;
+          const evtType = String(evt.type ?? '');
+          // Wait for inter-event delay
+          const currentTime = Number(evt.time_offset ?? evt.time_ms ?? evt.timestamp_ms ?? 0);
+          if (lastTime > 0) {
+            const delayMs = Math.max(0, (currentTime - lastTime) / speed);
+            const clampedDelay = Math.min(Math.max(delayMs, 16), 10000);
+            await new Promise(resolve => setTimeout(resolve, clampedDelay));
+          }
+          lastTime = currentTime;
+          try {
+            if (evtType === 'key') {
+              const keycode = Number(evt.keycode ?? 0);
+              const keyStr = keycodeToBridgeKey(keycode);
+              if (!keyStr) {
+                errors.push(`Event ${played}: unsupported keycode ${keycode}`);
+                continue;
+              }
+              await sendToBridge('send_key', {
+                key: keyStr,
+                pressed: Boolean(evt.pressed ?? true),
+              }, 3000);
+              played++;
+            } else if (evtType === 'mouse_click') {
+              const pos = evt.position ?? evt.pos ?? [0, 0];
+              const posArr = Array.isArray(pos) ? pos : [0, 0];
+              await sendToBridge('send_mouse_click', {
+                x: Number(posArr[0] ?? 0),
+                y: Number(posArr[1] ?? 0),
+                button: Number(evt.button ?? 1),
+                pressed: Boolean(evt.pressed ?? true),
+              }, 3000);
+              played++;
+            } else if (evtType === 'mouse_move') {
+              const pos = evt.position ?? evt.pos ?? [0, 0];
+              const posArr = Array.isArray(pos) ? pos : [0, 0];
+              await sendToBridge('send_mouse_move', {
+                x: Number(posArr[0] ?? 0),
+                y: Number(posArr[1] ?? 0),
+              }, 3000);
+              played++;
+            }
+            // else: skip unknown event types silently (played not incremented)
+          } catch (e) {
+            errors.push(`Event ${played} (${evtType}): ${(e as Error).message}`);
+          }
+        }
+        const result: Record<string, unknown> = {
+          status: errors.length > 0 && played === 0 ? 'error' : 'ok',
+          events_played: played,
+          total_events: events.length,
         };
-        return parseGdscriptResult(result, [], errorMapper);
+        if (errors.length > 0) {
+          result.errors = errors;
+        }
+        return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: played === 0 };
       }
       default:
         return null;

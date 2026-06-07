@@ -45,6 +45,9 @@ static func find_node(root: Node, path: String) -> Node:
 
 ## Check that a property exists on an object and its value type is compatible.
 ## Replaces duplicated copies in scene_commands.gd and ui_commands.gd.
+## C-03: Removed string wildcard pass-through — strings are only allowed when
+## the target property is also a string, or when str_to_var can parse them into
+## the correct type (e.g., "Vector2(1, 2)" for a Vector2 property).
 static func property_exists_and_type_ok(obj: Object, prop_name: String, val) -> bool:
 	var found: bool = false
 	for p: Dictionary in obj.get_property_list():
@@ -63,7 +66,14 @@ static func property_exists_and_type_ok(obj: Object, prop_name: String, val) -> 
 	# Allow float/int interchange
 	if (current_type == TYPE_FLOAT and val_type == TYPE_INT) or (current_type == TYPE_INT and val_type == TYPE_FLOAT):
 		return true
-	# Allow any type to be set as string (Godot will convert)
+	# C-03: String values only allowed for string properties, or when str_to_var
+	# can convert them to the expected type (e.g. "Vector2(1,2)" → TYPE_VECTOR2)
 	if val_type == TYPE_STRING:
-		return true
-	return false  # C-05: type mismatch — reject
+		if current_type == TYPE_STRING:
+			return true
+		# Try str_to_var conversion and check the result type matches
+		var parsed: Variant = str_to_var(val)
+		if parsed != null:
+			return typeof(parsed) == current_type
+		return false
+	return false  # type mismatch — reject

@@ -41,7 +41,6 @@ import {
   wrapAssertionCode,
 } from '../src/tools/shared.js';
 import {
-  genRecordingPlayScript,
   genRecordingSaveScript,
   genRecordingLoadScript,
 } from '../src/tools/recording.js';
@@ -276,123 +275,7 @@ describe('test-framework stress test GDScript generation', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 4. recording.ts — genRecordingPlayScript
-// ═══════════════════════════════════════════════════════════════════════════════
-
-describe('genRecordingPlayScript — GDScript playback generation', () => {
-  const sampleEvents = JSON.stringify({
-    version: 1,
-    duration_ms: 1000,
-    events: [
-      { type: 'key', keycode: 87, pressed: true, time_ms: 0 },
-      { type: 'mouse_click', position: [400, 300], button: 1, pressed: true, time_ms: 500 },
-      { type: 'mouse_move', position: [200, 100], time_ms: 800 },
-    ],
-  });
-
-  it('uses consistent tab indentation', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 1.0);
-    const check = hasConsistentTabIndentation(script);
-    expect(check.ok, `Mixed indentation at line ${check.line}: ${check.content}`).toBe(true);
-  });
-
-  it('starts with extends SceneTree', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 1.0);
-    expect(script.startsWith('extends SceneTree')).toBe(true);
-  });
-
-  it('contains playback state variables', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 1.0);
-    expect(script).toContain('var _mcp_play_events: Array = []');
-    expect(script).toContain('var _mcp_play_index: int = 0');
-    expect(script).toContain('var _mcp_play_speed: float =');
-    expect(script).toContain('var _mcp_play_timer: Timer = null');
-  });
-
-  it('contains _mcp_play_next_event function', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 1.0);
-    expect(script).toContain('func _mcp_play_next_event() -> void:');
-  });
-
-  it('handles key events with InputEventKey', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 1.0);
-    expect(script).toContain('InputEventKey');
-    expect(script).toContain('ie.keycode = int(evt.get("keycode"');
-    expect(script).toContain('ie.pressed = bool(evt.get("pressed"');
-    expect(script).toContain('ie.shift_pressed = bool(evt.get("shift"');
-  });
-
-  it('handles mouse_click events with InputEventMouseButton', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 1.0);
-    expect(script).toContain('InputEventMouseButton');
-    expect(script).toContain('ie.button_index = int(evt.get("button"');
-  });
-
-  it('handles mouse_move events with InputEventMouseMotion', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 1.0);
-    expect(script).toContain('InputEventMouseMotion');
-  });
-
-  it('calls Input.parse_input_event for all event types', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 1.0);
-    // Should appear multiple times (once per event type)
-    const matches = script.match(/Input\.parse_input_event/g);
-    expect(matches.length).toBeGreaterThanOrEqual(3);
-  });
-
-  it('emits playback_complete when done', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 1.0);
-    expect(script).toContain('_mcp_output("playback_complete"');
-    expect(script).toContain('events_played');
-  });
-
-  it('sets speed with float format (e.g., 1.0 not 1)', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 1.0);
-    expect(script).toContain('_mcp_play_speed = 1.0');
-  });
-
-  it('sets speed to 2.5 for fractional speed', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 2.5);
-    expect(script).toContain('_mcp_play_speed = 2.5');
-  });
-
-  it('parses events JSON with JSON.parse_string', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 1.0);
-    expect(script).toContain('JSON.parse_string(');
-  });
-
-  it('creates Timer node for playback scheduling', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 1.0);
-    expect(script).toContain('Timer.new()');
-    expect(script).toContain('_mcp_play_timer.one_shot = true');
-    expect(script).toContain('root.add_child(_mcp_play_timer)');
-  });
-
-  it('handles empty events array gracefully', () => {
-    const emptyEvents = gdEscape(JSON.stringify({ version: 1, duration_ms: 0, events: [] }));
-    const script = genRecordingPlayScript(emptyEvents, 1.0);
-    // Should have a check for empty events
-    expect(script).toContain('.size() == 0');
-    expect(script).toContain('"playback_complete"');
-    // Still valid GDScript structure
-    expect(script.startsWith('extends SceneTree')).toBe(true);
-  });
-
-  it('uses clampf for delay clamping', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 1.0);
-    expect(script).toContain('clampf(');
-    // Delay clamped between 0.016 and 10.0 seconds
-    expect(script).toContain('0.016');
-    expect(script).toContain('10.0');
-  });
-
-  it('connects timer timeout signal to _mcp_play_next_event', () => {
-    const script = genRecordingPlayScript(gdEscape(sampleEvents), 1.0);
-    expect(script).toContain('connect("timeout"');
-    expect(script).toContain('Callable(self, "_mcp_play_next_event")');
-  });
-});
-
+// 4. recording.ts — genRecordingSaveScript / genRecordingLoadScript (genRecordingPlayScript removed: playback now uses Bridge)
 // ═══════════════════════════════════════════════════════════════════════════════
 // 5. recording.ts — genRecordingSaveScript / genRecordingLoadScript
 // ═══════════════════════════════════════════════════════════════════════════════

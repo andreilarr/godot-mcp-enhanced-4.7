@@ -9,7 +9,7 @@ func setup(plugin: EditorPlugin, undo_manager: Node = null) -> void:
 
 # ─── animation_track ────────────────────────────────────────────────────────
 
-func handle_animation_track(params: Dictionary) -> Dictionary:
+func handle_animation_track(params: Dictionary, request_id: int = 0) -> Dictionary:
 	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
@@ -58,7 +58,7 @@ func handle_animation_track(params: Dictionary) -> Dictionary:
 				if insert_at != null and int(insert_at) >= 0 and int(insert_at) < anim.get_track_count() + 1:
 					do_ops.append({"type": "method", "target": anim, "method": "move_track", "args": [idx, int(insert_at)]})
 					idx = int(insert_at)
-				_undo_manager.create_action_mixed("Add Track", do_ops, [
+				_undo_manager.create_action_mixed("Add Track (req:%d)" % request_id, do_ops, [
 					{"type": "method", "target": anim, "method": "remove_track", "args": [idx]}
 				])
 			else:
@@ -103,7 +103,7 @@ func handle_animation_track(params: Dictionary) -> Dictionary:
 				if new_idx != ti:
 					undo_ops.append({"type": "method", "target": anim, "method": "move_track", "args": [new_idx, ti]})
 
-				_undo_manager.create_action_mixed("Remove Track", [
+				_undo_manager.create_action_mixed("Remove Track (req:%d)" % request_id, [
 					{"type": "method", "target": anim, "method": "remove_track", "args": [ti]},
 				], undo_ops)
 			else:
@@ -115,7 +115,7 @@ func handle_animation_track(params: Dictionary) -> Dictionary:
 
 # ─── animation_keyframe ─────────────────────────────────────────────────────
 
-func handle_animation_keyframe(params: Dictionary) -> Dictionary:
+func handle_animation_keyframe(params: Dictionary, request_id: int = 0) -> Dictionary:
 	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
@@ -158,7 +158,7 @@ func handle_animation_keyframe(params: Dictionary) -> Dictionary:
 					# upsert: 更新现有关键帧
 					var old_val = anim.track_get_key_value(ti, existing_idx)
 					var old_trans = anim.track_get_key_transition(ti, existing_idx)
-					_undo_manager.create_action_mixed("Upsert Keyframe", [
+					_undo_manager.create_action_mixed("Upsert Keyframe (req:%d)" % request_id, [
 						{"type": "method", "target": anim, "method": "track_set_key_value", "args": [ti, existing_idx, value]},
 						{"type": "method", "target": anim, "method": "track_set_key_transition", "args": [ti, existing_idx, trans_val]},
 					], [
@@ -168,7 +168,7 @@ func handle_animation_keyframe(params: Dictionary) -> Dictionary:
 					key_idx = existing_idx
 				else:
 					# 新增关键帧
-					_undo_manager.create_action_mixed("Insert Keyframe", [
+					_undo_manager.create_action_mixed("Insert Keyframe (req:%d)" % request_id, [
 						{"type": "method", "target": anim, "method": "track_insert_key", "args": [ti, float(time), value, trans_val]},
 					], [
 						# Issue 2 fix: undo 用 track_remove_key_at_time 而非错误的索引
@@ -190,7 +190,7 @@ func handle_animation_keyframe(params: Dictionary) -> Dictionary:
 				var old_time: float = anim.track_get_key_time(ti, ki)
 				var old_val = anim.track_get_key_value(ti, ki)
 				var old_trans: float = anim.track_get_key_transition(ti, ki)
-				_undo_manager.create_action_mixed("Remove Keyframe", [
+				_undo_manager.create_action_mixed("Remove Keyframe (req:%d)" % request_id, [
 					{"type": "method", "target": anim, "method": "track_remove_key", "args": [ti, ki]},
 				], [
 					{"type": "method", "target": anim, "method": "track_insert_key", "args": [ti, old_time, old_val, old_trans]},
@@ -224,7 +224,7 @@ func handle_animation_keyframe(params: Dictionary) -> Dictionary:
 					do_ops.append({"type": "method", "target": anim, "method": "track_set_key_time", "args": [ti, ki, float(time)]})
 					undo_ops.append({"type": "method", "target": anim, "method": "track_set_key_time", "args": [ti, ki, old_time]})
 				if do_ops.size() > 0:
-					_undo_manager.create_action_mixed("Update Keyframe", do_ops, undo_ops)
+					_undo_manager.create_action_mixed("Update Keyframe (req:%d)" % request_id, do_ops, undo_ops)
 			else:
 				var value = params.get("value")
 				if value != null:
@@ -243,7 +243,7 @@ func handle_animation_keyframe(params: Dictionary) -> Dictionary:
 # ─── animation_curve ────────────────────────────────────────────────────────
 # Issue 3: 补充 UndoRedo
 
-func handle_animation_curve(params: Dictionary) -> Dictionary:
+func handle_animation_curve(params: Dictionary, request_id: int = 0) -> Dictionary:
 	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}
@@ -294,7 +294,7 @@ func handle_animation_curve(params: Dictionary) -> Dictionary:
 		updated.append("out_handle")
 
 	if _undo_manager != null and do_ops.size() > 0:
-		_undo_manager.create_action_mixed("Set Curve Handle", do_ops, undo_ops)
+		_undo_manager.create_action_mixed("Set Curve Handle (req:%d)" % request_id, do_ops, undo_ops)
 	else:
 		# 无 undo_manager 时的回退逻辑
 		if in_handle != null and in_handle is Dictionary:
@@ -308,7 +308,7 @@ func handle_animation_curve(params: Dictionary) -> Dictionary:
 
 # ─── animation_blend ────────────────────────────────────────────────────────
 
-func handle_animation_blend(params: Dictionary) -> Dictionary:
+func handle_animation_blend(params: Dictionary, request_id: int = 0) -> Dictionary:
 	var root = CommandHelpers.get_edited_scene_root(_plugin)
 	if root == null:
 		return {"error": {"code": -32003, "message": "No scene currently open in editor"}}

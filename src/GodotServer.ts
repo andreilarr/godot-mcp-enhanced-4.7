@@ -198,8 +198,8 @@ export class GodotServer {
             getLogger().warn('godot-mcp', 'Editor reconnect attempts exhausted — degrading to headless mode.');
             this.dispatcher?.markEditorFallback();
             this.connectionMode = 'headless';
-            this.dispatcher?.setConnectionMode('headless');
-            this.dispatcher?.setEditorExecutor(null);
+            // I-04: Use atomic degradeToHeadless() to avoid two separate _pendingModeSwitch writes racing
+            this.dispatcher?.degradeToHeadless();
             this.editorConn = null;
           });
           log('Editor: Connected to Godot plugin on port %d', port);

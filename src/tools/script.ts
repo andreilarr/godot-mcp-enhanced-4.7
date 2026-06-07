@@ -453,8 +453,12 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
 
       // Line-number mode
-      const startLine = args.start_line as number;
-      const endLine = args.end_line as number;
+      // I-02: safe numeric conversion instead of raw `as number`
+      const startLine = Number(args.start_line);
+      const endLine = Number(args.end_line);
+      if (!Number.isFinite(startLine) || !Number.isFinite(endLine)) {
+        return opsErrorResult('INVALID_PARAMS', `start_line and end_line must be finite numbers, got start_line=${args.start_line}, end_line=${args.end_line}`);
+      }
       const newContent = args.new_content as string;
       const indentMode = (args.indent_mode as string) || 'raw';
       const verifyContent = args.verify_content as string | undefined;
@@ -716,6 +720,10 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     case 'execute_gdscript': {
       const projectPath = requireProjectPath(args);
       const code = args.code as string;
+      // I-01: validate code is a non-empty string before passing to wrapSnippet
+      if (!code || typeof code !== 'string') {
+        return opsErrorResult('INVALID_PARAMS', 'code must be a non-empty string.');
+      }
       const timeout = validateTimeout(args.timeout);
       const loadAutoloads = (args.load_autoloads as boolean) || false;
       const godot = await ctx.findGodot();
@@ -752,6 +760,36 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       const normalizedSearch = search.replace(/\r\n/g, '\n');
       const normalizedReplace = replace.replace(/\r\n/g, '\n');
+
+      // I-01, I-03: Clean up residual .bak / .mcp-tmp files from interrupted atomic writes
+      // Scan all top-level subdirectories (not just . and src) since project_replace can affect any location
+      const cleanedResiduals: string[] = [];
+      for (const suffix of ['.bak', '.mcp-tmp']) {
+        try {
+          const rootEntries = readdirSync(p, { withFileTypes: true });
+          for (const rootEntry of rootEntries) {
+            const absDir = join(p, rootEntry.name);
+            // Only scan directories that aren't excluded and the root itself
+            const isExcluded = excludeDirs.includes(rootEntry.name) || rootEntry.name.startsWith('.');
+            const targets = isExcluded ? [] : (rootEntry.isDirectory() ? [absDir] : rootEntry.isFile() && rootEntry.name.endsWith(suffix) ? [absDir] : []);
+            // Also check root-level files matching suffix
+            if (rootEntry.isFile() && rootEntry.name.endsWith(suffix)) {
+              try { unlinkSync(absDir); cleanedResiduals.push(rootEntry.name); } catch { /* best effort */ }
+              continue;
+            }
+            for (const targetDir of targets) {
+              if (!existsSync(targetDir)) continue;
+              const entries = readdirSync(targetDir, { withFileTypes: true });
+              for (const entry of entries) {
+                if (entry.isFile() && entry.name.endsWith(suffix)) {
+                  const residualPath = join(targetDir, entry.name);
+                  try { unlinkSync(residualPath); cleanedResiduals.push(join(rootEntry.name, entry.name)); } catch { /* best effort */ }
+                }
+              }
+            }
+          }
+        } catch { /* non-critical cleanup */ }
+      }
 
       // Collect files
       const MAX_FILES = 500;
@@ -881,6 +919,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         unchangedFiles.length > 0 ? `Unchanged: ${unchangedFiles.length} files` : '',
         skippedLarge.length > 0 ? `Skipped (>${MAX_FILE_SIZE / 1_000_000}MB): ${skippedLarge.length} files` : '',
         skippedDirs.length > 0 ? `Skipped dirs (unreadable): ${skippedDirs.slice(0, 10).join(', ')}${skippedDirs.length > 10 ? ` ... and ${skippedDirs.length - 10} more` : ''}` : '',
+        cleanedResiduals.length > 0 ? `Cleaned residuals: ${cleanedResiduals.join(', ')}` : '',
       ].filter(Boolean).join('\n');
 
       const details = changedFiles.length > 0

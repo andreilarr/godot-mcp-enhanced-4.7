@@ -135,7 +135,7 @@ func handle_instance_scene(params: Dictionary) -> Dictionary:
 	return {"result": {"node_name": str(instance.name), "instance_of": instance_path}}
 
 
-func handle_set_instance_property(params: Dictionary) -> Dictionary:
+func handle_set_instance_property(params: Dictionary, request_id: int = 0) -> Dictionary:
 	var node_path: String = params.get("node_path", "")
 	var prop_name: String = params.get("property", "")
 	var prop_value = params.get("value")
@@ -173,7 +173,7 @@ func handle_set_instance_property(params: Dictionary) -> Dictionary:
 	# UndoRedo: 记录旧值
 	if _undo_manager != null:
 		var old_value = target.get(prop_name)
-		_undo_manager.create_action_mixed("Set Instance Property",
+		_undo_manager.create_action_mixed("Set Instance Property (req:%d)" % request_id,
 			[
 				{"type": "property", "target": target, "property": prop_name, "value": prop_value}
 			],

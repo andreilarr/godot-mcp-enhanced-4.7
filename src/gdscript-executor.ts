@@ -118,10 +118,16 @@ function detectStringConcatBypass(code: string): string[] {
  *  Phase 2 catches common bypass patterns but determined attackers may still
  *  find ways around it. It is designed to prevent ACCIDENTAL and common-intent
  *  misuse, not to defend against adversarial input. For true sandboxing, use
- *  container/VM isolation. */
+ *  container/VM isolation.
+ *
+ *  ⚠️  GODOT_MCP_SANDBOX=disabled / GODOT_MCP_DISABLE_SAFETY=true completely
+ *  bypasses ALL safety checks. These flags exist for development/debugging only.
+ *  Do NOT use in production or multi-user environments. Any code executed while
+ *  these flags are active has unrestricted access to the host filesystem,
+ *  network, and process execution via OS.execute / FileAccess / DirAccess. */
 export function scanGdscriptSandbox(code: string): string[] {
   if (process.env.GODOT_MCP_SANDBOX === 'disabled') {
-    getLogger().warn('security', 'GODOT_MCP_SANDBOX=disabled — sandbox scanning skipped');
+    getLogger().warn('security', '⚠️ GODOT_MCP_SANDBOX=disabled — ALL sandbox checks bypassed. Any GDScript code will execute with unrestricted host access.');
     return [];
   }
   const warnings: string[] = [];

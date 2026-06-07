@@ -277,15 +277,18 @@ func _get_panel() -> Node:
 
 # DUPLICATE: Keep in sync with src/scripts/mcp_bridge.gd:_constant_time_compare
 # Cannot share because editor plugin and game autoload have separate script contexts.
+# C-05: Fixed-length comparison (always 32 bytes) to prevent timing side-channel.
 func _constant_time_compare(a: String, b: String) -> bool:
+	const SECRET_LEN := 32
 	var result := 0
-	if a.length() != b.length():
-		result = 1
-	var max_len := maxi(a.length(), b.length())
-	for i in range(max_len):
+	# Always compare exactly SECRET_LEN bytes regardless of input length
+	for i in range(SECRET_LEN):
 		var ca := ord(a[i]) if i < a.length() else 0
 		var cb := ord(b[i]) if i < b.length() else 0
 		result = result | (ca ^ cb)
+	# Reject if either input length differs from expected
+	if a.length() != SECRET_LEN or b.length() != SECRET_LEN:
+		return false
 	return result == 0
 
 func _exit_tree() -> void:

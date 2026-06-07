@@ -5,7 +5,6 @@ import {
   generateRecordingFileName,
   genRecordingSaveScript,
   genRecordingLoadScript,
-  genRecordingPlayScript,
 } from '../src/tools/recording.js';
 
 // ─── getToolDefinitions ─────────────────────────────────────────────────────
@@ -137,37 +136,6 @@ describe('genRecordingLoadScript', () => {
   it('handles file not found', () => {
     const script = genRecordingLoadScript('recording_missing.json');
     expect(script.includes('File not found')).toBeTruthy();
-  });
-});
-
-// ─── genRecordingPlayScript ─────────────────────────────────────────────────
-
-describe('genRecordingPlayScript', () => {
-  const sampleEvents = JSON.stringify({
-    version: 1,
-    duration_ms: 1000,
-    events: [
-      { type: 'key', keycode: 87, pressed: true, time_ms: 0 },
-      { type: 'mouse_click', position: [400, 300], button: 1, pressed: true, time_ms: 500 },
-    ],
-  });
-
-  it('generates GDScript with playback logic', () => {
-    const script = genRecordingPlayScript(sampleEvents.replace(/"/g, '\\"'), 1.0);
-    expect(script.includes('Input.parse_input_event')).toBeTruthy();
-    expect(script.includes('InputEventKey')).toBeTruthy();
-    expect(script.includes('InputEventMouseButton')).toBeTruthy();
-  });
-
-  it('includes speed factor', () => {
-    const script = genRecordingPlayScript(sampleEvents.replace(/"/g, '\\"'), 2.0);
-    expect(script.includes('_mcp_play_speed = 2.0')).toBeTruthy();
-  });
-
-  it('handles empty events gracefully', () => {
-    const emptyEvents = JSON.stringify({ version: 1, duration_ms: 0, events: [] });
-    const script = genRecordingPlayScript(emptyEvents.replace(/"/g, '\\"'), 1.0);
-    expect(script.includes('playback_complete')).toBeTruthy();
   });
 });
 

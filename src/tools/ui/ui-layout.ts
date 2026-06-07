@@ -190,6 +190,13 @@ function validateFlexChild(flex: FlexChild, warnings: string[]): void {
   if (flex.grow !== undefined && (typeof flex.grow !== 'number' || flex.grow < 0 || !Number.isFinite(flex.grow))) {
     throw new Error('INVALID_FLEX: grow must be a non-negative finite number');
   }
+  // I-05: validate min_width/min_height to prevent Infinity/NaN/negative values in GDScript
+  if (flex.min_width !== undefined && (typeof flex.min_width !== 'number' || flex.min_width < 0 || !Number.isFinite(flex.min_width))) {
+    throw new Error('INVALID_FLEX: min_width must be a non-negative finite number');
+  }
+  if (flex.min_height !== undefined && (typeof flex.min_height !== 'number' || flex.min_height < 0 || !Number.isFinite(flex.min_height))) {
+    throw new Error('INVALID_FLEX: min_height must be a non-negative finite number');
+  }
   if (flex.align_self !== undefined && !VALID_ALIGN_SELF.includes(flex.align_self)) {
     throw new Error(`INVALID_FLEX: align_self must be one of: ${VALID_ALIGN_SELF.join(', ')}, got "${flex.align_self}"`);
   }

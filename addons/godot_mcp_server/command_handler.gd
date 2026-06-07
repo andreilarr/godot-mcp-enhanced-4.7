@@ -104,7 +104,7 @@ func handle(method: String, params: Dictionary, request_id: int) -> Dictionary:
 		"instance_scene":
 			return _scene_commands.handle_instance_scene(params)
 		"set_instance_property":
-			return _scene_commands.handle_set_instance_property(params)
+			return _scene_commands.handle_set_instance_property(params, request_id)
 		"add_node":
 			return _node_commands.handle_add_node(params, request_id)
 		"test_assert":
@@ -153,13 +153,13 @@ func handle(method: String, params: Dictionary, request_id: int) -> Dictionary:
 			return _sync_commands.get_scene_tree()
 		# --- animation ------------------------------------------------
 		"animation_track":
-			return _animation_commands.handle_animation_track(params)
+			return _animation_commands.handle_animation_track(params, request_id)
 		"animation_keyframe":
-			return _animation_commands.handle_animation_keyframe(params)
+			return _animation_commands.handle_animation_keyframe(params, request_id)
 		"animation_curve":
-			return _animation_commands.handle_animation_curve(params)
+			return _animation_commands.handle_animation_curve(params, request_id)
 		"animation_blend":
-			return _animation_commands.handle_animation_blend(params)
+			return _animation_commands.handle_animation_blend(params, request_id)
 		# --- recording ------------------------------------------------
 		"recording_start":
 			return _recording_commands.handle_recording_start(params)
@@ -171,11 +171,11 @@ func handle(method: String, params: Dictionary, request_id: int) -> Dictionary:
 		"ui_create_control":
 			return _ui_commands.handle_ui_create_control(params, request_id)
 		"ui_set_layout":
-			return _ui_commands.handle_ui_set_layout(params)
+			return _ui_commands.handle_ui_set_layout(params, request_id)
 		"ui_get_layout":
 			return _ui_commands.handle_ui_get_layout(params)
 		"ui_anchor_preset":
-			return _ui_commands.handle_ui_anchor_preset(params)
+			return _ui_commands.handle_ui_anchor_preset(params, request_id)
 		"ui_set_theme":
 			return _ui_commands.handle_ui_set_theme(params)
 		"ui_container_add":

@@ -195,10 +195,12 @@ func create_scene(params):
 		log_error("Failed to instantiate node of type: " + root_node_type)
 		quit(1)
 		return
-		if params.has("root_node_name") and params.root_node_name != "":
-			scene_root.name = params.root_node_name
-		else:
-			scene_root.name = "root"
+
+	# C-03: apply root_node_name after successful instantiation (was dead code after return)
+	if params.has("root_node_name") and params.root_node_name != "":
+		scene_root.name = params.root_node_name
+	else:
+		scene_root.name = "root"
 
 	var packed_scene = PackedScene.new()
 	var result = packed_scene.pack(scene_root)
@@ -602,7 +604,13 @@ func _sanitize_res_path(path: String) -> String:
 	# Normalize backslashes to forward slashes
 	var normalized_path = path.replace("\\", "/")
 	# Percent-decode (handles %2e%2e → ..)
-	normalized_path = normalized_path.uri_decode()
+	# I-08: wrap uri_decode to handle invalid URI encodings gracefully
+	var decoded: String = normalized_path
+	if normalized_path.find("%") != -1:
+		var test: String = normalized_path.uri_decode()
+		if test != null:
+			decoded = test
+	normalized_path = decoded
 	# Ensure res:// prefix
 	var full = normalized_path if normalized_path.begins_with("res://") else "res://" + normalized_path
 	var parts = full.substr(6).split("/")

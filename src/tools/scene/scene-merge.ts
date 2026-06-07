@@ -32,14 +32,17 @@ export function mergeTscn(ours: string, theirs: string): string {
   };
 
   // Parse nodes from both sides
-  interface NodeDef { name: string; line: string; body: string }
+  // C-02: include parent in NodeDef for correct dedup (same name under different parents is valid)
+  interface NodeDef { name: string; parent: string; line: string; body: string }
   const parseNodes = (content: string): NodeDef[] => {
     const result: NodeDef[] = [];
     const sections = content.split(/\n(?=\[node\s)/);
     for (const section of sections) {
       const headerMatch = section.match(/^\[node\s+name="([^"]+)"/);
       if (headerMatch) {
-        result.push({ name: headerMatch[1]!, line: headerMatch[0], body: section.trim() });
+        const parentMatch = section.match(/parent="([^"]*)"/);
+        const parent = parentMatch ? parentMatch[1]! : '.';
+        result.push({ name: headerMatch[1]!, parent, line: headerMatch[0], body: section.trim() });
       }
     }
     return result;
@@ -119,10 +122,11 @@ export function mergeTscn(ours: string, theirs: string): string {
 
   const oursNodes = parseNodes(ours);
   const theirsNodes = parseNodes(theirs);
-  const oursNames = new Set(oursNodes.map(n => n.name));
+  // C-02: dedup by parent/name combo (not just name) to allow same-named nodes under different parents
+  const oursNodeKeys = new Set(oursNodes.map(n => `${n.parent}/${n.name}`));
   const mergedNodes = [...oursNodes];
   for (const node of theirsNodes) {
-    if (!oursNames.has(node.name)) {
+    if (!oursNodeKeys.has(`${node.parent}/${node.name}`)) {
       mergedNodes.push(node);
     }
   }

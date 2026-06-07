@@ -1,5 +1,5 @@
 // src/core/editor-auth.ts
-import { readFileSync, chmodSync, statSync } from 'fs';
+import { readFileSync, chmodSync, statSync, existsSync } from 'fs';
 import { join } from 'path';
 import { execFileSync } from 'child_process';
 import { userInfo } from 'os';
@@ -88,7 +88,13 @@ export async function waitForEditorSecret(
 ): Promise<string | null> {
   const interval = 200;
   const deadline = Date.now() + timeoutMs;
+  const secretFilePath = join(projectPath, '.godot', SECRET_FILE_NAME);
   while (Date.now() < deadline) {
+    // I-09: Fast path — check existsSync first to avoid expensive execFileSync (icacls) on every poll
+    if (!existsSync(secretFilePath)) {
+      await new Promise(r => setTimeout(r, interval));
+      continue;
+    }
     const secret = readEditorSecret(projectPath);
     if (secret) return secret;
     await new Promise(r => setTimeout(r, interval));
