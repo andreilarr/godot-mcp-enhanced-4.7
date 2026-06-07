@@ -173,7 +173,9 @@ func _mcp_output(key: String, value: Variant) -> void:
 
 func _mcp_done() -> void:
 	print("___MCP_RESULT___" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))
-	get_tree().quit(0)
+	var _tree = get_tree()
+	if _tree != null:
+		_tree.quit(0)
 
 var x = 1
 

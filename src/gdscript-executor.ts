@@ -454,7 +454,9 @@ export function wrapSnippetAsNode(code: string, resultMarker = MARKER_RESULT_SHA
     '',
     'func _mcp_done() -> void:',
     '\tprint("' + resultMarker + '" + JSON.stringify({"success": true, "outputs": _mcp_outputs}))',
-    '\tget_tree().quit(0)',
+    '\tvar _tree = get_tree()',
+    '\tif _tree != null:',
+    '\t\t_tree.quit(0)',
   ];
 
   // User code — safe: array join does not interpolate dollar-brace or backticks

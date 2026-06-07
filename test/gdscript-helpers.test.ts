@@ -47,9 +47,15 @@ describe('GDScript helpers - baseline snapshots', () => {
     expect(getRootMatch![0]).not.toContain('Engine.get_main_loop');
   });
 
-  it('wrapSnippetAsNode still uses get_tree().quit() (Node context)', () => {
+  it('wrapSnippetAsNode _mcp_done is null-safe for get_tree() (BUG-1 fix)', () => {
     const result = wrapSnippetAsNode('var x = 1');
-    expect(result).toContain('get_tree().quit(0)');
+    // _mcp_done should check get_tree() for null before calling quit()
+    const doneMatch = result.match(/func _mcp_done\(\)[\s\S]*?(?=\nfunc |\nvar |\n$)/);
+    expect(doneMatch).not.toBeNull();
+    const doneBody = doneMatch![0];
+    expect(doneBody).toContain('var _tree = get_tree()');
+    expect(doneBody).toContain('if _tree != null:');
+    expect(doneBody).toContain('_tree.quit(0)');
   });
 });
 
