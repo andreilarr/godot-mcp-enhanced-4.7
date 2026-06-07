@@ -8,6 +8,12 @@ vi.mock('../src/gdscript-executor.js', () => ({
     outputs: [{ key: 'result', value: JSON.stringify({ passed: true, message: 'Node exists: root/Player' }) }],
     raw_output: '', duration_ms: 100,
   })),
+  executeGdscriptTrusted: vi.fn(async () => ({
+    success: true, compile_success: true, compile_error: '',
+    errors: [], run_success: true, run_error: '',
+    outputs: [{ key: 'result', value: JSON.stringify({ passed: true, message: 'Node exists: root/Player' }) }],
+    raw_output: '', duration_ms: 100,
+  })),
 }));
 
 import { getToolDefinitions, handleTool, TOOL_META } from '../src/tools/test-framework.js';
@@ -99,8 +105,8 @@ describe('test-framework tools', () => {
   });
 
   it('handleTool for test stress', async () => {
-    const { executeGdscript } = await import('../src/gdscript-executor.js');
-    executeGdscript.mockResolvedValueOnce({
+    const { executeGdscriptTrusted } = await import('../src/gdscript-executor.js');
+    executeGdscriptTrusted.mockResolvedValueOnce({
       success: true, compile_success: true, compile_error: '',
       errors: [], run_success: true, run_error: '',
       outputs: [{ key: 'result', value: JSON.stringify({

@@ -23,6 +23,15 @@ vi.mock('../src/gdscript-executor.js', () => ({
       raw_output: '', duration_ms: 100,
     };
   }),
+  executeGdscriptTrusted: vi.fn(async (opts) => {
+    _capturedScripts.push(opts.code);
+    return {
+      success: true, compile_success: true, compile_error: '',
+      errors: [], run_success: true, run_error: '',
+      outputs: [{ key: 'result', value: JSON.stringify({ success: true, iterations: 100 }) }],
+      raw_output: '', duration_ms: 100,
+    };
+  }),
 }));
 
 import {

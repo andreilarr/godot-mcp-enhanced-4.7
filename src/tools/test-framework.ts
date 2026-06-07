@@ -1,6 +1,6 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
-import { executeGdscript } from '../gdscript-executor.js';
+import { executeGdscriptTrusted } from '../gdscript-executor.js';
 import { validatePath } from '../helpers.js';
 import { SCENE_TREE_HEADER, opsErrorResult, parseGdscriptResult } from './shared.js';
 import { gdEscape } from './shared.js';
@@ -230,7 +230,7 @@ func _initialize():
 \t_mcp_done()
 `;
 
-  const result = await executeGdscript({ godotPath: godot, projectPath, code: script, timeout: 120 });
+  const result = await executeGdscriptTrusted({ godotPath: godot, projectPath, code: script, timeout: 120 });
   return parseGdscriptResult(result, [], (_msg) => 'STRESS_TEST_FAILED');
 }
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
