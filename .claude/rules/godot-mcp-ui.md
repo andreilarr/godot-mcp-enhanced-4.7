@@ -3,7 +3,7 @@ description: "ui ui_create_control ui_build_layout ui_set_layout ui_get_layout u
 alwaysApply: false
 ---
 
-> 适用于 godot-mcp-enhanced v0.16.0+
+> 适用于 godot-mcp-enhanced v0.17.0+
 
 ## 概述与架构
 
@@ -139,7 +139,7 @@ ui_create_control(
 
 ## 常见陷阱
 
-- **运行时不持久化**：UI 布局工具创建的节点在 headless 进程退出后丢失。持久化需用 add_node + save_scene。
+- **运行时不持久化**：UI 布局工具创建的节点在 headless 进程退出后丢失。**持久化替代方案**：使用 `add_node` + `save_scene` 逐个写入 .tscn 文件，或使用 `scene_commit`（批量 node_property/node_add 操作）直接编辑 .tscn。`ui_build_layout` 适合快速原型验证，生产 UI 应通过持久化方式创建。
 - **Container 子节点必须是 Control**：向 HBoxContainer/VBoxContainer 等容器添加非 Control 子节点会报错。
 - **CSS 属性回退**：`wrap`、`order`、`flex-shrink`、`max-width/height` 等 CSS 属性在 Godot 中无对应，会被忽略。
 - **grid 方向必须指定 columns**：使用 `direction: "grid"` 时必须同时指定 `columns` 数量。

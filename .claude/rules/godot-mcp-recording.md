@@ -3,7 +3,7 @@ description: "recording recording_start recording_stop recording_save recording_
 alwaysApply: false
 ---
 
-> 适用于 godot-mcp-enhanced v0.16.0+
+> 适用于 godot-mcp-enhanced v0.17.0+
 
 ## 概述与架构
 
@@ -47,17 +47,17 @@ alwaysApply: false
   "version": 1,
   "duration_ms": 5420,
   "events": [
-    { "type": "key", "keycode": 87, "pressed": true, "timestamp_ms": 120 },
-    { "type": "mouse_click", "x": 640, "y": 360, "button": 1, "pressed": true, "timestamp_ms": 2300 },
-    { "type": "key", "keycode": 87, "pressed": false, "timestamp_ms": 4100 }
+    { "type": "key", "keycode": 87, "pressed": true, "time_offset": 120 },
+    { "type": "mouse_click", "position": [640, 360], "button": 1, "pressed": true, "time_offset": 2300 },
+    { "type": "key", "keycode": 87, "pressed": false, "time_offset": 4100 }
   ]
 }
 ```
 
 ### 文件命名与安全
 
-- **自动命名**：`recording_YYYYMMDD_HHmmss.json`（如 `recording_20260527_143022.json`）
-- **强制格式**：文件名必须匹配 `recording_*.json`，否则报 `INVALID_FILE_NAME`
+- **始终自动命名**：recording_save 忽略传入的 `file_name` 参数，始终生成 `recording_YYYYMMDD_HHmmss.json` 格式的时间戳文件名
+- **强制格式**：`file_name` 参数必须匹配 `recording_*.json`，否则报 `INVALID_FILE_NAME`（但实际保存仍用自动命名）
 - **路径遍历防护**：文件名禁止包含 `/`、`\`、`..`
 
 ## 调用示例
@@ -77,15 +77,17 @@ game_input(method="send_mouse_click", params={ "x": 320, "y": 240, "button": "le
 recording_stop(project_path="D:/game")
 // → { events_json: "{\"version\":1,\"duration_ms\":1200,\"events\":[...]}" }
 
-// 4. 保存到文件
+// 4. 保存到文件（注意：始终自动命名，忽略传入的 file_name）
 recording_save(project_path="D:/game", file_name="recording_test_login.json", events_json="<从 stop 获取>")
-// → { status: "ok", path: "res://recordings/recording_test_login.json" }
+// → { success: true, data: { saved: { file_name: "recording_20260607_220255.json", path: "res://recordings/recording_20260607_220255.json" } } }
 
-// 5. 后续加载并回放
-recording_load(project_path="D:/game", file_name="recording_test_login.json")
+// 5. 后续加载并回放（注意：recording_load 可能被沙箱拦截，推荐直接用 events_json）
+// 方式 A：通过文件加载（可能被沙箱拦截）
+recording_load(project_path="D:/game", file_name="recording_20260607_220255.json")
 // → { events_json: "..." }
 
-recording_play(project_path="D:/game", events_json="<从 load 获取>", speed=1.0)
+// 方式 B（推荐）：直接用 recording_stop 返回的 events_json，跳过文件加载
+recording_play(project_path="D:/game", events_json="<从 stop 直接获取>", speed=1.0)
 // → { status: "ok", events_played: 5 }
 ```
 
@@ -95,8 +97,8 @@ recording_play(project_path="D:/game", events_json="<从 load 获取>", speed=1.
 // 录制一次操作，后续自动回放 + 验证
 recording_load(project_path="D:/game", file_name="recording_open_menu.json")
 recording_play(project_path="D:/game", events_json="<loaded>", speed=2.0)
-game_wait(method="wait_for_node", params={ "path": "root/CanvasLayer/OptionsMenu" })
-game_query(method="get_node_properties", params={ "path": "root/CanvasLayer/OptionsMenu", "properties": ["visible"] })
+game_wait(method="wait_for_node", params={ "path": "/root/CanvasLayer/OptionsMenu" })
+game_query(method="get_node_properties", params={ "path": "/root/CanvasLayer/OptionsMenu", "properties": ["visible"] })
 // → { visible: true } — 测试通过
 ```
 
@@ -117,3 +119,5 @@ recording_start(project_path="D:/game")
 - **回放时序**：speed > 1.0 会加速回放，但可能因游戏帧率跟不上导致事件丢失。建议 E2E 测试使用 speed=1.0。
 - **录制文件存储在项目内**：`res://recordings/` 下的文件会随项目版本控制。敏感录制应在 .gitignore 中排除。
 - **事件类型有限**：仅捕获键盘（key）和鼠标（mouse_click）事件。触摸、手柄等不适用。
+- **recording_load 沙箱限制**：`recording_load` 需要文件读取，可能被 GDScript 沙箱拦截（"Sandbox violation: File access"）。推荐直接将 `recording_stop` 返回的 `events_json` 传给 `recording_play`，跳过文件加载。
+- **recording_play 需要 Bridge 连接**：回放通过 Bridge 逐条发送事件（send_key/send_mouse_click），不支持 headless 模式。不支持的按键（如功能键 F1-F12）会被跳过并记录到 errors 中。

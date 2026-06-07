@@ -3,7 +3,7 @@ description: "godot-mcp 核心指南 模式选择 Headless Editor Bridge execute
 alwaysApply: true
 ---
 
-> 适用于 godot-mcp-enhanced v0.16.0+
+> 适用于 godot-mcp-enhanced v0.17.0+
 
 ## 概述与架构
 

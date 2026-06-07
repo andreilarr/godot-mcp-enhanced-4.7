@@ -3,7 +3,7 @@ description: "game bridge game_query game_input game_write game_wait game_bridge
 alwaysApply: false
 ---
 
-> 适用于 godot-mcp-enhanced v0.16.0+
+> 适用于 godot-mcp-enhanced v0.17.0+
 
 ## 概述与架构
 
@@ -133,16 +133,16 @@ game_query(method="find_nodes", params={ "pattern": "Player" })
 ```
 game_input(method="send_mouse_click", params={ "x": 640, "y": 360, "button": "left", "pressed": true })
 game_input(method="send_mouse_click", params={ "x": 640, "y": 360, "button": "left", "pressed": false })
-game_wait(method="wait_for_node", params={ "path": "root/CanvasLayer/Dialog" })
-game_query(method="get_node_properties", params={ "path": "root/CanvasLayer/Dialog", "properties": ["visible"] })
+game_wait(method="wait_for_node", params={ "path": "/root/CanvasLayer/Dialog" })
+game_query(method="get_node_properties", params={ "path": "/root/CanvasLayer/Dialog", "properties": ["visible"] })
 // → { visible: true }
 ```
 
 ### 修改运行时状态
 
 ```
-game_write(method="set_node_property", params={ "path": "root/Player", "property": "position", "value": { "x": 10, "y": 0, "z": 5 } })
-game_write(method="call_method", params={ "path": "root/Player", "method": "take_damage", "args": [25] })
+game_write(method="set_node_property", params={ "path": "/root/Player", "property": "position", "value": { "x": 10, "y": 0, "z": 5 } })
+game_write(method="call_method", params={ "path": "/root/Player", "method": "take_damage", "args": [25] })
 ```
 
 ### 属性监控
@@ -196,6 +196,8 @@ game_query(method="ping")
 - **Bridge 未安装**：调用 game_query/input/write/wait 前必须先 game_bridge_install。安装是一次性的（写入 project.godot autoload）。
 - **游戏未运行**：Bridge autoload 只在游戏运行时监听。编辑器模式（编辑场景）不会启动 Bridge。
 - **密钥文件权限**：Windows 上可能需要 icacls 权限。Linux/macOS 上自动 chmod 0600。
+- **密钥权限循环**：Bridge 首次运行后将密钥文件权限收紧为只读（Windows: `(R)` only），导致后续启动时无法重写密钥而中止（"Failed to write secret — aborting Bridge startup"）。**解决**：手动恢复写入权限 `icacls ".godot/mcp_bridge_9081.secret" /grant "%USERNAME%:(W)"`，或删除密钥文件让 Bridge 重新生成。
+- **节点路径必须用绝对路径**：`game_write`、`game_wait` 等的 `path` 参数必须以 `/root/` 开头（如 `/root/Main/Player`），不接受 `root/Main/Player` 格式。`game_query(method="get_tree")` 返回的路径可用于参考。
 - **与录制系统**：recording_start 依赖 Bridge 连接。确保 Bridge 可用后再录制。
 - **端口 9081 冲突**：如果端口被占用，需要手动修改 autoload 脚本中的端口配置。
 - **密钥缓存**：5 分钟 TTL 后首次调用会重新读取密钥文件，可能有短暂延迟。
