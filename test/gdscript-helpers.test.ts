@@ -35,6 +35,20 @@ describe('GDScript helpers - baseline snapshots', () => {
     expect(result).not.toContain('func _mcp_get_node');
     expect(result).toMatchSnapshot('wrapSnippetAsNode-var-x');
   });
+
+  it('wrapSnippet uses self.root in _mcp_get_root (not Engine.get_main_loop)', () => {
+    const result = wrapSnippet('var x = 1');
+    expect(result).toContain('self.root');
+    // Extract _mcp_get_root function body only — _mcp_done legitimately uses Engine.get_main_loop
+    const getRootMatch = result.match(/func _mcp_get_root\(\)[\s\S]*?(?=\nfunc |\nclass_name |\Z)/);
+    expect(getRootMatch).not.toBeNull();
+    expect(getRootMatch![0]).not.toContain('Engine.get_main_loop');
+  });
+
+  it('wrapSnippetAsNode still uses get_tree().quit() (Node context)', () => {
+    const result = wrapSnippetAsNode('var x = 1');
+    expect(result).toContain('get_tree().quit(0)');
+  });
 });
 
 describe('GD_MCP shared constants', () => {
@@ -64,6 +78,17 @@ describe('GD_MCP shared constants', () => {
   it('GD_MCP_OUTPUT contains append call', () => {
     expect(GD_MCP_OUTPUT).toBeInstanceOf(Array);
     expect(GD_MCP_OUTPUT.join('\n')).toContain('_mcp_outputs.append');
+  });
+
+  it('GD_MCP_GET_ROOT uses self.root (Godot 4.6+ compatible)', () => {
+    const joined = GD_MCP_GET_ROOT.join('\n');
+    expect(joined).toContain('self.root');
+    expect(joined).not.toContain('Engine.get_main_loop');
+  });
+
+  it('SCENE_TREE_HEADER uses self.root via _mcp_get_root', () => {
+    expect(SCENE_TREE_HEADER).toContain('self.root');
+    expect(SCENE_TREE_HEADER).not.toMatch(/\bif root != null:/);
   });
 });
 
