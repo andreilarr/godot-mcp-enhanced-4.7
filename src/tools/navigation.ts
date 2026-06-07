@@ -3,11 +3,9 @@ import type { ToolContext, ToolResult } from '../types.js';
 import { requireProjectPath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult, normalizeNodePath, gdEscape, validateVector3 } from './shared.js';
+import { ff } from './shared/value-serializer.js';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
-
-/** Ensure a number is emitted as float literal for Godot strict typing. */
-const ff = (n: number) => Number.isInteger(n) ? `${n}.0` : `${n}`;
 
 const NAV_ERROR_CODES = {
   INVALID_PATH: 'INVALID_PATH',

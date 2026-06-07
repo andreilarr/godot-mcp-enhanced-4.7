@@ -23,6 +23,38 @@ export function gdEscape(s: string): string {
     .replace(/'/g, "\\'");
 }
 
+/** Format a number as a Godot-compatible float literal (e.g. 2 → 2.0). */
+export const ff = (n: number) => Number.isInteger(n) ? `${n}.0` : `${n}`;
+
+/** Normalize leading spaces to tabs to prevent "Mixed tabs and spaces" errors.
+ *  Detects the smallest nonzero leading-space count as the indent unit,
+ *  then replaces each group of that many spaces with one tab. */
+export function normalizeIndentToTabs(code: string): string {
+  const lines = code.split('\n');
+  let indentUnit = 0;
+  for (const line of lines) {
+    const m = line.match(/^( +)\S/);
+    if (m) {
+      const len = m[1]!.length;
+      if (indentUnit === 0 || len < indentUnit) {
+        indentUnit = len;
+      }
+    }
+  }
+  if (indentUnit === 0) return code;
+
+  return lines.map(line => {
+    let leadingSpaces = 0;
+    while (leadingSpaces < line.length && line[leadingSpaces] === ' ') {
+      leadingSpaces++;
+    }
+    if (leadingSpaces === 0) return line;
+    const tabs = Math.floor(leadingSpaces / indentUnit);
+    const remainder = leadingSpaces % indentUnit;
+    return '\t'.repeat(tabs) + ' '.repeat(remainder) + line.slice(leadingSpaces);
+  }).join('\n');
+}
+
 export function normalizeNodePath(input: string): string {
   if (typeof input !== 'string') throw new Error('NodePath is required and must be a string');
   const trimmed = input.trim();

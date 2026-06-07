@@ -3,11 +3,9 @@ import type { ToolContext, ToolResult } from '../types.js';
 import { requireProjectPath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { normalizeNodePath, gdEscape, validateVector3, clampParam, SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } from './shared.js';
+import { ff } from './shared/value-serializer.js';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
-
-/** Ensure a number is emitted as float literal (e.g. 2 → "2.0") for Godot strict typing. */
-const ff = (n: number) => Number.isInteger(n) ? `${n}.0` : `${n}`;
 
 const ACTIONS = [
   'particles_create',
@@ -169,7 +167,7 @@ function genSetProcessScript(
     lines += `\n\tmat_g.gravity = Vector3(${ff(gravity.x)}, ${ff(gravity.y)}, ${ff(gravity.z)})`;
   }
   if (speedScale !== undefined) {
-    lines += `\n\tnode.speed_scale = ${speedScale}`;
+    lines += `\n\tnode.speed_scale = ${ff(speedScale)}`;
   }
   if (explosiveness !== undefined) {
     lines += `\n\tnode.explosiveness = ${ff(explosiveness)}`;

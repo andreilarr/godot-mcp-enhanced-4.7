@@ -23,6 +23,7 @@ import { analyzeOutput, type ParsedError } from './error-analyzer.js';
 import { forceKillTree, getProjectDir, getRunningProcess, acquireShortRunningSlot, releaseShortRunningSlot } from './core/process-state.js';
 import { buildSafeEnv } from './helpers.js';
 import { MARKER_RESULT as MARKER_RESULT_SHARED, MARKER_ERROR as MARKER_ERROR_SHARED, GD_MCP_GET_ROOT, GD_MCP_GET_NODE, GD_MCP_LOAD_MAIN_SCENE, GD_MCP_OUTPUT } from './tools/shared.js';
+import { normalizeIndentToTabs as _sharedNormalizeIndent } from './tools/shared/value-serializer.js';
 import { getLogger } from './core/logger.js';
 import { needsImport, runImport } from './tools/import-check.js';
 
@@ -350,39 +351,12 @@ function classifyLines(code: string): { declarationLines: string[]; statementLin
   return { declarationLines, statementLines };
 }
 
-/**
- * Convert leading spaces to tabs in an array of source lines.
- * Detects the smallest nonzero leading-space count as the indent unit,
- * then replaces each group of that many spaces with one tab.
- * This prevents "Mixed use of tabs and spaces" when the wrapper
- * prepends \t to lines that already have space-based indentation.
- */
+/** Normalize leading spaces to tabs in-place via the shared implementation. */
 function _normalizeIndentToTabs(lines: string[]): void {
-  // Find the minimum nonzero leading-space count across all lines
-  let indentUnit = 0;
-  for (const line of lines) {
-    const m = line.match(/^( +)\S/);
-    if (m) {
-      const len = m[1]!.length;
-      if (indentUnit === 0 || len < indentUnit) {
-        indentUnit = len;
-      }
-    }
-  }
-  if (indentUnit === 0) return; // no space-indented lines
-
+  const normalized = _sharedNormalizeIndent(lines.join('\n'));
+  const result = normalized.split('\n');
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!;
-    // Count leading spaces (skip lines that start with tab or non-whitespace)
-    let leadingSpaces = 0;
-    while (leadingSpaces < line.length && line[leadingSpaces] === ' ') {
-      leadingSpaces++;
-    }
-    if (leadingSpaces === 0) continue;
-
-    const tabs = Math.floor(leadingSpaces / indentUnit);
-    const remainder = leadingSpaces % indentUnit;
-    lines[i] = '\t'.repeat(tabs) + ' '.repeat(remainder) + line.slice(leadingSpaces);
+    lines[i] = result[i] ?? lines[i]!;
   }
 }
 
