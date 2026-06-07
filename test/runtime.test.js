@@ -26,6 +26,8 @@ vi.mock('../src/core/process-state.js', () => ({
   acquireProcessSlot: vi.fn(() => true),
   acquireShortRunningSlot: vi.fn(() => true),
   releaseShortRunningSlot: vi.fn(),
+  buildBusyErrorMessage: vi.fn(() => 'Busy'),
+  killOrphanGodotProcesses: vi.fn(async () => 0),
 }));
 
 vi.mock('../src/helpers.js', () => ({

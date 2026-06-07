@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
-import { appendOutput, clearOutputBuffer, killProcess, forceKillTree, setProcessBusy, acquireProcessSlot, acquireShortRunningSlot, releaseShortRunningSlot, buildBusyErrorMessage } from '../core/process-state.js';
+import { appendOutput, clearOutputBuffer, killProcess, forceKillTree, setProcessBusy, acquireProcessSlot, acquireShortRunningSlot, releaseShortRunningSlot, buildBusyErrorMessage, killOrphanGodotProcesses } from '../core/process-state.js';
 import { requireProjectPath, checkVersionMismatch, buildSafeEnv } from '../helpers.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -176,6 +176,12 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
     case 'stop_project': {
       if (!ctx.runningProcess) {
+        // V-01 second layer: scan for orphaned Godot processes
+        const projectDir = (args.project_path as string) || ctx.projectDir || '';
+        const orphanKilled = await killOrphanGodotProcesses(projectDir);
+        if (orphanKilled > 0) {
+          return textResult(`Cleaned up ${orphanKilled} orphaned Godot process(es). Project directory: ${projectDir}`);
+        }
         return textResult('No project is currently running.');
       }
       await killProcess(ctx.runningProcess);
@@ -183,9 +189,11 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       ctx.setRunningProcess(null);
 
       const classified = classifyOutput(ctx.outputBuffer);
+      // I-10: Guard against processStartTime=0 producing absurd runtime values
+      const runtimeMs = ctx.processStartTime > 0 ? Date.now() - ctx.processStartTime : 0;
       const result = {
         status: 'stopped',
-        runtime: `${((Date.now() - ctx.processStartTime) / 1000).toFixed(1)}s`,
+        runtime: `${(runtimeMs / 1000).toFixed(1)}s`,
         errors: classified.errors,
         warnings: classified.warnings,
         prints: classified.prints.slice(-50),
@@ -200,9 +208,10 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         return textResult('No debug output available. Run a project first.');
       }
       const classified = classifyOutput(ctx.outputBuffer);
+      const debugRuntimeMs = ctx.processStartTime > 0 ? Date.now() - ctx.processStartTime : 0;
       const result = {
         running: ctx.runningProcess !== null,
-        runtime: `${((Date.now() - ctx.processStartTime) / 1000).toFixed(1)}s`,
+        runtime: `${(debugRuntimeMs / 1000).toFixed(1)}s`,
         errors: classified.errors,
         warnings: classified.warnings,
         prints: classified.prints.slice(-50),
