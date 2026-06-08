@@ -54,7 +54,7 @@ export function getToolDefinitions(): Tool[] {
             description: '项目路径（二选一，优先 instance_id）',
           },
         },
-        required: ['instance_id'],
+        required: [],
       },
       annotations: { tags: ['group:multi_instance'] },
     },

@@ -68,7 +68,7 @@ describe('instance-tools', () => {
     it('godot_select_instance requires instance_id', () => {
       const defs = getToolDefinitions();
       const selectDef = defs.find(d => d.name === 'godot_select_instance');
-      expect((selectDef?.inputSchema as any)?.required).toContain('instance_id');
+      expect((selectDef?.inputSchema as any)?.required).toEqual([]);
     });
   });
 
