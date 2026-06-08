@@ -84,8 +84,12 @@ function injectTags(defs: Tool[]): Tool[] {
   }));
 }
 
-/** Register all tool modules into the global registry. */
+let registered = false;
+
+/** Register all tool modules into the global registry. Idempotent — safe to call multiple times. */
 export function registerAllModules(): void {
+  if (registered) return;
+  registered = true;
   for (const mod of ALL_MODULES) {
     const originalGetDefs = mod.getToolDefinitions;
     const wrappedMod = {

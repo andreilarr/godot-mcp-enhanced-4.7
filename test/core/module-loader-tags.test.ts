@@ -42,4 +42,19 @@ describe('Module loader tag injection', () => {
       }
     }
   });
+
+  it('is idempotent — double registration does not wrap tags twice', () => {
+    // registerAllModules already called by earlier tests in this describe block.
+    // Calling it again should be a no-op thanks to the idempotency guard.
+    // Verify capturedTools count does NOT double after a second call.
+    const beforeCount = capturedTools.length;
+    registerAllModules();
+    expect(capturedTools.length).toBe(beforeCount);
+
+    // Also verify tags have not been duplicated per tool.
+    const tags = capturedTools.map(t => t.annotations?.tags as string[]);
+    const hasDuplicate = tags.some(t => t && new Set(t).size !== t.length);
+    expect(hasDuplicate, 'Some tools have duplicate tags after double registration').toBe(false);
+  });
+
 });
