@@ -522,8 +522,33 @@ export async function readResource(uri: string, projectPath: string | undefined)
   }
 
   const slashIdx = path.indexOf('/');
+
+  // Handle single-segment URIs (e.g. godot://health, godot://tool-groups)
   if (slashIdx === -1) {
-    return { uri, mimeType: 'text/plain', text: 'Unknown resource. Use godot://project/info, godot://scene/{path}, godot://script/{path}, or godot://file/{path}' };
+    switch (path) {
+      case 'health':
+        return { uri, mimeType: 'application/json', text: JSON.stringify({ status: 'not_yet_implemented', hint: 'Health data will be populated when HealthMonitor is wired to resources' }) };
+      case 'tool-groups': {
+        const active = getActiveGroups();
+        const result = Object.entries(TOOL_GROUPS).map(([name, def]) => ({
+          name,
+          description: def.description,
+          active: active.has(name),
+          toolCount: def.tools.length,
+        }));
+        return { uri, mimeType: 'application/json', text: JSON.stringify({ groups: result }, null, 2) };
+      }
+      case 'project-context':
+        return { uri, mimeType: 'text/markdown', text: buildProjectContext(projectPath) };
+      case 'console-errors':
+        return { uri, mimeType: 'application/json', text: JSON.stringify({ status: 'not_yet_implemented', errors: [], message: 'Requires active Bridge connection — returns live errors when connected' }) };
+      case 'scene-tree':
+        return { uri, mimeType: 'application/json', text: JSON.stringify({ status: 'not_yet_implemented', message: 'Requires active Bridge connection — returns live tree when connected' }) };
+      case 'instances':
+        return { uri, mimeType: 'application/json', text: JSON.stringify({ status: 'not_yet_implemented', instances: [], message: 'Multi-instance mode not active — enable GODOT_MCP_MULTI_INSTANCE=true' }) };
+      default:
+        return { uri, mimeType: 'text/plain', text: `Unknown resource: ${path}. Use godot://project/info, godot://scene/{path}, godot://script/{path}, or godot://file/{path}` };
+    }
   }
 
   const category = path.substring(0, slashIdx);
@@ -553,27 +578,6 @@ export async function readResource(uri: string, projectPath: string | undefined)
       return { uri, mimeType: 'text/markdown', text: guide.text };
     }
 
-    case 'health':
-      return { uri, mimeType: 'application/json', text: JSON.stringify({ status: 'available', hint: 'Health data populated at runtime' }) };
-    case 'tool-groups': {
-      const active = getActiveGroups();
-      const result = Object.entries(TOOL_GROUPS).map(([name, def]) => ({
-        name,
-        description: def.description,
-        active: active.has(name),
-        toolCount: def.tools.length,
-      }));
-      return { uri, mimeType: 'application/json', text: JSON.stringify({ groups: result }, null, 2) };
-    }
-    case 'project-context':
-      return { uri, mimeType: 'text/markdown', text: buildProjectContext(projectPath) };
-    case 'console-errors':
-      return { uri, mimeType: 'application/json', text: JSON.stringify({ errors: [], message: 'Requires active Bridge connection' }) };
-    case 'scene-tree':
-      return { uri, mimeType: 'application/json', text: JSON.stringify({ message: 'Requires active Bridge connection' }) };
-    case 'instances':
-      return { uri, mimeType: 'application/json', text: JSON.stringify({ instances: [], message: 'Multi-instance mode not active' }) };
-
     default:
       return { uri, mimeType: 'text/plain', text: `Unknown resource category: ${category}` };
   }
@@ -592,6 +596,17 @@ function countFiles(projectPath: string): Record<string, number> {
   return counts;
 }
 
+
+// A-10: Safe truncation that preserves Markdown structure
+function safeTruncate(content: string, maxLen: number): string {
+  if (content.length <= maxLen) return content;
+  const truncated = content.slice(0, maxLen);
+  const lastNewline = truncated.lastIndexOf(String.fromCharCode(10));
+  if (lastNewline > maxLen * 0.8) {
+    return truncated.slice(0, lastNewline) + String.fromCharCode(10, 10) + "[... truncated ...]";
+  }
+  return truncated + String.fromCharCode(10, 10) + "[... truncated ...]";
+}
 function buildProjectContext(projectPath: string | undefined): string {
   const lines: string[] = ['# Project Context\n'];
 
@@ -604,13 +619,13 @@ function buildProjectContext(projectPath: string | undefined): string {
   if (projectPath) {
     const claudeMdPath = join(projectPath, 'CLAUDE.md');
     if (existsSync(claudeMdPath)) {
-      const content = readFileSync(claudeMdPath, 'utf-8').slice(0, 2000);
+      const content = safeTruncate(readFileSync(claudeMdPath, 'utf-8'), 2000);
       lines.push('## Coding Guidelines\n', content, '\n');
     }
 
     const readmePath = join(projectPath, 'README.md');
     if (existsSync(readmePath)) {
-      const content = readFileSync(readmePath, 'utf-8').slice(0, 2000);
+      const content = safeTruncate(readFileSync(readmePath, 'utf-8'), 2000);
       lines.push('## Architecture\n', content, '\n');
     }
 
