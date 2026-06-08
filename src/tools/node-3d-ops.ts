@@ -1,5 +1,6 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
+import { getErrorMessage } from '../types.js';
 import { requireProjectPath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult, gdEscape, normalizeNodePath, validateVector3, TYPE_WHITELIST, validateIdentifier } from './shared.js';
@@ -172,7 +173,7 @@ export async function handleTool(
       suggestion: 'Use query_scene_tree to list available nodes, or check the node path spelling.',
     });
   } catch (err) {
-    const msg = (err as Error).message;
+    const msg = getErrorMessage(err);
     if (msg.includes('NodePath')) return opsErrorResult('INVALID_PATH', msg);
     if (msg.includes('Vector3')) return opsErrorResult('INVALID_VECTOR', msg);
     return opsErrorResult('SCRIPT_EXEC_FAILED', msg);

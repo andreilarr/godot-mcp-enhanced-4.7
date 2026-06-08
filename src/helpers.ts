@@ -48,6 +48,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getLogger } from './core/logger.js';
 import { validatePath, isPathInAllowedRoots } from './core/path-utils.js';
+import { getErrorMessage } from './types.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -142,7 +143,7 @@ export async function checkVersionMismatch(projectPath: string, godotBin: string
     }
     return null;
   } catch (err) {
-    getLogger().warn('helpers', `checkVersionMismatch failed: ${(err as Error).message}`);
+    getLogger().warn('helpers', `checkVersionMismatch failed: ${getErrorMessage(err)}`);
     return null;
   }
 }

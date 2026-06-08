@@ -22,6 +22,7 @@ import { listPrompts, getPrompt } from './prompts.js';
 // ─── Import and register tool modules ────────────────────────────────────────
 // C-ARCH-01: All tool modules centralized in module-loader.ts
 import { registerAllModules } from './core/module-loader.js';
+import { setToolCallDelegate } from './tools/advanced-proxy.js';
 registerAllModules();
 
 
@@ -30,6 +31,7 @@ const require = createRequire(import.meta.url);
 const pkgVersion = require('../package.json').version;
 import { ReadOnlyGuard } from './core/ReadOnlyGuard.js';
 import { ToolDispatcher } from './core/ToolDispatcher.js';
+import * as guard from './guard.js';
 import { EditorConnection } from './core/EditorConnection.js';
 import { EditorToolExecutor } from './core/EditorToolExecutor.js';
 import { findGodot, clearGodotPathCache, getCachedGodotPath } from './core/godot-finder.js';
@@ -96,6 +98,7 @@ export class GodotServer {
       noFallback: this.noFallback,
       opsScript: this.opsScript,
       findGodot,
+      toolCallDelegate: setToolCallDelegate,
     });
     this.dispatcher = dispatcher;
 
@@ -234,8 +237,8 @@ export class GodotServer {
           },
         });
         // Handle both sync and async notification returns
-        if (maybePromise && typeof (maybePromise as any).catch === 'function') {
-          (maybePromise as any).catch(() => {});
+        if (maybePromise && typeof maybePromise === 'object' && 'catch' in maybePromise) {
+          (maybePromise as Promise<void>).catch(() => {});
         }
       } catch { /* best-effort */ }
     });
@@ -309,6 +312,10 @@ export class GodotServer {
       ps.setRunningProcess(null);
       log('Running Godot process killed');
     }
+    // Clean up guard cleanup timer and pending tokens
+    guard.cleanup();
+    // Stop health monitor heartbeat
+    this.dispatcher?.getHealthMonitor().stopHeartbeat();
     await this.server.close();
     setOnGroupsChanged(null);
     log('Server shut down');

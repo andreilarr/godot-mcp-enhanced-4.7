@@ -1,6 +1,7 @@
 // src/core/EditorConnection.ts
 import WebSocket from 'ws';
 import { getLogger } from './logger.js';
+import { getErrorMessage } from '../types.js';
 
 // I-01: Auth uses a dedicated id outside the normal requestId sequence to avoid conflicts.
 // The plugin expects id=-1 for auth handshake (negative IDs are never used by normal requests).
@@ -280,7 +281,7 @@ export class EditorConnection {
         }
       } catch (err) {
         const snippet = typeof raw === 'string' ? raw.substring(0, 200) : '(unavailable)';
-        getLogger().warn('editor', `parse WebSocket message: ${(err as Error).message} raw: ${snippet}`);
+        getLogger().warn('editor', `parse WebSocket message: ${getErrorMessage(err)} raw: ${snippet}`);
         // Attempt to extract id from malformed JSON and reject the pending request
         const idMatch = raw.match(/"id"\s*:\s*(\d+)/);
         if (idMatch) {
@@ -289,7 +290,7 @@ export class EditorConnection {
           if (pending) {
             clearTimeout(pending.timer);
             this.pending.delete(badId);
-            pending.reject(new Error(`JSON parse error in editor response: ${(err as Error).message}`));
+            pending.reject(new Error(`JSON parse error in editor response: ${getErrorMessage(err)}`));
           }
         }
       }
@@ -461,7 +462,9 @@ export class EditorConnection {
         await this.connect();
         getLogger().info('editor', 'Reconnected');
       } catch (err) {
-        getLogger().warn('editor', `reconnect failed: ${err}`);
+        getLogger().warn('editor', `reconnect failed: ${getErrorMessage(err)}`);
+        // Re-schedule next attempt so the reconnect chain doesn't break
+        this.scheduleReconnect();
       }
     }, delay);
   }

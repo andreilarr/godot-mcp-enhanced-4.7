@@ -43,9 +43,11 @@ describe('advanced-proxy', () => {
       expect(schema.required).toContain('tool_name');
     });
 
-    it('belongs to core group', () => {
+    it('has no inline annotations (tags injected by module-loader)', () => {
       const defs = getToolDefinitions();
-      expect(defs[0].annotations?.tags).toContain('group:core');
+      // Tags are injected at registration time by module-loader.injectTags(),
+      // not declared in the raw tool definition.
+      expect(defs[0].annotations).toBeUndefined();
     });
 
     it('description mentions proxy functionality', () => {

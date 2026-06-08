@@ -1,5 +1,5 @@
 // src/core/ToolDispatcher.ts
-import type { ToolResult, ToolContext, DispatchContext, Middleware } from '../types.js';
+import type { ToolResult, ToolContext, DispatchContext, Middleware, ToolCallDelegate } from '../types.js';
 import type { ChildProcess } from 'child_process';
 import type { ReadOnlyGuard } from './ReadOnlyGuard.js';
 import type { EditorToolExecutor } from './EditorToolExecutor.js';
@@ -22,7 +22,6 @@ import {
 } from './tool-registry.js';
 import { isPathInAllowedRoots, parseGodotConfig } from '../helpers.js';
 import { opsErrorResult, COMMON_ERROR_CODES } from '../tools/shared.js';
-import { setToolCallDelegate } from '../tools/advanced-proxy.js';
 import { truncateResponse } from './response-limiter.js';
 import * as ps from './process-state.js';
 import { getLogger } from './logger.js';
@@ -47,6 +46,7 @@ export interface DispatcherOptions {
   editorExecutor?: EditorToolExecutor;
   opsScript: string;
   findGodot: () => Promise<string>;
+  toolCallDelegate: (fn: ToolCallDelegate | null) => void;
 }
 
 export class ToolDispatcher {
@@ -94,7 +94,7 @@ export class ToolDispatcher {
 
     // Phase 3a: Wire proxy delegate through handleCall for full middleware chain
     // (ReadOnlyGuard, path validation, confirmation tokens, etc.)
-    setToolCallDelegate(async (targetTool, toolArgs) => {
+    this.options.toolCallDelegate(async (targetTool, toolArgs) => {
       // Recursion guard: proxy must not delegate to itself
       if (targetTool === 'godot_advanced_tool') {
         return opsErrorResult('PROXY_RECURSION', 'Cannot proxy godot_advanced_tool through itself');

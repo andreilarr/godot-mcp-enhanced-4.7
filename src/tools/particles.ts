@@ -1,5 +1,6 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
+import { getErrorMessage } from '../types.js';
 import { requireProjectPath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import { normalizeNodePath, gdEscape, validateVector3, clampParam, SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } from './shared.js';
@@ -503,7 +504,7 @@ export async function handleTool(
 
     return parseGdscriptResult(result, paramWarnings, errorMapper);
   } catch (err) {
-    const msg = (err as Error).message;
+    const msg = getErrorMessage(err);
     if (msg.includes('NodePath')) return opsErrorResult('INVALID_PATH', msg);
     if (msg.includes('Vector2') || msg.includes('Vector3')) return opsErrorResult('INVALID_VECTOR', msg);
     return opsErrorResult(ERROR_CODES.SCRIPT_EXEC_FAILED, msg);

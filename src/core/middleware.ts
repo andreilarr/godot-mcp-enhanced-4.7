@@ -49,6 +49,8 @@ export async function executeMiddleware(
     try {
       result = await executeTool();
     } catch (err) {
+      // Log full exception (including stack trace) so crashes are diagnosable
+      getLogger().error('middleware', `Tool execution threw: ${err instanceof Error ? err.stack : String(err)}`);
       result = errorResult(`Tool execution error: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -123,7 +125,11 @@ export function createElicitationMiddleware(
       // Shallow-copy args to avoid mutating caller's object
       const safeArgs = { ...ctx.args };
       ctx.args = safeArgs;
-      const schema = def.inputSchema as any;
+      const schema = def.inputSchema as {
+          required?: string[];
+          properties?: Record<string, { type?: string; [key: string]: unknown }>;
+          [key: string]: unknown;
+        };
       const required: string[] = schema.required ?? [];
       if (required.length === 0) return { passed: true };
 

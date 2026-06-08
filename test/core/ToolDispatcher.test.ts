@@ -108,6 +108,7 @@ function createOptions(overrides?: Partial<DispatcherOptions>): DispatcherOption
     readOnlyGuard: createMockGuard(false),
     opsScript: '/fake/ops.gd',
     findGodot: vi.fn().mockResolvedValue('/fake/godot'),
+    toolCallDelegate: vi.fn(),
     ...overrides,
   };
 }

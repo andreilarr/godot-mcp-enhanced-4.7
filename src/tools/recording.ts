@@ -1,5 +1,6 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
+import { getErrorMessage } from '../types.js';
 import { requireProjectPath, resolveWithinRoot } from '../helpers.js';
 import { executeGdscriptTrusted } from '../gdscript-executor.js';
 import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult, gdEscape } from './shared.js';
@@ -361,7 +362,7 @@ export async function handleTool(
         return null;
     }
   } catch (err) {
-    const msg = (err as Error).message;
+    const msg = getErrorMessage(err);
     if (msg.includes('INVALID_FILE_NAME')) return opsErrorResult('INVALID_FILE_NAME', msg);
     if (msg.includes('traversal')) return opsErrorResult('INVALID_FILE_NAME', msg);
     if (msg.includes('ECONNREFUSED')) {

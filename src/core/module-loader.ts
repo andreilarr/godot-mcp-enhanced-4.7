@@ -26,7 +26,6 @@ import * as gameBridge from '../tools/game-bridge.js';
 import * as workflow from '../tools/workflow.js';
 import * as animationOps from '../tools/animation-ops.js';
 import * as profilerOps from '../tools/profiler-ops.js';
-import * as spatialOps from '../tools/spatial-ops.js';
 import * as testFramework from '../tools/test-framework.js';
 import * as animtreeOps from '../tools/animtree.js';
 import * as navigationOps from '../tools/navigation.js';
@@ -53,7 +52,7 @@ const ALL_MODULES = [
   runtime, screenshot, project, scene, script, validation, docs,
   node3dOps, physicsOps, audioOps, tilemapOps, materialOps,
   gameBridge, workflow, animationOps, animationTrack, profilerOps,
-  spatialOps, testFramework, animtreeOps, navigationOps, particlesOps,
+  testFramework, animtreeOps, navigationOps, particlesOps,
   signalOps, batchTools, uiOps, recordingOps, editorSync,
   delivery, codeTemplates, ikTools, gameDesign, sceneCommit, manageTools, instanceTools, advancedProxy,
 ];

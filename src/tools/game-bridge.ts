@@ -1,11 +1,11 @@
 import { createConnection, Socket } from 'net';
 import { readFileSync, writeFileSync, existsSync, copyFileSync, unlinkSync, chmodSync, statSync, lstatSync, renameSync } from 'fs';
 import { join, dirname } from 'path';
-import { tmpdir, userInfo } from 'os';
+import { userInfo } from 'os';
 import { execFileSync } from 'child_process';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
-import { textResult } from '../types.js';
+import { textResult, getErrorMessage } from '../types.js';
 import { opsErrorResult } from './shared.js';
 import { requireProjectPath } from '../helpers.js';
 import { launchDashboardOnce } from '../dashboard/launcher.js';
@@ -55,16 +55,13 @@ let _connectionLock: Promise<Socket> | null = null;
 // socket, causing each handler to see partial/mixed response data.
 let _sendLock: Promise<unknown> = Promise.resolve();
 
-/** Find the bridge secret file — prefer project .godot dir, fallback to tmpdir. */
+/** Find the bridge secret file in project .godot dir. Throws if project dir not set. */
 function findBridgeSecretPath(): string {
   if (_cachedSecretPath) return _cachedSecretPath;
-  // Prefer project-local path (more secure than tmpdir)
-  if (_projectDir) {
-    _cachedSecretPath = join(_projectDir, '.godot', `mcp_bridge_${BRIDGE_PORT}.secret`);
-    return _cachedSecretPath;
+  if (!_projectDir) {
+    throw new Error('Bridge secret path requested before game_bridge_install set project directory');
   }
-  // Fallback to tmpdir (legacy behavior)
-  _cachedSecretPath = join(tmpdir(), `mcp_bridge_${BRIDGE_PORT}.secret`);
+  _cachedSecretPath = join(_projectDir, '.godot', `mcp_bridge_${BRIDGE_PORT}.secret`);
   return _cachedSecretPath;
 }
 
@@ -101,7 +98,12 @@ function readBridgeSecret(): string | null {
     _cachedSecretAt = Date.now();
     return _cachedSecret;
   } catch (err) {
-    getLogger().warn('bridge', `read bridge secret failed (${(err as Error).message}): ${secretPath}`);
+    // ENOENT is normal (bridge not installed yet); other errors are serious
+    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+      getLogger().debug('bridge', `bridge secret not found (expected before install): ${secretPath}`);
+    } else {
+      getLogger().error('bridge', `read bridge secret failed (${getErrorMessage(err)}): ${secretPath}`);
+    }
     return null;
   }
 }
@@ -295,7 +297,7 @@ export function sendToBridge(method: string, params: Record<string, unknown> = {
       sock.write(JSON.stringify({ id, method, params }) + '\n');
     });
   }).catch(err => {
-    const msg = (err as Error).message;
+    const msg = getErrorMessage(err);
     if (msg.includes('ECONNREFUSED')) {
       return Promise.reject(new Error('Cannot connect to MCP Bridge. Is the game running with the bridge autoload installed?'));
     }
@@ -590,7 +592,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         return null;
     }
   } catch (err) {
-    const msg = (err as Error).message;
+    const msg = getErrorMessage(err);
     if (msg.includes('ECONNREFUSED')) {
       return opsErrorResult('BRIDGE_NOT_CONNECTED', 'Cannot connect to MCP Bridge. Is the game running with the bridge autoload installed?', {
         suggestion: 'Ensure: 1) game_bridge_install has been called, 2) the game is running (F5 or run_project), 3) check project .godot/ for mcp_bridge_9081.secret.',

@@ -4,6 +4,7 @@ import { join } from 'path';
 import { execFileSync } from 'child_process';
 import { userInfo } from 'os';
 import { getLogger } from './logger.js';
+import { getErrorMessage } from '../types.js';
 
 const SECRET_FILE_NAME = 'mcp_editor.key';
 let _permWarned = false;
@@ -64,18 +65,18 @@ function checkFilePermissions(filePath: string): boolean {
 export function readEditorSecret(projectPath: string): string | null {
   const secretPath = join(projectPath, '.godot', SECRET_FILE_NAME);
   try {
-    // Read directly without existsSync to avoid TOCTOU race between check and read.
-    const content = readFileSync(secretPath, 'utf-8').trim();
+    // Check permissions BEFORE reading — reject insecure files before content enters memory.
     if (!checkFilePermissions(secretPath)) {
       getLogger().error('security', `Refusing to use editor secret with insecure permissions: ${secretPath}`);
       return null;
     }
+    const content = readFileSync(secretPath, 'utf-8').trim();
     return content;
   } catch (err: unknown) {
     // ENOENT is expected (plugin not started yet) — silent.
     // Other errors (EACCES, EISDIR, etc.) should be surfaced for diagnosis.
     if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      getLogger().error('auth', `Failed to read editor secret: ${(err as NodeJS.ErrnoException).code} — ${(err as Error).message}`);
+      getLogger().error('auth', `Failed to read editor secret: ${(err as NodeJS.ErrnoException).code} — ${getErrorMessage(err)}`);
     }
     return null;
   }

@@ -2,6 +2,7 @@
 import { join } from 'path';
 import { findGodot } from '../core/godot-finder.js';
 import { ALL_ADAPTERS } from './clients/index.js';
+import { getErrorMessage } from '../types.js';
 
 /** I-08: 检测 MCP command/args — 改进安装方式判断 */
 function detectMcpCommand(): { command: string; args: string[] } {
@@ -37,7 +38,7 @@ export async function runSetup(_args: string[]): Promise<void> {
     godotPath = await findGodot();
     console.log(`✓ Godot found: ${godotPath}`);
   } catch (err) {
-    console.error(`✗ Godot not found: ${(err as Error).message}`);
+    console.error(`✗ Godot not found: ${getErrorMessage(err)}`);
     console.error('  Set GODOT_PATH environment variable or install Godot.');
     process.exit(1);
   }
@@ -68,7 +69,7 @@ export async function runSetup(_args: string[]): Promise<void> {
       console.log(`  ✓ ${adapter.name}: configured`);
       configured++;
     } catch (err) {
-      console.error(`  ✗ ${adapter.name}: ${(err as Error).message}`);
+      console.error(`  ✗ ${adapter.name}: ${getErrorMessage(err)}`);
     }
   }
 

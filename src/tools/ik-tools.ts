@@ -1,5 +1,6 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
+import { getErrorMessage } from '../types.js';
 import { requireProjectPath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
 import {
@@ -306,7 +307,7 @@ export async function handleTool(
 
     return parseGdscriptResult(result, [], errorMapper);
   } catch (err) {
-    const msg = (err as Error).message;
+    const msg = getErrorMessage(err);
     if (msg.includes('Identifier')) return opsErrorResult(ERROR_CODES.INVALID_PROPERTY, msg);
     if (msg.includes('NodePath')) return opsErrorResult(ERROR_CODES.NODE_NOT_FOUND, msg);
     return opsErrorResult(ERROR_CODES.SCRIPT_EXEC_FAILED, msg);

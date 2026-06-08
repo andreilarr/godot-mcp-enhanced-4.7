@@ -2,6 +2,7 @@
 
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../../types.js';
+import { getErrorMessage } from '../../types.js';
 import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath } from '../../helpers.js';
 import { executeGdscriptTrusted } from '../../gdscript-executor.js';
 import { normalizeNodePath, sanitizeResPath, opsErrorResult, parseGdscriptResult, NON_PERSIST } from '../shared.js';
@@ -365,7 +366,7 @@ export async function handleTool(
         try {
           script = genUiDrawRecipeScript(scenePath, nodePath, ops);
         } catch (err) {
-          const msg = (err as Error).message;
+          const msg = getErrorMessage(err);
           if (msg.includes('Unknown draw op kind') || msg.includes('Maximum') || msg.includes('Color must be')) {
             return opsErrorResult(ERROR_CODES.INVALID_DRAW_OP, msg);
           }
@@ -383,7 +384,7 @@ export async function handleTool(
         try {
           script = genUiBuildLayoutScript(scenePath, parentPath, tree);
         } catch (err) {
-          const msg = (err as Error).message;
+          const msg = getErrorMessage(err);
           if (msg.includes('INVALID_CONTROL_TYPE')) {
             return opsErrorResult(ERROR_CODES.INVALID_CONTROL_TYPE, msg);
           }
@@ -419,7 +420,7 @@ export async function handleTool(
 
     return parseGdscriptResult(result, [], errorMapper);
   } catch (err) {
-    const msg = (err as Error).message;
+    const msg = getErrorMessage(err);
     if (msg.includes('NodePath')) return opsErrorResult('INVALID_PATH', msg);
     return opsErrorResult(ERROR_CODES.SCRIPT_EXEC_FAILED, msg);
   }

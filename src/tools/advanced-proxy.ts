@@ -9,17 +9,15 @@
 
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
-import { textResult } from '../types.js';
-import { opsSuccess, opsError } from './shared.js';
+import { textResult, getErrorMessage, type ToolCallDelegate } from '../types.js';
+import { opsError } from './shared.js';
 import {
-  getAllToolDefinitions,
   isToolAllowed,
   getAllToolNames,
 } from '../core/tool-registry.js';
 
 // ─── Delegate (set by ToolDispatcher to enable re-dispatch) ─────────────────
 
-type ToolCallDelegate = (toolName: string, args: Record<string, unknown>) => Promise<ToolResult>;
 let _delegate: ToolCallDelegate | null = null;
 
 export function setToolCallDelegate(fn: ToolCallDelegate | null): void {
@@ -87,7 +85,6 @@ export function getToolDefinitions(): Tool[] {
         },
         required: ['tool_name'],
       },
-      annotations: { tags: ['group:core'] } as any,
     },
   ];
 }
@@ -133,7 +130,7 @@ export async function handleTool(
   try {
     return await _delegate(targetTool, toolArgs);
   } catch (err) {
-    return textResult(JSON.stringify(opsError('PROXY_ERROR', (err as Error).message)));
+    return textResult(JSON.stringify(opsError('PROXY_ERROR', getErrorMessage(err))));
   }
 }
 

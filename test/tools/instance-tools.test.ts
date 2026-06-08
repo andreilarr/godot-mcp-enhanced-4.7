@@ -62,7 +62,9 @@ describe('instance-tools', () => {
       const defs = getToolDefinitions();
       const listDef = defs.find(d => d.name === 'godot_list_instances');
       expect(listDef?.inputSchema).toBeDefined();
-      expect(listDef?.annotations?.tags).toContain('group:multi_instance');
+      // Tags are injected at registration time by module-loader.injectTags(),
+      // not declared in the raw tool definition.
+      expect(listDef?.annotations).toBeUndefined();
     });
 
     it('godot_select_instance requires instance_id', () => {

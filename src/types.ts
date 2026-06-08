@@ -29,6 +29,13 @@ export function errorResult(message: string): ToolResult {
   return { content: [{ type: 'text', text: message }], isError: true };
 }
 
+/** Safely extract a message string from an unknown thrown value. */
+export function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  return String(err);
+}
+
 // ─── Middleware types (competitive borrowing Phase 5) ──────────────────────────
 
 export type ConnectionState = 'disconnected' | 'connected' | 'degraded' | 'reconnecting';
@@ -49,3 +56,6 @@ export interface Middleware {
   before(ctx: DispatchContext): Promise<MiddlewareResult>;
   after?(ctx: DispatchContext, result: ToolResult): Promise<ToolResult>;
 }
+
+/** Delegate for proxy tool to re-dispatch through the full middleware chain. */
+export type ToolCallDelegate = (toolName: string, args: Record<string, unknown>) => Promise<ToolResult>;

@@ -1,5 +1,6 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
+import { getErrorMessage } from '../types.js';
 import { requireProjectPath } from '../helpers.js';
 import { executeGdscriptTrusted } from '../gdscript-executor.js';
 import { normalizeNodePath, gdEscape, sanitizeResPath, validateIdentifier } from './shared.js';
@@ -768,7 +769,7 @@ export async function handleTool(
 
     return parseGdscriptResult(result, [], materialErrorMapper);
   } catch (err) {
-    const msg = (err as Error).message;
+    const msg = getErrorMessage(err);
     if (msg.includes('Invalid param type')) return opsErrorResult('INVALID_PARAM_TYPE', msg);
     if (msg.includes('Invalid template')) return opsErrorResult('INVALID_TEMPLATE', msg);
     if (msg.includes('NodePath')) return opsErrorResult('MATERIAL_NOT_FOUND', msg);

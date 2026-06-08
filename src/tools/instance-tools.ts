@@ -8,7 +8,7 @@
 
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
-import { textResult } from '../types.js';
+import { textResult, getErrorMessage } from '../types.js';
 import { opsSuccess, opsError } from './shared.js';
 import type { InstanceManager } from '../core/instance-manager.js';
 import type { InstanceRouter } from '../core/instance-router.js';
@@ -37,7 +37,6 @@ export function getToolDefinitions(): Tool[] {
         type: 'object' as const,
         properties: {},
       },
-      annotations: { tags: ['group:multi_instance'] } as any,
     },
     {
       name: 'godot_select_instance',
@@ -56,7 +55,6 @@ export function getToolDefinitions(): Tool[] {
         },
         required: [],
       },
-      annotations: { tags: ['group:multi_instance'] } as any,
     },
   ];
 }
@@ -136,7 +134,7 @@ async function handleSelectInstance(args: Record<string, unknown>): Promise<Tool
       },
     })));
   } catch (err) {
-    return textResult(JSON.stringify(opsError('SELECT_FAILED', (err as Error).message)));
+    return textResult(JSON.stringify(opsError('SELECT_FAILED', getErrorMessage(err))));
   }
 }
 

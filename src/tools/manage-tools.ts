@@ -46,7 +46,6 @@ export function getToolDefinitions(): Tool[] {
         },
         required: ['action'],
       },
-      annotations: { tags: ['group:core'] },
     },
   ];
 }

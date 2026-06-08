@@ -266,6 +266,7 @@ export function chainOfVerification(verdict: string, context: string): CoVResult
 import { readFileSync } from "fs";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolContext, ToolResult } from "../types.js";
+import { getErrorMessage } from '../types.js';
 import { requireProjectPath, resolveWithinRoot } from "../helpers.js";
 
 export function getToolDefinitions(): Tool[] {
@@ -328,7 +329,7 @@ export async function handleTool(
       } catch (err) {
         return {
           content: [
-            { type: "text" as const, text: JSON.stringify({ passed: false, error: `Failed to read GDD file: ${(err as Error).message}` }) },
+            { type: "text" as const, text: JSON.stringify({ passed: false, error: `Failed to read GDD file: ${getErrorMessage(err)}` }) },
           ],
         };
       }

@@ -45,7 +45,9 @@ export class InstanceRouter {
    */
   autoSelect(): string | null {
     if (this.deps.instances.length === 1) {
-      this.selectedId = this.deps.instances[0].id;
+      const inst = this.deps.instances[0];
+      if (!inst) return null;
+      this.selectedId = inst.id;
       return this.selectedId;
     }
     return null;
@@ -56,8 +58,12 @@ export class InstanceRouter {
     const inst = this.deps.instances.find(i => i.id === id);
     if (!inst) throw new Error(`Instance not found: ${id}`);
 
-    // Wait for all in-flight requests to complete
+    // Wait for all in-flight requests to complete (with timeout to prevent livelock)
+    const deadline = Date.now() + 10_000; // 10s timeout
     while (this.inflightCount > 0) {
+      if (Date.now() > deadline) {
+        throw new Error(`selectInstance timed out: ${this.inflightCount} in-flight requests still pending after 10s`);
+      }
       this.inflightZero = new Promise<void>(resolve => {
         this.inflightZeroResolve = resolve;
       });

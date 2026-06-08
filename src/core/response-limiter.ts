@@ -101,7 +101,7 @@ export function trimToArrayLimit(data: unknown, limitBytes: number): unknown {
   // Refine with limited binary search (max 5 iterations)
   let lo: number;
   let hi: number;
-  let best = estimatedFit;
+  let best: number;
 
   // First verify the estimate itself
   const probeEstimate = { ...nonArrayFields, [largestKey]: originalArray.slice(0, estimatedFit) };
