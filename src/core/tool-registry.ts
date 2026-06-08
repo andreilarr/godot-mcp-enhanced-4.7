@@ -146,6 +146,7 @@ export const TOOL_GROUPS: Record<string, ToolGroupDef> = {
   code:       { description: '代码工具', tools: ['docs', 'templates', 'batch', 'game_design'], requires: [] },
   ik:         { description: 'IK', tools: ['ik'], requires: [] },
   recording:  { description: '录制', tools: ['recording'], requires: ['bridge'] },
+  multi_instance: { description: '多实例', tools: ['godot_list_instances', 'godot_select_instance'], requires: [] },
 };
 
 /** 5 preset profiles. Each maps to an array of group names. */
