@@ -137,13 +137,32 @@ describe('ReconnectionManager', () => {
     expect(onExhausted).toHaveBeenCalledTimes(1);
   });
 
-  it('caps delay at maxDelayMs', async () => {
+  it('caps delay at maxDelayMs with jitter', async () => {
     const mgr = new ReconnectionManager({ baseDelayMs: 1000, maxDelayMs: 4000 });
-    expect(mgr.getDelayMs(0)).toBe(1000);  // 1000 * 2^0
-    expect(mgr.getDelayMs(1)).toBe(2000);  // 1000 * 2^1
-    expect(mgr.getDelayMs(2)).toBe(4000);  // 1000 * 2^2
-    expect(mgr.getDelayMs(3)).toBe(4000);  // min(8000, 4000) = 4000 (capped)
-    expect(mgr.getDelayMs(10)).toBe(4000); // still capped
+    // With jitter (50-100%), base 1000 -> delay in [500, 1000]
+    for (let i = 0; i < 50; i++) {
+      const d0 = mgr.getDelayMs(0);  // base 1000
+      expect(d0).toBeGreaterThanOrEqual(500);
+      expect(d0).toBeLessThanOrEqual(1000);
+    }
+    // base 2000 -> delay in [1000, 2000]
+    for (let i = 0; i < 50; i++) {
+      const d1 = mgr.getDelayMs(1);
+      expect(d1).toBeGreaterThanOrEqual(1000);
+      expect(d1).toBeLessThanOrEqual(2000);
+    }
+    // Capped: base 4000 -> delay in [2000, 4000]
+    for (let i = 0; i < 50; i++) {
+      const d2 = mgr.getDelayMs(2);
+      expect(d2).toBeGreaterThanOrEqual(2000);
+      expect(d2).toBeLessThanOrEqual(4000);
+    }
+    // Past cap: base 8000, capped to 4000 -> delay in [2000, 4000]
+    for (let i = 0; i < 50; i++) {
+      const d3 = mgr.getDelayMs(3);
+      expect(d3).toBeGreaterThanOrEqual(2000);
+      expect(d3).toBeLessThanOrEqual(4000);
+    }
   });
 
   it('does not start twice', async () => {
@@ -178,5 +197,58 @@ describe('ReconnectionManager', () => {
     // Third attempt succeeded — attempt stays at 2 (only failures increment via scheduleRetry)
     expect(mgr.getAttempt()).toBe(2);
     expect(mgr.isRunning()).toBe(false);
+  });
+
+  it('applies jitter to delay calculation', () => {
+    const mgr = new ReconnectionManager({ baseDelayMs: 1000, maxDelayMs: 30000 });
+    const delays = new Set<number>();
+    for (let i = 0; i < 20; i++) {
+      delays.add(mgr.getDelayMs(2)); // 1000 * 4 = 4000ms base
+    }
+    expect(delays.size).toBeGreaterThan(1);
+  });
+
+  it('start resolves true on successful reconnection', async () => {
+    const mgr = new ReconnectionManager({ baseDelayMs: 50 });
+    const connectFn = vi.fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValue(true);
+    const onExhausted = vi.fn();
+
+    const promise = mgr.start(connectFn, onExhausted);
+    await tick(0);
+    await tick(50);
+
+    const result = await promise;
+    expect(result).toBe(true);
+    expect(mgr.isRunning()).toBe(false);
+  });
+
+  it('start resolves false when retries exhausted', async () => {
+    const mgr = new ReconnectionManager({ maxRetries: 2, baseDelayMs: 50 });
+    const connectFn = vi.fn().mockResolvedValue(false);
+    const onExhausted = vi.fn();
+
+    const promise = mgr.start(connectFn, onExhausted);
+    await tick(0);
+    await tick(50);
+    await tick(100);
+
+    const result = await promise;
+    expect(result).toBe(false);
+    expect(onExhausted).toHaveBeenCalled();
+  });
+
+  it('start resolves false when cancelled', async () => {
+    const mgr = new ReconnectionManager({ baseDelayMs: 100 });
+    const connectFn = vi.fn().mockResolvedValue(false);
+    const onExhausted = vi.fn();
+
+    const promise = mgr.start(connectFn, onExhausted);
+    await tick(0);
+    mgr.cancel();
+
+    const result = await promise;
+    expect(result).toBe(false);
   });
 });
