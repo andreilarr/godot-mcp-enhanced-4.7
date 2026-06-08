@@ -44,6 +44,7 @@ import * as gameDesign from '../tools/game-design.js';
 import * as sceneCommit from '../tools/scene-commit-tool.js';
 import * as manageTools from '../tools/manage-tools.js';
 import * as instanceTools from '../tools/instance-tools.js';
+import * as advancedProxy from '../tools/advanced-proxy.js';
 
 // ─── Registration ─────────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ const ALL_MODULES = [
   gameBridge, workflow, animationOps, animationTrack, profilerOps,
   spatialOps, testFramework, animtreeOps, navigationOps, particlesOps,
   signalOps, batchTools, uiOps, recordingOps, editorSync,
-  delivery, codeTemplates, ikTools, gameDesign, sceneCommit, manageTools, instanceTools,
+  delivery, codeTemplates, ikTools, gameDesign, sceneCommit, manageTools, instanceTools, advancedProxy,
 ];
 
 // ─── Tag injection ─────────────────────────────────────────────────────────────

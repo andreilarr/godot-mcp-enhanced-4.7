@@ -20,6 +20,7 @@ import {
 } from './tool-registry.js';
 import { isPathInAllowedRoots, parseGodotConfig } from '../helpers.js';
 import { opsErrorResult, COMMON_ERROR_CODES } from '../tools/shared.js';
+import { setToolCallDelegate } from '../tools/advanced-proxy.js';
 import * as ps from './process-state.js';
 import { getLogger } from './logger.js';
 
@@ -81,6 +82,11 @@ export class ToolDispatcher {
 
     // 注册内联工具的元数据（confirm_and_execute 不属于任何 ToolModule）
     registerInlineTool('confirm_and_execute', { readonly: true, long_running: false });
+
+    // Phase 3a: Wire proxy delegate to re-dispatch through dispatchTool
+    setToolCallDelegate(async (targetTool, toolArgs) => {
+      return this.dispatchTool(targetTool, toolArgs, Date.now());
+    });
   }
 
   getFilteredTools(): Tool[] {
@@ -120,6 +126,15 @@ export class ToolDispatcher {
         log('PROFILE mode (%s): %d tools available', this.options.mode, allTools.length);
       } else {
         getLogger().warn('dispatcher', `Profile "${String(this.options.mode)}" resolved to empty set — falling back to full mode. Check for typos.`);
+      }
+    }
+
+    // slim mode: ensure proxy tool is always present (it belongs to core group,
+    // but guard against edge cases where filtering might exclude it)
+    if (this.options.mode === 'slim') {
+      const hasProxy = allTools.some(t => t.name === 'godot_advanced_tool');
+      if (!hasProxy) {
+        allTools.push(...getAllToolDefinitions().filter(t => t.name === 'godot_advanced_tool'));
       }
     }
 

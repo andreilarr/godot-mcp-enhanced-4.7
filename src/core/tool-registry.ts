@@ -149,12 +149,13 @@ export const TOOL_GROUPS: Record<string, ToolGroupDef> = {
   multi_instance: { description: '多实例', tools: ['godot_list_instances', 'godot_select_instance'], requires: [] },
 };
 
-/** 5 preset profiles. Each maps to an array of group names. */
+/** 6 preset profiles. Each maps to an array of group names. */
 export const PROFILES: Record<string, string[]> = {
   full:        Object.keys(TOOL_GROUPS),
   // BREAKING CHANGE: lite now uses group-based expansion (matches current LITE_TOOLS content)
   lite:        ['core', 'bridge', 'animation', 'audio', 'signal', 'visual', 'code', 'test', 'profiler'],
   minimal:     ['core'],
+  slim:        ['core'],
   bridge_dev:  ['core', 'bridge', 'profiler', 'test', 'recording'],
   '3d_dev':    ['core', 'animation', 'visual', 'physics', 'navigation', 'ik'],  // physics includes node_create_3d
 };

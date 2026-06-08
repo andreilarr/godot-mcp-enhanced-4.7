@@ -78,8 +78,8 @@ describe('tool-registry groups and profiles', () => {
   });
 
   describe('PROFILES', () => {
-    it('should define 5 profiles', () => {
-      expect(Object.keys(PROFILES)).toHaveLength(5);
+    it('should define 6 profiles', () => {
+      expect(Object.keys(PROFILES)).toHaveLength(6);
     });
 
     it('should have full profile include all 17 groups', () => {
