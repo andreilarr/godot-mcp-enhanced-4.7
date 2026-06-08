@@ -119,12 +119,16 @@ export function createElicitationMiddleware(
       const def = getToolDef(ctx.toolName);
       if (!def?.inputSchema) return { passed: true };
 
+
+      // Shallow-copy args to avoid mutating caller's object
+      const safeArgs = { ...ctx.args };
+      ctx.args = safeArgs;
       const schema = def.inputSchema as any;
       const required: string[] = schema.required ?? [];
       if (required.length === 0) return { passed: true };
 
       const missing = required.filter(name => {
-        const val = ctx.args[name];
+        const val = safeArgs[name];
         return val === undefined || val === null || val === '';
       });
       if (missing.length === 0) return { passed: true };
@@ -142,7 +146,7 @@ export function createElicitationMiddleware(
         const elicited = await elicitFn(primitiveMissing);
         if (elicited) {
           for (const [key, val] of Object.entries(elicited)) {
-            if (primitiveMissing.includes(key) && !(key in ctx.args)) ctx.args[key] = val;
+            if (primitiveMissing.includes(key) && !(key in safeArgs)) safeArgs[key] = val;
           }
           return { passed: true };
         }

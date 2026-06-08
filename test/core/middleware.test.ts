@@ -252,4 +252,30 @@ describe('elicitation middleware', () => {
     expect(ctx.args.project_path).toBe('/filled');
     expect(capturedMissing).toEqual(['project_path']);
   });
+
+  it('elicitation does not mutate original args object', async () => {
+    const toolDef = {
+      name: 'test_tool',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string' },
+          project_path: { type: 'string' },
+        },
+        required: ['action', 'project_path'],
+      },
+    };
+    const elicitFn = vi.fn().mockResolvedValue({ project_path: '/test' });
+    const mw = createElicitationMiddleware(() => toolDef as any, elicitFn);
+
+    const originalArgs = { action: 'ping' };
+    const ctx = { toolName: 'test_tool', args: originalArgs, startTime: Date.now(), phase: 'before' as const };
+
+    process.env.GODOT_MCP_ELICITATION = 'true';
+    await mw.before(ctx);
+    delete process.env.GODOT_MCP_ELICITATION;
+
+    expect(originalArgs).not.toHaveProperty('project_path');
+    expect(ctx.args).toHaveProperty('project_path', '/test');
+  });
 });
