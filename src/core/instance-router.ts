@@ -18,7 +18,9 @@ export interface RouterDependencies {
 export class InstanceRouter {
   private deps: RouterDependencies;
   private selectedId: string | null = null;
-  private switchLock: Promise<void> = Promise.resolve();
+  private inflightCount = 0;
+  private inflightZero: Promise<void> = Promise.resolve();
+  private inflightZeroResolve: (() => void) | null = null;
 
   constructor(deps: RouterDependencies) {
     this.deps = deps;
@@ -54,8 +56,13 @@ export class InstanceRouter {
     const inst = this.deps.instances.find(i => i.id === id);
     if (!inst) throw new Error(`Instance not found: ${id}`);
 
-    // Wait for in-flight requests to complete
-    await this.switchLock;
+    // Wait for all in-flight requests to complete
+    while (this.inflightCount > 0) {
+      this.inflightZero = new Promise<void>(resolve => {
+        this.inflightZeroResolve = resolve;
+      });
+      await this.inflightZero;
+    }
 
     const prev = this.selectedId;
     this.selectedId = id;
@@ -84,14 +91,15 @@ export class InstanceRouter {
       return 'Selected instance no longer available. Use godot_list_instances to discover.';
     }
 
-    // Create a new lock entry for this request
-    let releaseLock: () => void;
-    this.switchLock = new Promise<void>(resolve => { releaseLock = resolve; });
-
+    this.inflightCount++;
     try {
       return await this.deps.sendToInstance(instance, toolName, args);
     } finally {
-      releaseLock!();
+      this.inflightCount--;
+      if (this.inflightCount === 0 && this.inflightZeroResolve) {
+        this.inflightZeroResolve();
+        this.inflightZeroResolve = null;
+      }
     }
   }
 

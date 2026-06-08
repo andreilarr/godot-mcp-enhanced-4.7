@@ -112,5 +112,30 @@ describe('InstanceRouter', () => {
 
       expect(router.getSelectedId()).toBe('uuid-2');
     });
+
+    it('does not lose lock for concurrent requests during switch', async () => {
+      const inst1 = makeInstance({ id: 'uuid-1', port: 9081 });
+      const inst2 = makeInstance({ id: 'uuid-2', port: 9082 });
+      let resolveSend1: () => void;
+      let resolveSend2: () => void;
+      const mockSend = vi.fn()
+        .mockImplementationOnce(() => new Promise<void>(r => { resolveSend1 = r; }))
+        .mockImplementationOnce(() => new Promise<void>(r => { resolveSend2 = r; }));
+
+      const router = new InstanceRouter({ instances: [inst1, inst2], sendToInstance: mockSend });
+      await router.selectInstance('uuid-1');
+
+      const req1 = router.route('game_query', { action: 'ping' });
+      const req2 = router.route('game_query', { action: 'get_tree' });
+
+      const switchPromise = router.selectInstance('uuid-2');
+
+      resolveSend1!();
+      resolveSend2!();
+
+      await Promise.all([req1, req2, switchPromise]);
+      expect(router.getSelectedId()).toBe('uuid-2');
+    });
+
   });
 });
