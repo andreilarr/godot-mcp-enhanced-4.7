@@ -1,16 +1,16 @@
 // src/core/instance-manager.ts
 /**
- * InstanceManager — multi-instance discovery and registry management (Phase 2b)
+ * InstanceManager �?multi-instance discovery and registry management (Phase 2b)
  *
  * Discovers running Godot instances via:
  * 1. Machine-level registry: ~/.godot-mcp/instances/
  * 2. Project-level registry: {project}/.godot/mcp-instances/
  *
  * Each instance writes its own JSON file (no concurrent write contention).
- * Stale detection: lastSeen > staleTimeout → stale status.
+ * Stale detection: lastSeen > staleTimeout �?stale status.
  */
 
-import { readFileSync, readdirSync } from 'fs';
+import { readdir, readFile } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'os';
 
@@ -53,7 +53,7 @@ function parsePortRange(): [number, number] {
   if (!env) return [DEFAULT_PORT_START, DEFAULT_PORT_END];
   const parts = env.split('-').map(Number);
   if (parts.length === 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
-    return [parts[0], parts[1]];
+    return [parts[0]!, parts[1]!];
   }
   return [DEFAULT_PORT_START, DEFAULT_PORT_END];
 }
@@ -80,18 +80,18 @@ export class InstanceManager {
   }
 
   /** Load instances from both registry levels. Machine-level first, then project-level overrides. */
-  loadFromRegistry(): InstanceInfo[] {
+  async loadFromRegistry(): Promise<InstanceInfo[]> {
     const merged = new Map<string, InstanceInfo>();
 
     // Machine-level first
-    const machineInstances = this.readRegistryDir(this.registryDir);
+    const machineInstances = await this.readRegistryDir(this.registryDir);
     for (const inst of machineInstances) {
       merged.set(inst.id, inst);
     }
 
     // Project-level overrides (project wins on duplicate id)
     if (this.projectRegistryDir) {
-      const projectInstances = this.readRegistryDir(this.projectRegistryDir);
+      const projectInstances = await this.readRegistryDir(this.projectRegistryDir);
       for (const inst of projectInstances) {
         merged.set(inst.id, inst);
       }
@@ -120,14 +120,14 @@ export class InstanceManager {
   }
 
   /** Read instance JSON files from a directory. Corrupt/invalid files are skipped. */
-  private readRegistryDir(dir: string): InstanceInfo[] {
+  private async readRegistryDir(dir: string): Promise<InstanceInfo[]> {
     const results: InstanceInfo[] = [];
     try {
-      const files = readdirSync(dir);
+      const files = await readdir(dir);
       for (const file of files) {
         if (!file.endsWith('.json')) continue;
         try {
-          const content = readFileSync(join(dir, file), 'utf-8');
+          const content = await readFile(join(dir, file), 'utf-8');
           const parsed = JSON.parse(content);
           // Validate required fields
           if (parsed.id && parsed.port && parsed.projectPath) {
@@ -138,7 +138,7 @@ export class InstanceManager {
         }
       }
     } catch {
-      // Directory doesn't exist — return empty
+      // Directory doesn't exist �?return empty
     }
     return results;
   }
@@ -152,5 +152,5 @@ export function getMachineRegistryDir(): string {
 /** Convenience: discover all instances. Creates a temporary manager and runs discovery. */
 export async function discoverInstances(opts?: InstanceManagerOptions): Promise<InstanceInfo[]> {
   const manager = new InstanceManager(opts);
-  return manager.loadFromRegistry();
+  return await manager.loadFromRegistry();
 }

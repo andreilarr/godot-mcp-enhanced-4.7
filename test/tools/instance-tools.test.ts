@@ -13,7 +13,7 @@ const mockCtx = {} as ToolContext;
 
 function makeManager(instances: any[] = []): InstanceManager {
   return {
-    loadFromRegistry: vi.fn().mockReturnValue(instances),
+    loadFromRegistry: vi.fn().mockResolvedValue(instances),
     getInstance: vi.fn((id: string) => instances.find((i: any) => i.id === id)),
     getAllInstances: vi.fn().mockReturnValue(instances),
     getStatus: vi.fn().mockReturnValue('alive'),

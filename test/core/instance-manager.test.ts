@@ -45,7 +45,7 @@ describe('InstanceManager', () => {
   });
 
   describe('registry read/write', () => {
-    it('reads instances from machine-level registry', () => {
+    it('reads instances from machine-level registry', async () => {
       const manager = new InstanceManager({ registryDir: TMP });
       writeInstanceFile(TMP, {
         id: 'uuid-1',
@@ -58,12 +58,12 @@ describe('InstanceManager', () => {
         capabilities: [],
       });
 
-      const instances = manager.loadFromRegistry();
+      const instances = await manager.loadFromRegistry();
       expect(instances).toHaveLength(1);
       expect(instances[0].id).toBe('uuid-1');
     });
 
-    it('reads instances from project-level registry', () => {
+    it('reads instances from project-level registry', async () => {
       const projectDir = join(TMP, 'project');
       const manager = new InstanceManager({
         registryDir: TMP,
@@ -81,12 +81,12 @@ describe('InstanceManager', () => {
         capabilities: [],
       });
 
-      const instances = manager.loadFromRegistry();
+      const instances = await manager.loadFromRegistry();
       expect(instances).toHaveLength(1);
       expect(instances[0].id).toBe('uuid-proj-1');
     });
 
-    it('merges machine + project registries, dedup by id', () => {
+    it('merges machine + project registries, dedup by id', async () => {
       const projectDir = join(TMP, 'project');
       const manager = new InstanceManager({
         registryDir: TMP,
@@ -124,13 +124,13 @@ describe('InstanceManager', () => {
         capabilities: [],
       });
 
-      const instances = manager.loadFromRegistry();
+      const instances = await manager.loadFromRegistry();
       expect(instances).toHaveLength(2);
       const updated = instances.find(i => i.id === 'uuid-1');
       expect(updated?.godotVersion).toBe('4.5');
     });
 
-    it('handles corrupt JSON files gracefully', () => {
+    it('handles corrupt JSON files gracefully', async () => {
       mkdirSync(TMP, { recursive: true });
       writeFileSync(join(TMP, 'bad.json'), '{not valid json');
       writeFileSync(join(TMP, 'good.json'), JSON.stringify({
@@ -145,14 +145,14 @@ describe('InstanceManager', () => {
       }));
 
       const manager = new InstanceManager({ registryDir: TMP });
-      const instances = manager.loadFromRegistry();
+      const instances = await manager.loadFromRegistry();
       expect(instances).toHaveLength(1);
       expect(instances[0].id).toBe('uuid-good');
     });
 
-    it('handles missing registry directory gracefully', () => {
+    it('handles missing registry directory gracefully', async () => {
       const manager = new InstanceManager({ registryDir: join(TMP, 'nonexistent') });
-      const instances = manager.loadFromRegistry();
+      const instances = await manager.loadFromRegistry();
       expect(instances).toHaveLength(0);
     });
   });
@@ -205,4 +205,23 @@ describe('InstanceManager', () => {
       else delete process.env.GODOT_MCP_INSTANCE_PORT_RANGE;
     });
   });
+
+  describe('async loadFromRegistry', () => {
+    it('loadFromRegistry returns asynchronously', async () => {
+      const dir = join(tmpdir(), 'godot-mcp-test-async-' + Date.now());
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'inst1.json'), JSON.stringify({
+        id: 'async-1', port: 9081, projectPath: 'D:/a', projectName: 'a', pid: 1,
+        lastSeen: new Date().toISOString(), godotVersion: '4.4', capabilities: [],
+      }));
+
+      const mgr = new InstanceManager({ registryDir: dir });
+      const result = await mgr.loadFromRegistry();
+      expect(result).toHaveLength(1);
+      expect(result[0]!.id).toBe('async-1');
+
+      rmSync(dir, { recursive: true, force: true });
+    });
+  });
+
 });

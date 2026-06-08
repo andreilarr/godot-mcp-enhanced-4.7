@@ -139,27 +139,30 @@ export class GodotServer {
       return getPrompt(name, (promptArgs ?? {}) as Record<string, string>);
     });
 
-    // Phase 2b: Multi-instance initialization (gated by feature flag)
-    if (isFeatureEnabled('MULTI_INSTANCE')) {
-      const projectDir = ps.getProjectDir();
-      const manager = new InstanceManager({
-        projectRegistryDir: projectDir
-          ? join(projectDir, '.godot', 'mcp-instances')
-          : undefined,
-      });
-      const router = new InstanceRouter({
-        instances: manager.loadFromRegistry(),
-        sendToInstance: async () => ({
-          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Direct bridge routing not yet implemented' }) }],
-        }),
-      });
-      setInstanceManager(manager);
-      setInstanceRouter(router);
-      getLogger().info('instance', 'Multi-instance mode enabled');
-    }
+    // Phase 2b: Multi-instance initialization moved to initMultiInstance() (async fs)
   }
 
-  /** Send tools/list_changed notification to client. Called when active groups change. */
+  /** Phase 2b: Multi-instance initialization (async fs — C-02). */
+  private async initMultiInstance(): Promise<void> {
+    if (!isFeatureEnabled('MULTI_INSTANCE')) return;
+    const projectDir = ps.getProjectDir();
+    const manager = new InstanceManager({
+      projectRegistryDir: projectDir
+        ? join(projectDir, '.godot', 'mcp-instances')
+        : undefined,
+    });
+    const router = new InstanceRouter({
+      instances: await manager.loadFromRegistry(),
+      sendToInstance: async () => ({
+        content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Direct bridge routing not yet implemented' }) }],
+      }),
+    });
+    setInstanceManager(manager);
+    setInstanceRouter(router);
+    getLogger().info('instance', 'Multi-instance mode enabled');
+  }
+
+    /** Send tools/list_changed notification to client. Called when active groups change. */
   sendToolListChanged(): void {
     this.server.notification({
       method: 'notifications/tools/list_changed',
@@ -212,6 +215,9 @@ export class GodotServer {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     log('Godot MCP Enhanced server running on stdio');
+
+    // Phase 2b: Multi-instance initialization (async fs — C-02)
+    await this.initMultiInstance();
 
     // Phase 5d: Project context notification
     setImmediate(() => {

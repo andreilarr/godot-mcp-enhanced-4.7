@@ -37,7 +37,7 @@ export function getToolDefinitions(): Tool[] {
         type: 'object' as const,
         properties: {},
       },
-      annotations: { tags: ['group:multi_instance'] },
+      annotations: { tags: ['group:multi_instance'] } as any,
     },
     {
       name: 'godot_select_instance',
@@ -56,7 +56,7 @@ export function getToolDefinitions(): Tool[] {
         },
         required: [],
       },
-      annotations: { tags: ['group:multi_instance'] },
+      annotations: { tags: ['group:multi_instance'] } as any,
     },
   ];
 }
@@ -73,12 +73,12 @@ export async function handleTool(
   return null;
 }
 
-function handleListInstances(): ToolResult {
+async function handleListInstances(): Promise<ToolResult> {
   if (!_manager) {
     return textResult(JSON.stringify(opsError('NOT_INITIALIZED', 'InstanceManager not initialized. Set GODOT_MCP_MULTI_INSTANCE=true.')));
   }
 
-  const instances = _manager.loadFromRegistry();
+  const instances = await _manager.loadFromRegistry();
   const list = instances.map(inst => ({
     id: inst.id,
     projectPath: inst.projectPath,
@@ -110,7 +110,7 @@ async function handleSelectInstance(args: Record<string, unknown>): Promise<Tool
   }
 
   // Refresh instances before selection
-  _manager.loadFromRegistry();
+  await _manager.loadFromRegistry();
   const instances = _manager.getAllInstances();
 
   let targetId = instanceId;
