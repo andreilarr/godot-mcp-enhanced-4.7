@@ -134,6 +134,9 @@ export function createElicitationMiddleware(
       if (missing.length === 0) return { passed: true };
 
       const props = schema.properties ?? {};
+      // Note: enum-typed params (type:'string' + enum:[...]) are already covered by this
+      // check since their base type is 'string'. However, oneOf/anyOf compound types are
+      // NOT supported — elicitation skips them to avoid complex schema resolution.
       const primitiveMissing = missing.filter(name => {
         const prop = props[name];
         if (!prop) return false;

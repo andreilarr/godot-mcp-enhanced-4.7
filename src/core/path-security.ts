@@ -15,7 +15,7 @@ const DEFAULT_ALLOWED_ROOTS = ['res://', 'user://'];
 
 // Note: colon (:) excluded — "res://", "user://", "D:/" all use it.
 // Path traversal and prefix whitelist handle the remaining security.
-const ILLEGAL_CHARS = /[<>|"|?*\x00-\x1f]/;
+const ILLEGAL_CHARS = /[<>|"?*\x00-\x1f]/;
 const TRAVERSAL_PATTERN = /\.\./;
 
 /** Get combined allowed roots: defaults + env var + opts */

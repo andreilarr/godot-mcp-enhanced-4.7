@@ -22,11 +22,15 @@ export function isFeatureEnabled(key: FeatureKey): boolean {
   return envVal.toLowerCase() === 'true';
 }
 
-/** Get all feature flags with their current values. */
+let flagsCache: Record<FeatureKey, boolean> | null = null;
+
+/** Get all feature flags with their current values. Result is cached (flags don't change at runtime). */
 export function getAllFeatureFlags(): Record<FeatureKey, boolean> {
+  if (flagsCache) return flagsCache;
   const result = {} as Record<FeatureKey, boolean>;
   for (const key of Object.keys(FEATURES) as FeatureKey[]) {
     result[key] = isFeatureEnabled(key);
   }
-  return result;
+  flagsCache = result;
+  return flagsCache;
 }

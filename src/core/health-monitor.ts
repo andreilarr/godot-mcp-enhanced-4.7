@@ -286,7 +286,8 @@ function avg(nums: number[]): number {
   return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 
+const RETRIABLE_TYPES = new Set(['timeout', 'connection_reset', 'heartbeat', 'ECONNREFUSED', 'ECONNRESET']);
+
 function isRetriable(errorType: string): boolean {
-  const retriableTypes = ['timeout', 'connection_reset', 'heartbeat', 'ECONNREFUSED', 'ECONNRESET'];
-  return retriableTypes.includes(errorType);
+  return RETRIABLE_TYPES.has(errorType);
 }

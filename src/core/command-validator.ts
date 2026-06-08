@@ -29,6 +29,8 @@ const DANGEROUS_APIS: Array<{ pattern: RegExp; label: string; priority: number }
  */
 export function validateGdscriptCommand(code: string): ValidationResult {
   if (!code || code.trim().length === 0) {
+    // No code to validate — this represents "nothing to check", not "empty code is safe to execute".
+    // The caller should treat safe:true + no reason as "validation skipped (no input)".
     return { safe: true };
   }
 
