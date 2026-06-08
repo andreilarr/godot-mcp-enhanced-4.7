@@ -120,24 +120,32 @@ export function clearRegistry(): void {
 
 // ─── Tool groups ─────────────────────────────────────────────────────────────
 
+/** Tool group definition with connection requirements and protection. */
+export interface ToolGroupDef {
+  description: string;
+  tools: string[];
+  requires: ('bridge' | 'editor' | 'headless')[];
+  protected?: boolean;
+}
+
 /** 16 tool groups for fine-grained profile configuration. */
-export const TOOL_GROUPS: Record<string, string[]> = {
-  core:       ['project', 'scene', 'script', 'runtime', 'validation', 'confirm_and_execute'],
-  editor:     ['editor'],
-  bridge:     ['game'],
-  animation:  ['animation', 'animtree', 'animation_track'],
-  audio:      ['audio'],
-  visual:     ['material', 'screenshot', 'particles'],
-  physics:    ['physics', 'node_create_3d'],
-  navigation: ['nav'],
-  ui:         ['ui'],
-  tilemap:    ['tilemap', 'scene_commit'],
-  signal:     ['signal'],
-  profiler:   ['profiler', 'workflow'],
-  test:       ['test', 'verify_delivery'],
-  code:       ['docs', 'templates', 'batch', 'game_design'],
-  ik:         ['ik'],
-  recording:  ['recording'],
+export const TOOL_GROUPS: Record<string, ToolGroupDef> = {
+  core:       { description: '核心工具', tools: ['project', 'scene', 'script', 'runtime', 'validation', 'confirm_and_execute'], requires: [], protected: true },
+  editor:     { description: '编辑器', tools: ['editor'], requires: ['editor'] },
+  bridge:     { description: 'Game Bridge', tools: ['game'], requires: ['bridge'] },
+  animation:  { description: '动画系统', tools: ['animation', 'animtree', 'animation_track'], requires: [] },
+  audio:      { description: '音频', tools: ['audio'], requires: [] },
+  visual:     { description: '视觉', tools: ['material', 'screenshot', 'particles'], requires: [] },
+  physics:    { description: '物理/导航', tools: ['physics', 'node_create_3d'], requires: [] },
+  navigation: { description: '导航', tools: ['nav'], requires: [] },
+  ui:         { description: 'UI', tools: ['ui'], requires: [] },
+  tilemap:    { description: 'TileMap', tools: ['tilemap', 'scene_commit'], requires: [] },
+  signal:     { description: '信号', tools: ['signal'], requires: [] },
+  profiler:   { description: '性能分析', tools: ['profiler', 'workflow'], requires: [] },
+  test:       { description: '测试', tools: ['test', 'verify_delivery'], requires: [] },
+  code:       { description: '代码工具', tools: ['docs', 'templates', 'batch', 'game_design'], requires: [] },
+  ik:         { description: 'IK', tools: ['ik'], requires: [] },
+  recording:  { description: '录制', tools: ['recording'], requires: ['bridge'] },
 };
 
 /** 5 preset profiles. Each maps to an array of group names. */
@@ -154,9 +162,9 @@ export const PROFILES: Record<string, string[]> = {
 export function expandGroups(groups: string[]): Set<string> {
   const tools = new Set<string>();
   for (const g of groups) {
-    const groupTools = TOOL_GROUPS[g];
-    if (groupTools) {
-      for (const t of groupTools) tools.add(t);
+    const groupDef = TOOL_GROUPS[g];
+    if (groupDef) {
+      for (const t of groupDef.tools) tools.add(t);
     }
   }
   return tools;

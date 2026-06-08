@@ -15,63 +15,63 @@ describe('tool-registry groups and profiles', () => {
     });
 
     it('should have each group contain valid tool names as non-empty string arrays', () => {
-      for (const [name, tools] of Object.entries(TOOL_GROUPS)) {
-        expect(Array.isArray(tools), `Group ${name} should be array`).toBe(true);
-        expect(tools.length, `Group ${name} should not be empty`).toBeGreaterThan(0);
-        for (const t of tools) {
+      for (const [name, group] of Object.entries(TOOL_GROUPS)) {
+        expect(Array.isArray(group.tools), `Group ${name} should have tools array`).toBe(true);
+        expect(group.tools.length, `Group ${name} should not be empty`).toBeGreaterThan(0);
+        for (const t of group.tools) {
           expect(typeof t, `Tool in ${name} should be string`).toBe('string');
         }
       }
     });
 
     it('should have core group with essential tools', () => {
-      expect(TOOL_GROUPS.core).toContain('project');
-      expect(TOOL_GROUPS.core).toContain('scene');
-      expect(TOOL_GROUPS.core).toContain('script');
-      expect(TOOL_GROUPS.core).toContain('runtime');
-      expect(TOOL_GROUPS.core).toContain('validation');
-      expect(TOOL_GROUPS.core).toContain('confirm_and_execute');
+      expect(TOOL_GROUPS.core.tools).toContain('project');
+      expect(TOOL_GROUPS.core.tools).toContain('scene');
+      expect(TOOL_GROUPS.core.tools).toContain('script');
+      expect(TOOL_GROUPS.core.tools).toContain('runtime');
+      expect(TOOL_GROUPS.core.tools).toContain('validation');
+      expect(TOOL_GROUPS.core.tools).toContain('confirm_and_execute');
     });
 
     it('should have bridge group with game tool', () => {
-      expect(TOOL_GROUPS.bridge).toContain('game');
+      expect(TOOL_GROUPS.bridge.tools).toContain('game');
     });
 
     it('should have visual group with material+screenshot+particles', () => {
-      expect(TOOL_GROUPS.visual).toContain('material');
-      expect(TOOL_GROUPS.visual).toContain('screenshot');
-      expect(TOOL_GROUPS.visual).toContain('particles');
+      expect(TOOL_GROUPS.visual.tools).toContain('material');
+      expect(TOOL_GROUPS.visual.tools).toContain('screenshot');
+      expect(TOOL_GROUPS.visual.tools).toContain('particles');
     });
 
     it('should have physics group with physics+node_create_3d', () => {
-      expect(TOOL_GROUPS.physics).toContain('physics');
-      expect(TOOL_GROUPS.physics).toContain('node_create_3d');
+      expect(TOOL_GROUPS.physics.tools).toContain('physics');
+      expect(TOOL_GROUPS.physics.tools).toContain('node_create_3d');
     });
 
     it('should have navigation group with nav (not navigation)', () => {
-      expect(TOOL_GROUPS.navigation).toContain('nav');
+      expect(TOOL_GROUPS.navigation.tools).toContain('nav');
     });
 
     it('should have test group with test+verify_delivery', () => {
-      expect(TOOL_GROUPS.test).toContain('test');
-      expect(TOOL_GROUPS.test).toContain('verify_delivery');
+      expect(TOOL_GROUPS.test.tools).toContain('test');
+      expect(TOOL_GROUPS.test.tools).toContain('verify_delivery');
     });
 
     it('should have code group with docs+templates+batch+game_design', () => {
-      expect(TOOL_GROUPS.code).toContain('docs');
-      expect(TOOL_GROUPS.code).toContain('templates');
-      expect(TOOL_GROUPS.code).toContain('batch');
-      expect(TOOL_GROUPS.code).toContain('game_design');
+      expect(TOOL_GROUPS.code.tools).toContain('docs');
+      expect(TOOL_GROUPS.code.tools).toContain('templates');
+      expect(TOOL_GROUPS.code.tools).toContain('batch');
+      expect(TOOL_GROUPS.code.tools).toContain('game_design');
     });
 
     it('should have animation group with animation+animtree+animation_track', () => {
-      expect(TOOL_GROUPS.animation).toContain('animation');
-      expect(TOOL_GROUPS.animation).toContain('animtree');
-      expect(TOOL_GROUPS.animation).toContain('animation_track');
+      expect(TOOL_GROUPS.animation.tools).toContain('animation');
+      expect(TOOL_GROUPS.animation.tools).toContain('animtree');
+      expect(TOOL_GROUPS.animation.tools).toContain('animation_track');
     });
 
     it('should not have overlapping tool names across groups', () => {
-      const allTools = Object.values(TOOL_GROUPS).flat();
+      const allTools = Object.values(TOOL_GROUPS).flatMap(g => g.tools);
       const uniqueTools = [...new Set(allTools)];
       expect(allTools.length, 'No duplicate tool names across groups').toBe(uniqueTools.length);
     });
@@ -136,7 +136,7 @@ describe('tool-registry groups and profiles', () => {
 
     it('should resolve full profile to all tools', () => {
       const tools = resolveProfile('full');
-      const allGroupTools = Object.values(TOOL_GROUPS).flat();
+      const allGroupTools = Object.values(TOOL_GROUPS).flatMap(g => g.tools);
       expect(tools.size).toBe(allGroupTools.length);
     });
 
