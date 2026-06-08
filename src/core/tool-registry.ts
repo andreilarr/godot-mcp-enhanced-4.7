@@ -182,6 +182,58 @@ export function resolveProfile(profile: string): Set<string> {
   return expandGroups(groups);
 }
 
+// ─── Active groups (connection-level, not persisted) ──────────────────────────
+
+/** Currently active tool groups. Copy-on-write for read consistency. */
+let activeGroups: Set<string> = new Set(Object.keys(TOOL_GROUPS));
+
+/** Reverse mapping: tool name → group name. Built once from TOOL_GROUPS. */
+const toolToGroup = new Map<string, string>();
+for (const [group, def] of Object.entries(TOOL_GROUPS)) {
+  for (const tool of def.tools) {
+    toolToGroup.set(tool, group);
+  }
+}
+
+/** Tools that are always allowed regardless of group state. */
+const ALWAYS_ALLOWED = new Set(['manage_tools', 'confirm_and_execute', 'godot_advanced_tool']);
+
+/** Set active groups (copy-on-write). Returns previous set for comparison. */
+export function setActiveGroups(groups: Set<string>): Set<string> {
+  const prev = activeGroups;
+  activeGroups = new Set(groups); // Copy-on-write
+  return prev;
+}
+
+/** Get current active groups (read-only snapshot). */
+export function getActiveGroups(): ReadonlySet<string> {
+  return activeGroups;
+}
+
+/** Initialize active groups from a profile name. */
+export function initActiveGroupsFromProfile(profile: string): void {
+  const groups = PROFILES[profile];
+  if (groups) {
+    activeGroups = new Set(groups);
+  } else {
+    const parsed = profile.split(',').map(g => g.trim()).filter(Boolean);
+    activeGroups = new Set(parsed.length > 0 ? parsed : Object.keys(TOOL_GROUPS));
+  }
+}
+
+/** Check if a tool is allowed under current active groups. */
+export function isToolAllowed(toolName: string): boolean {
+  if (ALWAYS_ALLOWED.has(toolName)) return true;
+  const group = toolToGroup.get(toolName);
+  if (!group) return false; // Unknown tool
+  return activeGroups.has(group);
+}
+
+/** Get the group name for a tool. Returns undefined if tool not in any group. */
+export function getGroupForTool(toolName: string): string | undefined {
+  return toolToGroup.get(toolName);
+}
+
 // ─── Mode filters ────────────────────────────────────────────────────────────
 
 // LITE/MINIMAL mode tool sets — now derived from PROFILES to avoid manual drift.

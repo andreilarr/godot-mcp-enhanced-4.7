@@ -5,6 +5,10 @@ import {
   PROFILES,
   expandGroups,
   resolveProfile,
+  setActiveGroups,
+  getActiveGroups,
+  isToolAllowed,
+  getGroupForTool,
 } from '../../src/core/tool-registry.js';
 
 describe('TOOL_GROUPS enhanced', () => {
@@ -34,5 +38,58 @@ describe('TOOL_GROUPS enhanced', () => {
 
   it('editor group requires editor connection', () => {
     expect(TOOL_GROUPS.editor.requires).toContain('editor');
+  });
+});
+
+describe('activeGroups management', () => {
+  beforeEach(() => {
+    // 重置为 full profile
+    setActiveGroups(new Set(Object.keys(TOOL_GROUPS)));
+  });
+
+  it('getActiveGroups returns current active groups', () => {
+    const groups = getActiveGroups();
+    expect(groups.size).toBe(Object.keys(TOOL_GROUPS).length);
+  });
+
+  it('setActiveGroups updates active groups', () => {
+    setActiveGroups(new Set(['core', 'animation']));
+    const groups = getActiveGroups();
+    expect(groups.has('core')).toBe(true);
+    expect(groups.has('animation')).toBe(true);
+    expect(groups.has('bridge')).toBe(false);
+  });
+
+  it('isToolAllowed returns true for tools in active groups', () => {
+    setActiveGroups(new Set(['core', 'animation']));
+    expect(isToolAllowed('animation')).toBe(true);
+    expect(isToolAllowed('animtree')).toBe(true);
+  });
+
+  it('isToolAllowed returns false for tools in inactive groups', () => {
+    setActiveGroups(new Set(['core']));
+    expect(isToolAllowed('game')).toBe(false);
+  });
+
+  it('isToolAllowed always returns true for manage_tools', () => {
+    setActiveGroups(new Set());
+    expect(isToolAllowed('manage_tools')).toBe(true);
+  });
+
+  it('isToolAllowed always returns true for confirm_and_execute', () => {
+    setActiveGroups(new Set());
+    expect(isToolAllowed('confirm_and_execute')).toBe(true);
+  });
+});
+
+describe('toolToGroup reverse mapping', () => {
+  it('getGroupForTool returns group name for a tool', () => {
+    expect(getGroupForTool('animation')).toBe('animation');
+    expect(getGroupForTool('game')).toBe('bridge');
+    expect(getGroupForTool('project')).toBe('core');
+  });
+
+  it('getGroupForTool returns undefined for unknown tool', () => {
+    expect(getGroupForTool('nonexistent_tool')).toBeUndefined();
   });
 });
