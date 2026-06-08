@@ -92,7 +92,6 @@ export class ReconnectionManager {
       return;
     }
 
-    let succeeded = false;
     try {
       // We handle the promise manually to avoid unhandled rejection
       connectFn()

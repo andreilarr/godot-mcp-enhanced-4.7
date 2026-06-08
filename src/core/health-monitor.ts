@@ -258,7 +258,12 @@ export class HealthMonitor {
       try {
         const ok = await this.pingFn();
         if (ok) {
-          this.recordSuccess(0); // heartbeat ping, no meaningful response time
+          // Heartbeat success: restore state without polluting response-time stats
+          this.totalRequests++;
+          this.totalSuccesses++;
+          this.consecutiveFails = 0;
+          this.pushRecentFlag(true);
+          if (this.state !== 'connected') this.setState('connected');
         } else {
           this.recordFailure('heartbeat', 'Ping returned false', 'heartbeat');
         }

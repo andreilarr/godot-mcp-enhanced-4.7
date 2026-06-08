@@ -216,13 +216,17 @@ export class GodotServer {
     // Phase 5d: Project context notification
     setImmediate(() => {
       try {
-        this.server.notification({
+        const maybePromise = this.server.notification({
           method: 'notifications/message',
           params: {
             level: 'info',
             data: '[Godot MCP] Project context available at godot://project-context. Read it for coding guidelines and architecture notes.',
           },
         });
+        // Handle both sync and async notification returns
+        if (maybePromise && typeof (maybePromise as any).catch === 'function') {
+          (maybePromise as any).catch(() => {});
+        }
       } catch { /* best-effort */ }
     });
 

@@ -134,8 +134,7 @@ export function createElicitationMiddleware(
         const prop = props[name];
         if (!prop) return false;
         const type = prop.type;
-        return type === 'string' || type === 'number' || type === 'boolean' ||
-          (type === 'string' && prop.enum);
+        return type === 'string' || type === 'number' || type === 'boolean';
       });
       if (primitiveMissing.length === 0) return { passed: true };
 
@@ -143,7 +142,7 @@ export function createElicitationMiddleware(
         const elicited = await elicitFn(primitiveMissing);
         if (elicited) {
           for (const [key, val] of Object.entries(elicited)) {
-            if (!(key in ctx.args)) ctx.args[key] = val;
+            if (primitiveMissing.includes(key) && !(key in ctx.args)) ctx.args[key] = val;
           }
           return { passed: true };
         }

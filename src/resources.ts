@@ -7,6 +7,7 @@ import { existsSync, readFileSync, statSync } from 'fs';
 import { resolve, join, extname, sep, basename } from 'path';
 import { parseTscnSummary } from './tscn-parser.js';
 import { parseConfigValue, safeRealPath, scanFiles, iterativeDecode, isPathInAllowedRoots, resolveWithinRoot } from './helpers.js';
+import { getActiveGroups, TOOL_GROUPS } from './core/tool-registry.js';
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB — reject files larger than this
 
@@ -555,9 +556,8 @@ export async function readResource(uri: string, projectPath: string | undefined)
     case 'health':
       return { uri, mimeType: 'application/json', text: JSON.stringify({ status: 'available', hint: 'Health data populated at runtime' }) };
     case 'tool-groups': {
-      const { getActiveGroups: getGroups, TOOL_GROUPS: groups } = await import('./core/tool-registry.js');
-      const active = getGroups();
-      const result = Object.entries(groups).map(([name, def]) => ({
+      const active = getActiveGroups();
+      const result = Object.entries(TOOL_GROUPS).map(([name, def]) => ({
         name,
         description: def.description,
         active: active.has(name),
