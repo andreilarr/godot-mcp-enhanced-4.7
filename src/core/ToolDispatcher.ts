@@ -1,9 +1,11 @@
 // src/core/ToolDispatcher.ts
-import type { ToolResult, ToolContext } from '../types.js';
+import type { ToolResult, ToolContext, DispatchContext, Middleware } from '../types.js';
 import type { ChildProcess } from 'child_process';
 import type { ReadOnlyGuard } from './ReadOnlyGuard.js';
 import type { EditorToolExecutor } from './EditorToolExecutor.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { executeMiddleware } from './middleware.js';
+import { HealthMonitor } from './health-monitor.js';
 import {
   requiresConfirmation,
   createPendingToken,
@@ -55,6 +57,7 @@ export class ToolDispatcher {
   private readonly ctx: ToolContext;
   private _editorFallback = false;
   private _editorFallbackWarned = false;
+  private healthMonitor: HealthMonitor;
 
   /** Deferred mode switch — applied at the start of the next handleCall. Prevents
    *  editor disconnect callbacks from switching mode mid-request (C-01). */
@@ -84,6 +87,9 @@ export class ToolDispatcher {
     // 注册内联工具的元数据（confirm_and_execute 不属于任何 ToolModule）
     registerInlineTool('confirm_and_execute', { readonly: true, long_running: false });
 
+    // Health monitor for middleware pipeline
+    this.healthMonitor = new HealthMonitor();
+
     // Phase 3a: Wire proxy delegate through handleCall for full middleware chain
     // (ReadOnlyGuard, path validation, confirmation tokens, etc.)
     setToolCallDelegate(async (targetTool, toolArgs) => {
@@ -93,6 +99,10 @@ export class ToolDispatcher {
       }
       return this.handleCall({ params: { name: targetTool, arguments: toolArgs } });
     });
+  }
+
+  getHealthMonitor(): HealthMonitor {
+    return this.healthMonitor;
   }
 
   getFilteredTools(): Tool[] {
@@ -154,13 +164,21 @@ export class ToolDispatcher {
   }
 
   async handleCall(request: { params: { name: string; arguments?: Record<string, unknown> } }): Promise<ToolResult> {
-    // Apply deferred mode switch before processing (C-01: prevents mid-request mode changes)
+    // Apply deferred mode switch before processing
     this._applyPendingModeSwitch();
 
     const { name, arguments: rawArgs } = request.params;
     const startTime = Date.now();
     const args = this.normalizeArgs(rawArgs);
 
+    const ctx: DispatchContext = { toolName: name, args, startTime, phase: 'before' };
+
+    return executeMiddleware(this.buildMiddleware(), ctx, async () => {
+      return this.executeToolCall(name, args, startTime);
+    });
+  }
+
+  private async executeToolCall(name: string, args: Record<string, unknown>, startTime: number): Promise<ToolResult> {
     // Snapshot current mode + executor for consistent routing throughout this call
     const currentMode = this.connectionMode;
     const currentExecutor = this.editorExecutor;
@@ -267,6 +285,30 @@ export class ToolDispatcher {
       log('Tool error:', name, msg);
       return opsErrorResult('TOOL_ERROR', msg);
     }
+  }
+
+  private buildMiddleware(): Middleware[] {
+    const mw: Middleware[] = [];
+
+    // Health sample middleware (after hook — runs on both success and failure)
+    mw.push({
+      name: 'healthSample',
+      before: async () => ({ passed: true }),
+      after: async (ctx, result) => {
+        const duration = Date.now() - ctx.startTime;
+        const isError = result.isError === true ||
+          (result.content?.[0] && typeof (result.content[0] as any).text === 'string' &&
+           (result.content[0] as any).text.includes('"success":false'));
+        if (isError) {
+          this.healthMonitor.recordFailure('TOOL_ERROR', `Tool ${ctx.toolName} failed`);
+        } else {
+          this.healthMonitor.recordSuccess(duration);
+        }
+        return result;
+      },
+    });
+
+    return mw;
   }
 
   /** Schedule a connection mode change. Applied at the start of the next handleCall
