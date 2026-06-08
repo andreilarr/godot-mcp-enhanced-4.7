@@ -154,6 +154,26 @@ describe('trimToArrayLimit', () => {
     const arr = [1, 2, 3];
     expect(trimToArrayLimit(arr, 100)).toBe(arr);
   });
+
+  it('uses sampling estimation — completes fast on large arrays', () => {
+    const largeArray = Array.from({ length: 50000 }, (_, i) => ({
+      name: `node_${i}`,
+      type: 'Node3D',
+      properties: { position: { x: i, y: 0, z: 0 } },
+    }));
+    const data = { nodes: largeArray, count: largeArray.length };
+
+    const start = Date.now();
+    const result = trimToArrayLimit(data, 100_000);
+    const elapsed = Date.now() - start;
+
+    expect(elapsed).toBeLessThan(500);
+    if (result && typeof result === 'object') {
+      const obj = result as Record<string, unknown>;
+      expect(obj.nodes_truncatedAt).toBeDefined();
+      expect(obj.nodes_totalNodeCount).toBe(50000);
+    }
+  });
 });
 
 // ─── truncateResponse ─────────────────────────────────────────────────────────

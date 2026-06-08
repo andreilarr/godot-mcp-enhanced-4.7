@@ -40,11 +40,14 @@ export function decodeCursor(cursor: string): CursorData | null {
 // ─── Array trimming ──────────────────────────────────────────────────────────
 
 /**
- * Find the largest array in `data`, binary-search for the max item count
- * that fits within `limitBytes`, and return a trimmed copy.
+ * Find the largest array in `data`, estimate the max item count via sampling,
+ * refine with limited binary search (max 5 iterations), and return a trimmed copy.
  *
  * Non-array fields are preserved. The trimmed array gets `truncatedAt` and
  * `totalNodeCount` metadata appended.
+ *
+ * Sampling estimation avoids the O(n log n) serialization cost of pure binary
+ * search on large arrays (~14 iterations x 4MB = ~56MB overhead).
  */
 export function trimToArrayLimit(data: unknown, limitBytes: number): unknown {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
@@ -65,21 +68,57 @@ export function trimToArrayLimit(data: unknown, limitBytes: number): unknown {
   }
 
   if (largestKey === null || largestLen === 0) {
-    return data; // nothing to trim
+    return data;
   }
 
   const originalArray = obj[largestKey] as unknown[];
 
-  // Binary search for the largest slice that fits
-  let lo = 0;
-  let hi = originalArray.length;
-  let best = originalArray.length;
+  // Collect non-array fields once
+  const nonArrayFields: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (key !== largestKey) nonArrayFields[key] = val;
+  }
 
-  while (lo <= hi) {
+  // Sampling estimation: estimate per-item size from first N items
+  const sampleSize = Math.min(100, originalArray.length);
+  const sample = originalArray.slice(0, sampleSize);
+  const sampleObj = { ...nonArrayFields, [largestKey]: sample };
+  const sampleBytes = Buffer.byteLength(JSON.stringify(sampleObj), 'utf-8');
+  const nonArrayBytes = Buffer.byteLength(JSON.stringify(nonArrayFields), 'utf-8');
+  const sampleArrayBytes = sampleBytes - nonArrayBytes;
+  const estimatedItemSize = sampleArrayBytes / sampleSize;
+  const budgetBytes = limitBytes - nonArrayBytes;
+
+  // Estimate how many items fit
+  let estimatedFit = estimatedItemSize > 0
+    ? Math.floor(budgetBytes / estimatedItemSize)
+    : originalArray.length;
+
+  // Clamp
+  if (estimatedFit >= originalArray.length) return data;
+  if (estimatedFit < 0) estimatedFit = 0;
+
+  // Refine with limited binary search (max 5 iterations)
+  let lo: number;
+  let hi: number;
+  let best = estimatedFit;
+
+  // First verify the estimate itself
+  const probeEstimate = { ...nonArrayFields, [largestKey]: originalArray.slice(0, estimatedFit) };
+  if (Buffer.byteLength(JSON.stringify(probeEstimate), 'utf-8') <= limitBytes) {
+    lo = estimatedFit;
+    hi = originalArray.length;
+    best = estimatedFit;
+  } else {
+    lo = 0;
+    hi = estimatedFit;
+    best = 0;
+  }
+
+  for (let i = 0; i < 5 && lo <= hi; i++) {
     const mid = Math.floor((lo + hi) / 2);
-    const trimmed = { ...obj, [largestKey]: originalArray.slice(0, mid) };
-    const size = Buffer.byteLength(JSON.stringify(trimmed), 'utf-8');
-    if (size <= limitBytes) {
+    const probe = { ...nonArrayFields, [largestKey]: originalArray.slice(0, mid) };
+    if (Buffer.byteLength(JSON.stringify(probe), 'utf-8') <= limitBytes) {
       best = mid;
       lo = mid + 1;
     } else {
@@ -87,26 +126,13 @@ export function trimToArrayLimit(data: unknown, limitBytes: number): unknown {
     }
   }
 
-  // If trimming didn't help (best is full array), return as-is
-  if (best >= originalArray.length) {
-    return data;
-  }
+  if (best >= originalArray.length) return data;
 
-  // Build trimmed result preserving non-array fields
-  const result: Record<string, unknown> = {};
-  for (const [key, val] of Object.entries(obj)) {
-    if (key === largestKey) {
-      result[key] = originalArray.slice(0, best);
-    } else {
-      result[key] = val;
-    }
-  }
-
-  // Add truncation metadata
-  result[largestKey] = (result[largestKey] as unknown[]).concat([]);
-  // Store metadata as extra keys on the trimmed array's parent
-  (result as Record<string, unknown>)[`${largestKey}_truncatedAt`] = best;
-  (result as Record<string, unknown>)[`${largestKey}_totalNodeCount`] = originalArray.length;
+  // Build result
+  const result: Record<string, unknown> = { ...nonArrayFields };
+  result[largestKey] = originalArray.slice(0, best);
+  result[`${largestKey}_truncatedAt`] = best;
+  result[`${largestKey}_totalNodeCount`] = originalArray.length;
 
   return result;
 }
