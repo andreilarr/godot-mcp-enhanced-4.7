@@ -545,6 +545,20 @@ describe('genThemeSetPropertyScript', () => {
     expect(() => genThemeSetPropertyScript('/project', '/root/Panel', 'color', 'bg', 'not-array')).toThrow(/array/);
   });
 
+  it('parses stringified color array [r,g,b]', () => {
+    const script = genThemeSetPropertyScript('/project', '/root/Panel', 'color', 'bg', '[0.2, 0.3, 0.4]');
+    expect(script).toContain('Color(0.2, 0.3, 0.4, 1)');
+  });
+
+  it('parses stringified color array [r,g,b,a]', () => {
+    const script = genThemeSetPropertyScript('/project', '/root/Panel', 'color', 'bg', '[1, 0.5, 0, 0.8]');
+    expect(script).toContain('Color(1, 0.5, 0, 0.8)');
+  });
+
+  it('throws for unparseable string color', () => {
+    expect(() => genThemeSetPropertyScript('/project', '/root/Panel', 'color', 'bg', 'not-json')).toThrow(/array/);
+  });
+
   it('includes scene loading when scene_path provided', () => {
     const script = genThemeSetPropertyScript('/project', '/root/Panel', 'constant', 'sep', 4, undefined, '/scene.tscn');
     expect(script.includes('_mcp_load_scene("/scene.tscn")')).toBeTruthy();
