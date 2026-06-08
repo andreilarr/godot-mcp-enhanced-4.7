@@ -5,6 +5,8 @@
 import { getLogger } from './logger.js';
 import { errorResult } from '../types.js';
 import type { DispatchContext, Middleware, MiddlewareResult, ToolResult } from '../types.js';
+import { isFeatureEnabled } from './feature-flags.js';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 // ─── Pipeline Executor ────────────────────────────────────────────────────────
 
@@ -21,7 +23,7 @@ export async function executeMiddleware(
   ctx: DispatchContext,
   executeTool: () => Promise<ToolResult>,
 ): Promise<ToolResult> {
-  let result: ToolResult;
+  let result: ToolResult = errorResult('No middleware result');
   let rejected = false;
 
   // ── Phase 1: Before hooks ───────────────────────────────────────────────────
@@ -92,6 +94,72 @@ export function createConnectionCheckMiddleware(
         };
       }
       return { passed: true };
+    },
+  };
+}
+
+// ─── Elicitation Middleware Factory ────────────────────────────────────────────
+
+/**
+ * Create an elicitation middleware.
+ * Checks required params vs provided args. If missing and client supports
+ * elicitation, asks the client. Otherwise returns MISSING_PARAM error.
+ * Only prompts for primitive types (string/number/boolean/enum).
+ */
+export function createElicitationMiddleware(
+  getToolDef: (name: string) => Tool | null,
+  elicitFn: ((params: string[]) => Promise<Record<string, string> | null>) | null,
+): Middleware {
+  return {
+    name: 'elicitation',
+
+    before: async (ctx) => {
+      if (!isFeatureEnabled('ELICITATION')) return { passed: true };
+
+      const def = getToolDef(ctx.toolName);
+      if (!def?.inputSchema) return { passed: true };
+
+      const schema = def.inputSchema as any;
+      const required: string[] = schema.required ?? [];
+      if (required.length === 0) return { passed: true };
+
+      const missing = required.filter(name => {
+        const val = ctx.args[name];
+        return val === undefined || val === null || val === '';
+      });
+      if (missing.length === 0) return { passed: true };
+
+      const props = schema.properties ?? {};
+      const primitiveMissing = missing.filter(name => {
+        const prop = props[name];
+        if (!prop) return false;
+        const type = prop.type;
+        return type === 'string' || type === 'number' || type === 'boolean' ||
+          (type === 'string' && prop.enum);
+      });
+      if (primitiveMissing.length === 0) return { passed: true };
+
+      if (elicitFn) {
+        const elicited = await elicitFn(primitiveMissing);
+        if (elicited) {
+          for (const [key, val] of Object.entries(elicited)) {
+            if (!(key in ctx.args)) ctx.args[key] = val;
+          }
+          return { passed: true };
+        }
+      }
+
+      return {
+        rejected: true,
+        error: {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            success: false,
+            error: `Missing required parameter(s): ${primitiveMissing.join(', ')}`,
+            error_code: 'MISSING_PARAM',
+            missing_params: primitiveMissing,
+          }) }],
+        },
+      };
     },
   };
 }

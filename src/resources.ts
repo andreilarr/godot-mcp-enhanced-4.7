@@ -418,6 +418,15 @@ export function listResources(projectPath: string | undefined): McpResource[] {
     });
   }
 
+  // Phase 5a: Dynamic resources
+  resources.push(
+    { uri: 'godot://health', name: 'Health Monitor', description: 'Server health statistics and connection status', mimeType: 'application/json' },
+    { uri: 'godot://tool-groups', name: 'Tool Groups', description: 'Current tool group activation status', mimeType: 'application/json' },
+    { uri: 'godot://project-context', name: 'Project Context', description: 'Project documentation summary for AI context', mimeType: 'text/markdown' },
+    { uri: 'godot://console-errors', name: 'Console Errors', description: 'Recent Godot engine errors and warnings (requires Bridge)', mimeType: 'application/json' },
+    { uri: 'godot://scene-tree', name: 'Scene Tree', description: 'Current scene tree snapshot (requires Bridge)', mimeType: 'application/json' },
+  );
+
   scanForResources(projectPath, resources);
   if (resources.length >= MAX_RESOURCES) {
     resources.push({
@@ -478,12 +487,18 @@ export function listResourceTemplates(): McpResourceTemplate[] {
       description: 'Read any text file from the project (binary files and hidden dirs blocked)',
       mimeType: 'text/plain',
     },
+    {
+      uriTemplate: 'godot://instances',
+      name: 'Instances',
+      description: 'Discovered Godot instances (multi-instance mode)',
+      mimeType: 'application/json',
+    },
   ];
 }
 
 // ─── Resource reading ─────────────────────────────────────────────────────────
 
-export function readResource(uri: string, projectPath: string | undefined): McpResourceContent {
+export async function readResource(uri: string, projectPath: string | undefined): Promise<McpResourceContent> {
   if (!projectPath) {
     return { uri, mimeType: 'text/plain', text: 'ERROR: No project path available.' };
   }
@@ -537,6 +552,28 @@ export function readResource(uri: string, projectPath: string | undefined): McpR
       return { uri, mimeType: 'text/markdown', text: guide.text };
     }
 
+    case 'health':
+      return { uri, mimeType: 'application/json', text: JSON.stringify({ status: 'available', hint: 'Health data populated at runtime' }) };
+    case 'tool-groups': {
+      const { getActiveGroups: getGroups, TOOL_GROUPS: groups } = await import('./core/tool-registry.js');
+      const active = getGroups();
+      const result = Object.entries(groups).map(([name, def]) => ({
+        name,
+        description: def.description,
+        active: active.has(name),
+        toolCount: def.tools.length,
+      }));
+      return { uri, mimeType: 'application/json', text: JSON.stringify({ groups: result }, null, 2) };
+    }
+    case 'project-context':
+      return { uri, mimeType: 'text/markdown', text: buildProjectContext(projectPath) };
+    case 'console-errors':
+      return { uri, mimeType: 'application/json', text: JSON.stringify({ errors: [], message: 'Requires active Bridge connection' }) };
+    case 'scene-tree':
+      return { uri, mimeType: 'application/json', text: JSON.stringify({ message: 'Requires active Bridge connection' }) };
+    case 'instances':
+      return { uri, mimeType: 'application/json', text: JSON.stringify({ instances: [], message: 'Multi-instance mode not active' }) };
+
     default:
       return { uri, mimeType: 'text/plain', text: `Unknown resource category: ${category}` };
   }
@@ -553,4 +590,35 @@ function countFiles(projectPath: string): Record<string, number> {
     if (ext) counts[ext] = (counts[ext] || 0) + 1;
   }
   return counts;
+}
+
+function buildProjectContext(projectPath: string | undefined): string {
+  const lines: string[] = ['# Project Context\n'];
+
+  if (projectPath && existsSync(join(projectPath, 'project.godot'))) {
+    const config = readFileSync(join(projectPath, 'project.godot'), 'utf-8');
+    const nameMatch = config.match(/config\/name\s*=\s*"([^"]+)"/);
+    lines.push(`## Project: ${nameMatch?.[1] ?? 'Unnamed'}\n`);
+  }
+
+  if (projectPath) {
+    const claudeMdPath = join(projectPath, 'CLAUDE.md');
+    if (existsSync(claudeMdPath)) {
+      const content = readFileSync(claudeMdPath, 'utf-8').slice(0, 2000);
+      lines.push('## Coding Guidelines\n', content, '\n');
+    }
+
+    const readmePath = join(projectPath, 'README.md');
+    if (existsSync(readmePath)) {
+      const content = readFileSync(readmePath, 'utf-8').slice(0, 2000);
+      lines.push('## Architecture\n', content, '\n');
+    }
+
+    const gutPath = join(projectPath, 'test');
+    if (existsSync(gutPath)) {
+      lines.push('## Testing\n', 'Tests directory: test/\n');
+    }
+  }
+
+  return lines.join('\n').slice(0, 8000);
 }

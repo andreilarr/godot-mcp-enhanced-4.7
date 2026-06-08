@@ -6,6 +6,8 @@ import {
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
   ReadResourceRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -15,6 +17,7 @@ import {
   listResourceTemplates as listMcpResourceTemplates,
   readResource as readMcpResource,
 } from './resources.js';
+import { listPrompts, getPrompt } from './prompts.js';
 
 // ─── Import and register tool modules ────────────────────────────────────────
 // C-ARCH-01: All tool modules centralized in module-loader.ts
@@ -79,7 +82,7 @@ export class GodotServer {
     this.noFallback = options.noFallback ?? false;
     this.server = new Server(
       { name: 'godot-mcp-enhanced', version: pkgVersion },
-      { capabilities: { tools: {}, resources: {} } }
+      { capabilities: { tools: {}, resources: {}, prompts: {} } }
     );
     this.setupHandlers();
   }
@@ -119,12 +122,22 @@ export class GodotServer {
     this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       const { uri } = request.params;
       const projectPath = this.detectProjectPath();
-      const content = readMcpResource(uri, projectPath);
+      const content = await readMcpResource(uri, projectPath);
       return { contents: [content] };
     });
 
     // Connect manage-tools notification callback
     setOnGroupsChanged(() => this.sendToolListChanged());
+
+    // ── MCP Prompts handlers (Phase 5b) ────────────────────────────────────────
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+      prompts: listPrompts(),
+    }));
+
+    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      const { name, arguments: promptArgs } = request.params;
+      return getPrompt(name, (promptArgs ?? {}) as Record<string, string>);
+    });
 
     // Phase 2b: Multi-instance initialization (gated by feature flag)
     if (isFeatureEnabled('MULTI_INSTANCE')) {
@@ -199,6 +212,19 @@ export class GodotServer {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     log('Godot MCP Enhanced server running on stdio');
+
+    // Phase 5d: Project context notification
+    setImmediate(() => {
+      try {
+        this.server.notification({
+          method: 'notifications/message',
+          params: {
+            level: 'info',
+            data: '[Godot MCP] Project context available at godot://project-context. Read it for coding guidelines and architecture notes.',
+          },
+        });
+      } catch { /* best-effort */ }
+    });
 
     if (this.connectionMode === 'editor') {
       const port = parseInt(process.env.GODOT_EDITOR_PORT ?? '9090', 10);

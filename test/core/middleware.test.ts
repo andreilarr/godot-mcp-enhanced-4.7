@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { ToolResult, MiddlewareResult, DispatchContext, Middleware } from '../../src/types.js';
-import { executeMiddleware, createConnectionCheckMiddleware } from '../../src/core/middleware.js';
+import { executeMiddleware, createConnectionCheckMiddleware, createElicitationMiddleware } from '../../src/core/middleware.js';
 import { textResult, errorResult } from '../../src/types.js';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -181,5 +182,74 @@ describe('createConnectionCheckMiddleware', () => {
 
     expect(toolFn).not.toHaveBeenCalled();
     expect(result.isError).toBe(true);
+  });
+});
+
+// ─── createElicitationMiddleware ───────────────────────────────────────────────
+
+describe('elicitation middleware', () => {
+  const makeToolDef = (required: string[]): Tool => ({
+    name: 'test_tool',
+    description: 'test',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        project_path: { type: 'string' },
+        action: { type: 'string' },
+      },
+      required,
+    },
+  });
+
+  it('passes when all required params provided', async () => {
+    const mw = createElicitationMiddleware(
+      () => makeToolDef(['project_path', 'action']),
+      () => null,
+    );
+    const result = await mw.before({
+      toolName: 'test_tool', args: { project_path: '/tmp', action: 'get' },
+      startTime: Date.now(), phase: 'before',
+    });
+    expect('passed' in result && result.passed).toBe(true);
+  });
+
+  it('returns MISSING_PARAM when client lacks elicitation', async () => {
+    const mw = createElicitationMiddleware(
+      () => makeToolDef(['project_path']),
+      () => null,
+    );
+    const result = await mw.before({
+      toolName: 'test_tool', args: {},
+      startTime: Date.now(), phase: 'before',
+    });
+    expect('rejected' in result && result.rejected).toBe(true);
+  });
+
+  it('passes when tool def not found', async () => {
+    const mw = createElicitationMiddleware(() => null, () => null);
+    const result = await mw.before({
+      toolName: 'unknown', args: {},
+      startTime: Date.now(), phase: 'before',
+    });
+    expect('passed' in result && result.passed).toBe(true);
+  });
+
+  it('fills missing params from elicitation', async () => {
+    let capturedMissing: string[] = [];
+    const mw = createElicitationMiddleware(
+      () => makeToolDef(['project_path']),
+      async (params) => {
+        capturedMissing = params;
+        return { project_path: '/filled' };
+      },
+    );
+    const ctx = {
+      toolName: 'test_tool', args: {},
+      startTime: Date.now(), phase: 'before',
+    };
+    const result = await mw.before(ctx);
+    expect('passed' in result && result.passed).toBe(true);
+    expect(ctx.args.project_path).toBe('/filled');
+    expect(capturedMissing).toEqual(['project_path']);
   });
 });

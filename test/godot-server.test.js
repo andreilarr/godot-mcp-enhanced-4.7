@@ -23,6 +23,8 @@ vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
   ListResourcesRequestSchema: 'ListResourcesRequestSchema',
   ListResourceTemplatesRequestSchema: 'ListResourceTemplatesRequestSchema',
   ReadResourceRequestSchema: 'ReadResourceRequestSchema',
+  ListPromptsRequestSchema: 'ListPromptsRequestSchema',
+  GetPromptRequestSchema: 'GetPromptRequestSchema',
 }));
 
 // ─── Mock fs to control detectProjectPath behavior ───────────────────────────

@@ -70,43 +70,43 @@ describe('resources', () => {
     }
   });
 
-  it('readResource with valid guide uri', () => {
+  it('readResource with valid guide uri', async () => {
     writeFileSync(join(tmpDir, 'project.godot'), '[application]\nname="Test"\n');
-    const content = readResource('godot://guide/getting-started', tmpDir);
+    const content = await readResource('godot://guide/getting-started', tmpDir);
     expect(content.uri).toBe('godot://guide/getting-started');
     expect(content.text).toBeTruthy();
     expect(content.text).toContain('Getting Started');
     expect(content.mimeType).toBe('text/markdown');
   });
 
-  it('readResource with project/info uri', () => {
+  it('readResource with project/info uri', async () => {
     writeFileSync(join(tmpDir, 'project.godot'), '[application]\nname="TestProject"\nconfig_version=5\n');
-    const content = readResource('godot://project/info', tmpDir);
+    const content = await readResource('godot://project/info', tmpDir);
     expect(content.uri).toBe('godot://project/info');
     expect(content.text).toBeTruthy();
     const parsed = JSON.parse(content.text);
     expect(parsed['application/name']).toBe('TestProject');
   });
 
-  it('readResource with unknown uri', () => {
+  it('readResource with unknown uri', async () => {
     writeFileSync(join(tmpDir, 'project.godot'), '[application]\nname="Test"\n');
-    const content = readResource('godot://unknown/thing', tmpDir);
+    const content = await readResource('godot://unknown/thing', tmpDir);
     expect(content.text).toContain('Unknown resource category');
   });
 
-  it('readResource with invalid uri scheme', () => {
-    const content = readResource('http://example.com', tmpDir);
+  it('readResource with invalid uri scheme', async () => {
+    const content = await readResource('http://example.com', tmpDir);
     expect(content.text).toContain('Invalid URI scheme');
   });
 
-  it('readResource with unknown guide returns error', () => {
+  it('readResource with unknown guide returns error', async () => {
     writeFileSync(join(tmpDir, 'project.godot'), '[application]\nname="Test"\n');
-    const content = readResource('godot://guide/nonexistent', tmpDir);
+    const content = await readResource('godot://guide/nonexistent', tmpDir);
     expect(content.text).toContain('Unknown guide');
   });
 
-  it('readResource with undefined projectPath returns error', () => {
-    const content = readResource('godot://project/info', undefined);
+  it('readResource with undefined projectPath returns error', async () => {
+    const content = await readResource('godot://project/info', undefined);
     expect(content.text).toContain('No project path available');
   });
 
@@ -118,28 +118,28 @@ describe('resources', () => {
     expect(resources.length).toBeGreaterThan(0);
   });
 
-  it('readResource with file uri reads text file', () => {
+  it('readResource with file uri reads text file', async () => {
     writeFileSync(join(tmpDir, 'project.godot'), '[application]\nname="Test"\n');
     mkdirSync(join(tmpDir, 'data'));
     writeFileSync(join(tmpDir, 'data', 'items.json'), '{"items": []}');
 
-    const content = readResource('godot://file/data/items.json', tmpDir);
+    const content = await readResource('godot://file/data/items.json', tmpDir);
     expect(content.text).toContain('items');
     expect(content.mimeType).toBe('application/json');
   });
 
-  it('readResource blocks forbidden extensions', () => {
+  it('readResource blocks forbidden extensions', async () => {
     writeFileSync(join(tmpDir, 'project.godot'), '[application]\nname="Test"\n');
     mkdirSync(join(tmpDir, 'assets'));
     writeFileSync(join(tmpDir, 'assets', 'icon.png'), 'fake png');
 
-    const content = readResource('godot://file/assets/icon.png', tmpDir);
+    const content = await readResource('godot://file/assets/icon.png', tmpDir);
     expect(content.text).toContain('Access denied');
   });
 
-  it('readResource with missing file returns error', () => {
+  it('readResource with missing file returns error', async () => {
     writeFileSync(join(tmpDir, 'project.godot'), '[application]\nname="Test"\n');
-    const content = readResource('godot://file/nonexistent.txt', tmpDir);
+    const content = await readResource('godot://file/nonexistent.txt', tmpDir);
     expect(content.text).toContain('File not found');
   });
 });

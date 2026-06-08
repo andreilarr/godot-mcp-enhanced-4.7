@@ -156,10 +156,10 @@ export function truncateResponse(response: ToolResult): ToolResult {
   let parsedIdx = -1;
 
   for (let i = 0; i < content.length; i++) {
-    const block = content[i];
-    if (block.type === 'text') {
+    const block = content[i]!;
+    if (block.type === 'text' && 'text' in block) {
       try {
-        parsed = JSON.parse(block.text);
+        parsed = JSON.parse((block as { type: 'text'; text: string }).text);
         parsedIdx = i;
         break;
       } catch {
