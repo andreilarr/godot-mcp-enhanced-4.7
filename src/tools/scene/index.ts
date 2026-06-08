@@ -199,7 +199,10 @@ export async function handleTool(
 
     case 'quick_scene': {
       const p = requireProjectPath(args);
-      const sceneRelPath = normalizeUserProjectPath(args.scene_path as string);
+      const rawScenePath = args.scene_path as string;
+      if (!rawScenePath || !rawScenePath.trim()) return opsErrorResult('INVALID_PARAMS', 'scene_path is required for quick_scene');
+      const sceneRelPath = normalizeUserProjectPath(rawScenePath);
+      if (!sceneRelPath) return opsErrorResult('INVALID_PARAMS', 'scene_path is required for quick_scene');
       const scriptRelPath = args.script_path ? normalizeUserProjectPath(args.script_path as string) : undefined;
       const rootNodeType = (args.root_node_type as string) || 'Node2D';
       const scriptContent = args.script_content as string | undefined;

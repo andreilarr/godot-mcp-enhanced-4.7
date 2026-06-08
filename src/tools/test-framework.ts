@@ -102,7 +102,12 @@ async function handleTestAssert(args: Record<string, unknown>, godot: string, pr
   }
 
   const assertionType = gdEscape(rawAssertionType);
-  const path = gdEscape((args.path as string) || '');
+  // Validate path parameter — required for node_exists, property_equals, signal_connected
+  const rawPath = (args.path as string) || '';
+  if (!rawPath && rawAssertionType !== 'node_count') {
+    return opsErrorResult('INVALID_PARAMS', `"path" is required for ${rawAssertionType} assertion`);
+  }
+  const path = gdEscape(rawPath);
   const property = gdEscape((args.property as string) || '');
   const signalName = gdEscape((args.signal as string) || '');
   const targetPath = gdEscape((args.target as string) || '');
@@ -209,7 +214,7 @@ func _initialize():
 \t\t\t_peak = _mem
 \t\t_n.queue_free()
 \tfor _f in range(3):
-\t\tawait get_tree().process_frame
+\t\tawait self.process_frame
 \tvar _obj_after = Performance.get_monitor(Performance.OBJECT_COUNT)
 \tvar _mem_after = Performance.get_monitor(Performance.MEMORY_STATIC)
 \tvar _obj_leaked = (_obj_after - _obj_before) > _iters * 0.1

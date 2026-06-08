@@ -270,7 +270,7 @@ describe('test-framework stress test GDScript generation', () => {
 
   it('contains process_frame await for cleanup', async () => {
     const captured = await captureStressScript({ node_type: 'Node', iterations: 10 });
-    expect(captured).toContain('await get_tree().process_frame');
+    expect(captured).toContain('await self.process_frame');
   });
 });
 

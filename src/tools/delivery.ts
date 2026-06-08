@@ -8,7 +8,7 @@ import { executeGdscript } from '../gdscript-executor.js';
 import { batchValidateScripts } from './validation.js';
 import { SCENE_TREE_HEADER, wrapAssertionCode, opsErrorResult } from './shared.js';
 import { existsSync, readFileSync, readdirSync } from 'fs';
-import { join } from 'path';
+import { join, relative } from 'path';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -253,7 +253,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       // A-07: Replaced inline collectScenes with scanFiles
       const sceneFiles = scanFiles(projectPath, ['.tscn'], { skipDirs: [...SKIP_DIRS] });
       getLogger().debug('delivery', `scanFiles found ${sceneFiles.length} .tscn files in ${projectPath}`);
-      scenePaths = sceneFiles.map(f => f.replace(projectPath + (process.platform === 'win32' ? '\\' : '/'), ''));
+      scenePaths = sceneFiles.map(f => relative(projectPath, f));
     }
 
     if (!report.scene_tree) {
@@ -293,7 +293,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       // A-07: Replaced inline collectScripts with scanFiles
       const scriptFiles = scanFiles(projectPath, ['.gd'], { skipDirs: [...SKIP_DIRS] });
       getLogger().debug('delivery', `scanFiles found ${scriptFiles.length} .gd files in ${projectPath}`);
-      scriptPaths = scriptFiles.map(f => f.replace(projectPath + (process.platform === 'win32' ? '\\' : '/'), ''));
+      scriptPaths = scriptFiles.map(f => relative(projectPath, f));
     }
 
     // Check file existence
@@ -465,7 +465,7 @@ func _initialize():
 
       // A-07: Replaced inline collectGddFiles with scanFiles
       const gddFileList = scanFiles(fullDir, ['.md'], { skipDirs: [...SKIP_DIRS] });
-      const gddFiles = gddFileList.map(f => f.replace(fullDir + (process.platform === 'win32' ? '\\' : '/'), ''));
+      const gddFiles = gddFileList.map(f => relative(fullDir, f));
       gddFilesScanned += gddFiles.length;
 
       for (const gf of gddFiles) {

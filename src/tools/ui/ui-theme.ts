@@ -185,7 +185,9 @@ export function genThemeSetPropertyScript(
       break;
     }
     case 'color': {
-      const c = value as number[];
+      let c = value;
+      // MCP may serialize arrays as strings — try to parse
+      if (typeof c === 'string') { try { c = JSON.parse(c); } catch { /* fall through to error */ } }
       if (!Array.isArray(c) || c.length < 3) throw new Error('Color value must be array [r, g, b] or [r, g, b, a]');
       const a = c.length >= 4 ? c[3] : 1.0;
       setLine = `\ttheme.set_color("${safeName}", ${tt}, Color(${c[0]}, ${c[1]}, ${c[2]}, ${a}))`;
