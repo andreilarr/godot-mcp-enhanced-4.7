@@ -15,6 +15,12 @@ const MAX_PEERS := 5
 const PROTOCOL_VERSION := "1.0"
 const INACTIVITY_TIMEOUT := 60.0
 
+# ─── Instance Registry (Phase 2b) ─────────────────────────────────────────
+const REGISTRY_HEARTBEAT_INTERVAL := 30.0
+var _registry_heartbeat_timer: Timer = null
+var _registry_file: String = ""
+var _instance_id: String = ""
+
 var _server: TCPServer = null
 var _peers: Array[StreamPeerTCP] = []
 var _peer_buffers: Dictionary = {}
@@ -196,6 +202,8 @@ func _start_server() -> void:
 		_server.stop()
 		_server = null
 		return
+	# Instance registry heartbeat (Phase 2b)
+	_start_registry_heartbeat()
 
 ## Compat: Godot 4.6 renamed TCPServer.accept() to take_connection()
 func _server_take_connection() -> StreamPeerTCP:
@@ -267,7 +275,71 @@ func _write_secret_to_file(path: String) -> bool:
 	return false
 
 
+# ─── Instance Registry (Phase 2b) ─────────────────────────────────────────
+
+
+func _start_registry_heartbeat() -> void:
+	_instance_id = str(randi())
+	# Machine-level registry
+	var machine_dir: String = OS.get_data_dir().get_base_dir().get_base_dir().path_join(".godot-mcp").path_join("instances")
+	# Project-level registry
+	var project_dir: String = ProjectSettings.globalize_path("user://").path_join(".godot").path_join("mcp-instances")
+	_dir_ensure(machine_dir)
+	_dir_ensure(project_dir)
+	# Write to project-level (machine-level is optional for later)
+	_registry_file = project_dir.path_join(_instance_id + ".json")
+	_write_registry_entry()
+	# Timer
+	_registry_heartbeat_timer = Timer.new()
+	_registry_heartbeat_timer.wait_time = REGISTRY_HEARTBEAT_INTERVAL
+	_registry_heartbeat_timer.one_shot = false
+	_registry_heartbeat_timer.autostart = true
+	_registry_heartbeat_timer.timeout.connect(_write_registry_entry)
+	add_child(_registry_heartbeat_timer)
+
+
+func _write_registry_entry() -> void:
+	if _registry_file == "":
+		return
+	var entry: Dictionary = {
+		"id": _instance_id,
+		"projectPath": ProjectSettings.globalize_path("res://"),
+		"projectName": ProjectSettings.get_setting("application/config/name"),
+		"port": PORT,
+		"pid": OS.get_process_id(),
+		"lastSeen": Time.get_datetime_string_from_system(),
+		"godotVersion": Engine.get_version_info().get("string", "unknown"),
+		"capabilities": ["registry-heartbeat"],
+	}
+	var json: String = JSON.stringify(entry, "	")
+	# Atomic write: temp file -> rename
+	var tmp_file: String = _registry_file + ".tmp"
+	var f: FileAccess = FileAccess.open(tmp_file, FileAccess.WRITE)
+	if f == null:
+		push_warning("[MCP Bridge] Failed to write registry entry: %s" % FileAccess.get_open_error())
+		return
+	f.store_string(json)
+	f.close()
+	DirAccess.rename_absolute(tmp_file, _registry_file)
+
+
+func _stop_registry_heartbeat() -> void:
+	if _registry_heartbeat_timer != null:
+		_registry_heartbeat_timer.stop()
+		_registry_heartbeat_timer.queue_free()
+		_registry_heartbeat_timer = null
+	# Clean up registry file on exit
+	if _registry_file != "" and FileAccess.file_exists(_registry_file):
+		DirAccess.remove_absolute(_registry_file)
+	_registry_file = ""
+
+
+func _dir_ensure(dir: String) -> void:
+	if not DirAccess.dir_exists_absolute(dir):
+		DirAccess.make_dir_recursive_absolute(dir)
+
 func _stop_server() -> void:
+	_stop_registry_heartbeat()
 	for p in _peers:
 		if p.get_status() == StreamPeerTCP.STATUS_CONNECTED:
 			p.disconnect_from_host()
