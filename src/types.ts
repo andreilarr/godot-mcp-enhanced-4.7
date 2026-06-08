@@ -28,3 +28,24 @@ export function textResult(s: string): ToolResult {
 export function errorResult(message: string): ToolResult {
   return { content: [{ type: 'text', text: message }], isError: true };
 }
+
+// ─── Middleware types (competitive borrowing Phase 5) ──────────────────────────
+
+export type ConnectionState = 'disconnected' | 'connected' | 'degraded' | 'reconnecting';
+
+export interface DispatchContext {
+  toolName: string;
+  args: Record<string, unknown>;
+  startTime: number;
+  phase: 'before' | 'after';
+}
+
+export type MiddlewareResult =
+  | { passed: true }
+  | { rejected: true; error: ToolResult };
+
+export interface Middleware {
+  name: string;
+  before(ctx: DispatchContext): Promise<MiddlewareResult>;
+  after?(ctx: DispatchContext, result: ToolResult): Promise<ToolResult>;
+}
