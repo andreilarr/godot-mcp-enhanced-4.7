@@ -56,7 +56,7 @@ Phase 1 ──→ Phase 3a（代理依赖 Tag 过滤和组信息）
 | `GODOT_MCP_RESPONSE_LIMIT` | `true` | Phase 3b：响应截断 |
 | `GODOT_MCP_HEALTH_MONITOR` | `true` | Phase 4：健康监控和自动重连 |
 | `GODOT_MCP_OFFLINE_MODE` | `true` | Phase 4d：离线降级 |
-| `GODOT_MCP_Elicitation` | `true` | Phase 5c：缺参询问 |
+| `GODOT_MCP_ELICITATION` | `true` | Phase 5c：缺参询问 |
 
 禁用时对应中间件直接跳过（`next()`），不影响其他层。这确保安全模块误杀时可以快速关闭。
 
