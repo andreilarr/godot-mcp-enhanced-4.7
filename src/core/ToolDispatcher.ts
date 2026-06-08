@@ -12,6 +12,7 @@ import {
 import {
   getAllToolDefinitions,
   getModuleForTool,
+  isToolAllowed,
   LITE_TOOLS,
   MINIMAL_TOOLS,
   registerInlineTool,
@@ -120,6 +121,12 @@ export class ToolDispatcher {
       } else {
         getLogger().warn('dispatcher', `Profile "${String(this.options.mode)}" resolved to empty set — falling back to full mode. Check for typos.`);
       }
+    }
+
+    // activeGroups 过滤（Phase 1 动态管理）
+    if (process.env.GODOT_MCP_TOOL_GROUPS !== 'false') {
+      allTools = allTools.filter(t => isToolAllowed(t.name));
+      log('activeGroups filter: %d tools available', allTools.length);
     }
 
     return allTools;

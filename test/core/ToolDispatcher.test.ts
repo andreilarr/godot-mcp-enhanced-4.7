@@ -17,6 +17,8 @@ const {
   mockCreatePendingToken,
   mockConsumeToken,
   mockIsPathInAllowedRoots,
+  mockIsToolAllowed,
+  mockSetActiveGroups,
 } = vi.hoisted(() => ({
   mockGetAllToolDefinitions: vi.fn<() => Tool[]>(),
   mockGetModuleForTool: vi.fn(),
@@ -26,6 +28,8 @@ const {
   mockCreatePendingToken: vi.fn(),
   mockConsumeToken: vi.fn(),
   mockIsPathInAllowedRoots: vi.fn().mockReturnValue(true),
+  mockIsToolAllowed: vi.fn().mockReturnValue(true),
+  mockSetActiveGroups: vi.fn(),
 }));
 
 vi.mock('../../src/core/tool-registry.js', () => ({
@@ -34,6 +38,8 @@ vi.mock('../../src/core/tool-registry.js', () => ({
   registerInlineTool: vi.fn(),
   LITE_TOOLS: mockLITE_TOOLS,
   MINIMAL_TOOLS: mockMINIMAL_TOOLS,
+  isToolAllowed: mockIsToolAllowed,
+  setActiveGroups: mockSetActiveGroups,
 }));
 
 vi.mock('../../src/guard.js', () => ({
@@ -760,5 +766,46 @@ describe('ToolDispatcher.handleCall', () => {
     const parsed = JSON.parse((result.content[0] as { text: string }).text);
     expect(parsed.error_code).toBe('PATH_NOT_ALLOWED');
     expect(mockExecutor.execute).not.toHaveBeenCalled();
+  });
+});
+
+// ── getFilteredTools with activeGroups ────────────────────────────────────
+
+describe('getFilteredTools with activeGroups', () => {
+  let dispatcher: ToolDispatcher;
+
+  beforeEach(() => {
+    // 默认 isToolAllowed 返回 true（不过滤）
+    mockIsToolAllowed.mockReturnValue(true);
+    dispatcher = new ToolDispatcher(createOptions());
+  });
+
+  it('returns only tools allowed by activeGroups', () => {
+    // 模拟 activeGroups 过滤：core(animation,scene) 允许，bridge(game) 不允许
+    mockIsToolAllowed.mockImplementation((name: string) => {
+      const blocked = ['game'];
+      return !blocked.includes(name);
+    });
+
+    const tools = dispatcher.getFilteredTools();
+    const toolNames = tools.map(t => t.name);
+    // core tools should be present
+    expect(toolNames).toContain('scene');
+    // animation tools should be present
+    expect(toolNames).toContain('animation');
+    // bridge tools should NOT be present
+    expect(toolNames).not.toContain('game');
+  });
+
+  it('manage_tools always appears regardless of active groups', () => {
+    // 模拟只有 core 组激活
+    mockIsToolAllowed.mockImplementation((name: string) => {
+      const coreTools = ['scene', 'script', 'project', 'confirm_and_execute'];
+      return coreTools.includes(name);
+    });
+
+    const tools = dispatcher.getFilteredTools();
+    const toolNames = tools.map(t => t.name);
+    expect(toolNames).toContain('confirm_and_execute');
   });
 });
