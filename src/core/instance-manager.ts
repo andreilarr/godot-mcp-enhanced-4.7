@@ -52,7 +52,13 @@ function parsePortRange(): [number, number] {
   const env = process.env.GODOT_MCP_INSTANCE_PORT_RANGE;
   if (!env) return [DEFAULT_PORT_START, DEFAULT_PORT_END];
   const parts = env.split('-').map(Number);
-  if (parts.length === 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
+  if (
+    parts.length === 2 &&
+    Number.isFinite(parts[0]) && Number.isFinite(parts[1]) &&
+    parts[0]! >= 1 && parts[0]! <= 65535 &&
+    parts[1]! >= 1 && parts[1]! <= 65535 &&
+    parts[0]! < parts[1]!
+  ) {
     return [parts[0]!, parts[1]!];
   }
   return [DEFAULT_PORT_START, DEFAULT_PORT_END];

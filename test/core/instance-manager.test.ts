@@ -204,6 +204,24 @@ describe('InstanceManager', () => {
       if (original !== undefined) process.env.GODOT_MCP_INSTANCE_PORT_RANGE = original;
       else delete process.env.GODOT_MCP_INSTANCE_PORT_RANGE;
     });
+
+    it('rejects port 0 from empty range segment', () => {
+      const original = process.env.GODOT_MCP_INSTANCE_PORT_RANGE;
+      process.env.GODOT_MCP_INSTANCE_PORT_RANGE = '-9090';
+      const manager = new InstanceManager({ registryDir: TMP });
+      expect(manager.portRange).toEqual([9081, 9090]);
+      if (original !== undefined) process.env.GODOT_MCP_INSTANCE_PORT_RANGE = original;
+      else delete process.env.GODOT_MCP_INSTANCE_PORT_RANGE;
+    });
+
+    it('rejects out-of-range ports', () => {
+      const original = process.env.GODOT_MCP_INSTANCE_PORT_RANGE;
+      process.env.GODOT_MCP_INSTANCE_PORT_RANGE = '0-70000';
+      const manager = new InstanceManager({ registryDir: TMP });
+      expect(manager.portRange).toEqual([9081, 9090]);
+      if (original !== undefined) process.env.GODOT_MCP_INSTANCE_PORT_RANGE = original;
+      else delete process.env.GODOT_MCP_INSTANCE_PORT_RANGE;
+    });
   });
 
   describe('async loadFromRegistry', () => {

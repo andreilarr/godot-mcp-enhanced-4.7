@@ -155,7 +155,7 @@ export const PROFILES: Record<string, string[]> = {
   // BREAKING CHANGE: lite now uses group-based expansion (matches current LITE_TOOLS content)
   lite:        ['core', 'bridge', 'animation', 'audio', 'signal', 'visual', 'code', 'test', 'profiler'],
   minimal:     ['core'],
-  slim:        ['core'],
+  slim:        ['core'],  // intentional alias of minimal - proxy tool is in core group,
   bridge_dev:  ['core', 'bridge', 'profiler', 'test', 'recording'],
   '3d_dev':    ['core', 'animation', 'visual', 'physics', 'navigation', 'ik'],  // physics includes node_create_3d
 };
