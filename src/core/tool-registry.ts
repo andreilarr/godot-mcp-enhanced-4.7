@@ -245,3 +245,16 @@ export function getGroupForTool(toolName: string): string | undefined {
 export const LITE_TOOLS: Set<string> = resolveProfile('lite');
 
 export const MINIMAL_TOOLS: Set<string> = resolveProfile('minimal');
+
+// ─── Offline-capable tools (Phase 4d) ──────────────────────────────────────────
+
+/** Tools that can run without an active Godot connection. */
+export const OFFLINE_TOOLS = new Set([
+  'project', 'script', 'validation', 'confirm_and_execute',
+  'manage_tools', 'godot_advanced_tool',
+]);
+
+/** Check if a tool can run in offline mode. */
+export function isOfflineCapable(toolName: string): boolean {
+  return OFFLINE_TOOLS.has(toolName);
+}
