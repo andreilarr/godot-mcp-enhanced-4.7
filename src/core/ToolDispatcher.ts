@@ -58,6 +58,7 @@ export class ToolDispatcher {
   private _editorFallback = false;
   private _editorFallbackWarned = false;
   private healthMonitor: HealthMonitor;
+  private readonly middleware: Middleware[];
 
   /** Deferred mode switch — applied at the start of the next handleCall. Prevents
    *  editor disconnect callbacks from switching mode mid-request (C-01). */
@@ -89,6 +90,7 @@ export class ToolDispatcher {
 
     // Health monitor for middleware pipeline
     this.healthMonitor = new HealthMonitor();
+    this.middleware = this.buildMiddleware();
 
     // Phase 3a: Wire proxy delegate through handleCall for full middleware chain
     // (ReadOnlyGuard, path validation, confirmation tokens, etc.)
@@ -173,7 +175,7 @@ export class ToolDispatcher {
 
     const ctx: DispatchContext = { toolName: name, args, startTime, phase: 'before' };
 
-    return executeMiddleware(this.buildMiddleware(), ctx, async () => {
+    return executeMiddleware(this.middleware, ctx, async () => {
       return this.executeToolCall(name, args, startTime);
     });
   }
@@ -296,9 +298,7 @@ export class ToolDispatcher {
       before: async () => ({ passed: true }),
       after: async (ctx, result) => {
         const duration = Date.now() - ctx.startTime;
-        const isError = result.isError === true ||
-          (result.content?.[0] && typeof (result.content[0] as any).text === 'string' &&
-           (result.content[0] as any).text.includes('"success":false'));
+        const isError = result.isError === true || this.checkJsonSuccessFalse(result);
         if (isError) {
           this.healthMonitor.recordFailure('TOOL_ERROR', `Tool ${ctx.toolName} failed`);
         } else {
@@ -451,5 +451,19 @@ export class ToolDispatcher {
       }
     }
     return result;
+  }
+
+  /** Parse content blocks as JSON and check for success === false. */
+  private checkJsonSuccessFalse(result: ToolResult): boolean {
+    if (!result.content) return false;
+    for (const block of result.content) {
+      if ("text" in block && typeof block.text === "string") {
+        try {
+          const parsed = JSON.parse(block.text);
+          if (parsed && typeof parsed === "object" && parsed.success === false) return true;
+        } catch { /* not JSON */ }
+      }
+    }
+    return false;
   }
 }
