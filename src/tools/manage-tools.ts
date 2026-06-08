@@ -127,19 +127,11 @@ function handleDeactivate(args: Record<string, unknown>): ToolResult {
 }
 
 function handleSync(): ToolResult {
-  const active = getActiveGroups();
-  return textResult(JSON.stringify(opsSuccess({
-    synced: true,
-    activeGroups: [...active],
-    note: 'Basic sync — Phase 4 will add connection-aware sync',
-  })));
+  return textResult(JSON.stringify(opsError('NOT_IMPLEMENTED', 'Connection-aware sync is not yet implemented. Active groups are always in sync.')));
 }
 
 function handleReconnect(): ToolResult {
-  return textResult(JSON.stringify(opsSuccess({
-    reconnected: false,
-    note: 'Reconnect will be implemented in Phase 4',
-  })));
+  return textResult(JSON.stringify(opsError('NOT_IMPLEMENTED', 'Auto-reconnect is not yet implemented. Check that the game/editor is running.')));
 }
 
 export const TOOL_META = {

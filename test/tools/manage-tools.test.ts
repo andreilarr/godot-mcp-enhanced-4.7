@@ -111,16 +111,17 @@ describe('manage_tools', () => {
     expect(data.success).toBe(true);
   });
 
-  it('sync returns updated status', async () => {
-    mockSetActiveGroups.mockImplementation((groups: Set<string>) => groups);
+  it('sync returns NOT_IMPLEMENTED', async () => {
     const result = await handleTool('manage_tools', { action: 'sync' }, {} as any);
     const data = JSON.parse((result!.content as any)[0].text);
-    expect(data.success).toBe(true);
+    expect(data.success).toBe(false);
+    expect(data.error_code).toBe('NOT_IMPLEMENTED');
   });
 
-  it('reconnect returns placeholder for Phase 4', async () => {
+  it('reconnect returns NOT_IMPLEMENTED', async () => {
     const result = await handleTool('manage_tools', { action: 'reconnect' }, {} as any);
     const data = JSON.parse((result!.content as any)[0].text);
-    expect(data.success).toBe(true);
+    expect(data.success).toBe(false);
+    expect(data.error_code).toBe('NOT_IMPLEMENTED');
   });
 });

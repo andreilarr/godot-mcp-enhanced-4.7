@@ -154,7 +154,11 @@ export class GodotServer {
     const router = new InstanceRouter({
       instances: await manager.loadFromRegistry(),
       sendToInstance: async () => ({
-        content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Direct bridge routing not yet implemented' }) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          error: 'NOT_IMPLEMENTED',
+          message: 'Multi-instance routing is under development. The instance registry is available, but tool dispatching to a specific instance requires the upcoming Bridge routing layer.',
+          hint: 'Track progress via GODOT_MCP_MULTI_INSTANCE feature flag.',
+        }) }],
       }),
     });
     setInstanceManager(manager);
