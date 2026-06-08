@@ -31,6 +31,10 @@ import { EditorConnection } from './core/EditorConnection.js';
 import { EditorToolExecutor } from './core/EditorToolExecutor.js';
 import { findGodot, clearGodotPathCache, getCachedGodotPath } from './core/godot-finder.js';
 import { setOnGroupsChanged } from './tools/manage-tools.js';
+import { InstanceManager } from './core/instance-manager.js';
+import { InstanceRouter } from './core/instance-router.js';
+import { setInstanceManager, setInstanceRouter } from './tools/instance-tools.js';
+import { isFeatureEnabled } from './core/feature-flags.js';
 import * as ps from './core/process-state.js';
 import { killProcess } from './core/process-state.js';
 import { getLogger } from './core/logger.js';
@@ -121,6 +125,25 @@ export class GodotServer {
 
     // Connect manage-tools notification callback
     setOnGroupsChanged(() => this.sendToolListChanged());
+
+    // Phase 2b: Multi-instance initialization (gated by feature flag)
+    if (isFeatureEnabled('MULTI_INSTANCE')) {
+      const projectDir = ps.getProjectDir();
+      const manager = new InstanceManager({
+        projectRegistryDir: projectDir
+          ? join(projectDir, '.godot', 'mcp-instances')
+          : undefined,
+      });
+      const router = new InstanceRouter({
+        instances: manager.loadFromRegistry(),
+        sendToInstance: async () => ({
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Direct bridge routing not yet implemented' }) }],
+        }),
+      });
+      setInstanceManager(manager);
+      setInstanceRouter(router);
+      getLogger().info('instance', 'Multi-instance mode enabled');
+    }
   }
 
   /** Send tools/list_changed notification to client. Called when active groups change. */
