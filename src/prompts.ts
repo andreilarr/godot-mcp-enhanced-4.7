@@ -7,6 +7,16 @@ export interface PromptDef {
   arguments?: Array<{ name: string; description: string; required?: boolean }>;
 }
 
+/**
+ * Phase 1 static prompt templates.
+ *
+ * These templates provide structured guidance text for common workflows.
+ * They do not dynamically analyze the project — the parameters are used
+ * only for string interpolation into the template text.
+ *
+ * Future phases will add dynamic context (scene analysis, project scan, etc.)
+ * by replacing the static build() functions with tool-calling logic.
+ */
 const PROMPTS: Record<string, { def: PromptDef; build: (args: Record<string, string>) => PromptMessage[] }> = {
   create_platformer: {
     def: {
