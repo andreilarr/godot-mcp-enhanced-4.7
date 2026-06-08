@@ -121,7 +121,6 @@ export async function handleTool(
       error_code: 'UNKNOWN_TOOL',
       message: `Unknown tool '${targetTool}'.`,
       suggestions,
-      available_tools: allNames,
     }));
   }
 
@@ -139,5 +138,7 @@ export async function handleTool(
 }
 
 export const TOOL_META = {
-  godot_advanced_tool: { readonly: false, long_running: true },
+  // Proxy itself doesn't write — readonly=true so it works in read-only mode.
+  // Target tool's readonly check happens inside handleCall's middleware chain.
+  godot_advanced_tool: { readonly: true, long_running: true },
 };

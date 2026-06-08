@@ -83,9 +83,14 @@ export class ToolDispatcher {
     // 注册内联工具的元数据（confirm_and_execute 不属于任何 ToolModule）
     registerInlineTool('confirm_and_execute', { readonly: true, long_running: false });
 
-    // Phase 3a: Wire proxy delegate to re-dispatch through dispatchTool
+    // Phase 3a: Wire proxy delegate through handleCall for full middleware chain
+    // (ReadOnlyGuard, path validation, confirmation tokens, etc.)
     setToolCallDelegate(async (targetTool, toolArgs) => {
-      return this.dispatchTool(targetTool, toolArgs, Date.now());
+      // Recursion guard: proxy must not delegate to itself
+      if (targetTool === 'godot_advanced_tool') {
+        return opsErrorResult('PROXY_RECURSION', 'Cannot proxy godot_advanced_tool through itself');
+      }
+      return this.handleCall({ params: { name: targetTool, arguments: toolArgs } });
     });
   }
 
