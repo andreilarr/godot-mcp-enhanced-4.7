@@ -6,7 +6,8 @@
  * Adding a new tool module requires editing ONLY this file.
  */
 
-import { registerModule } from './tool-registry.js';
+import { registerModule, TOOL_GROUPS } from './tool-registry.js';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 // ─── Tool module imports ─────────────────────────────────────────────────────
 import * as runtime from '../tools/runtime.js';
@@ -55,9 +56,41 @@ const ALL_MODULES = [
   delivery, codeTemplates, ikTools, gameDesign, sceneCommit, manageTools,
 ];
 
+// ─── Tag injection ─────────────────────────────────────────────────────────────
+
+/** Build tool→group mapping for tag injection. */
+function buildToolGroupMap(): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const [group, def] of Object.entries(TOOL_GROUPS)) {
+    for (const tool of def.tools) {
+      map.set(tool, group);
+    }
+  }
+  return map;
+}
+
+const toolGroupMap = buildToolGroupMap();
+
+/** Inject annotations.tags into tool definitions based on TOOL_GROUPS mapping. */
+function injectTags(defs: Tool[]): Tool[] {
+  return defs.map(def => ({
+    ...def,
+    annotations: {
+      ...def.annotations,
+      tags: [`group:${toolGroupMap.get(def.name) ?? 'unknown'}`],
+    },
+  }));
+}
+
 /** Register all tool modules into the global registry. */
 export function registerAllModules(): void {
   for (const mod of ALL_MODULES) {
-    registerModule(mod);
+    const originalGetDefs = mod.getToolDefinitions;
+    const wrappedMod = {
+      ...mod,
+      TOOL_META: mod.TOOL_META,
+      getToolDefinitions: () => injectTags(originalGetDefs.call(mod)),
+    };
+    registerModule(wrappedMod);
   }
 }
