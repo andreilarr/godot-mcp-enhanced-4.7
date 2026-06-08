@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-06-08
+
+### Fixed
+
+- **CRITICAL-1**: 删除 `tscn-editor.ts` 中 8 个无引用导出函数（`editNodeProperty`、`deleteNode`、`addConnection`、`removeConnection`、`setNodeScript`、`changeNodeType`、`addExtResource`、`addSubResource`）及 `ResourceAddResult` 接口 — 净减 ~527 行死代码
+- **CRITICAL-2**: 解耦 core ↔ tools 双向依赖 — `ToolCallDelegate` 类型定义提升到 `types.ts` 共享层，`ToolDispatcher` 改用构造函数注入 delegate，`GodotServer` 组合根负责连接
+- **CRITICAL-3**: `animation-ops.ts` 补充 38 个单元测试 — 参数验证（15）、GDScript 生成验证（13）、路由与导出（5）、边界（5）
+- **CRITICAL-4**: `EditorToolExecutor.ts` 补充 16 个 mock 测试 — sync 生命周期、treeChangeRing 缓冲区、reconnect 处理、execute 分支
+- **S-03**: `game-bridge.ts` 移除 Bridge 密钥 tmpdir 回退 — `_projectDir` 未设置时抛出明确错误，不再静默回退到全局可读的临时目录
+- **S-04**: `editor-auth.ts` 权限检查顺序修正 — `checkFilePermissions()` 先于 `readFileSync()` 执行，拒绝不安全权限的密钥文件
+- **D-02**: 删除 `spatial-ops.ts` 空壳文件及 `module-loader.ts` 引用 — 功能已迁移到 `physics-ops.ts`
+
+### Changed
+
+- 工具模块统一使用 `requireProjectPath` 辅助函数，减少重复代码
+
+### Removed
+
+- `src/tools/spatial-ops.ts`（空壳，功能已在 physics-ops.ts）
+- `test/spatial-ops.test.js`（对应测试）
+- `test/tscn-editor-resources.test.ts`（仅测试死代码函数）
+
 ## [0.17.0] - 2026-06-07
 
 ### Fixed
