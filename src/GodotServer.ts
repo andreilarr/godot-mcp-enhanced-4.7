@@ -30,6 +30,7 @@ import { ToolDispatcher } from './core/ToolDispatcher.js';
 import { EditorConnection } from './core/EditorConnection.js';
 import { EditorToolExecutor } from './core/EditorToolExecutor.js';
 import { findGodot, clearGodotPathCache, getCachedGodotPath } from './core/godot-finder.js';
+import { setOnGroupsChanged } from './tools/manage-tools.js';
 import * as ps from './core/process-state.js';
 import { killProcess } from './core/process-state.js';
 import { getLogger } from './core/logger.js';
@@ -116,6 +117,16 @@ export class GodotServer {
       const projectPath = this.detectProjectPath();
       const content = readMcpResource(uri, projectPath);
       return { contents: [content] };
+    });
+
+    // Connect manage-tools notification callback
+    setOnGroupsChanged(() => this.sendToolListChanged());
+  }
+
+  /** Send tools/list_changed notification to client. Called when active groups change. */
+  sendToolListChanged(): void {
+    this.server.notification({
+      method: 'notifications/tools/list_changed',
     });
   }
 
@@ -236,6 +247,7 @@ export class GodotServer {
       log('Running Godot process killed');
     }
     await this.server.close();
+    setOnGroupsChanged(null);
     log('Server shut down');
   }
 }
