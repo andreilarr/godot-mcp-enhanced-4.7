@@ -29,6 +29,14 @@ export async function startMcpServer(args: string[]): Promise<void> {
       'Set ALLOWED_PROJECT_PATHS=/path1;/path2 to restrict access, or GODOT_MCP_UNRESTRICTED=true to suppress this warning.');
   }
 
+  // Feature flags info
+  const { getAllFeatureFlags } = await import('./core/feature-flags.js');
+  const flags = getAllFeatureFlags();
+  const disabledFeatures = Object.entries(flags).filter(([, v]) => !v).map(([k]) => k);
+  if (disabledFeatures.length > 0) {
+    getLogger().info('godot-mcp', `Features disabled: ${disabledFeatures.join(', ')}`);
+  }
+
   // --profile=<name> or GODOT_MCP_PROFILE for fine-grained tool selection
   const profileArg = args.find(a => a.startsWith('--profile='));
   const profileFromArg = profileArg ? profileArg.split('=')[1] : null;
