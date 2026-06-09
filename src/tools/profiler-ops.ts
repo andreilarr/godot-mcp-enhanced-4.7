@@ -9,6 +9,33 @@ import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } f
 
 const TOOL_NAMES = ['profiler'] as const;
 
+const DIMENSION_MAP: Record<string, { gdConstant: string; label: string }> = {
+  'process':     { gdConstant: 'Performance.TIME_PROCESS',           label: 'process' },
+  'physics':     { gdConstant: 'Performance.TIME_PHYSICS_PROCESS',   label: 'physics' },
+  'nav_process': { gdConstant: 'Performance.TIME_NAVIGATION_PROCESS', label: 'nav_process' },
+};
+const VALID_DIMENSIONS = new Set(Object.keys(DIMENSION_MAP));
+
+function parseDimensions(raw: unknown): { dimensions: string[]; warnings: string[] } {
+  let dims: string[];
+  if (Array.isArray(raw) && raw.length > 0) {
+    dims = raw.filter(d => typeof d === 'string');
+  } else {
+    return { dimensions: ['process'], warnings: [] };
+  }
+  const invalid = dims.filter(d => !VALID_DIMENSIONS.has(d));
+  const valid = dims.filter(d => VALID_DIMENSIONS.has(d));
+  const warnings: string[] = [];
+  if (invalid.length > 0) {
+    warnings.push(`Unknown dimensions ignored: ${invalid.join(', ')}. Valid: ${[...VALID_DIMENSIONS].join(', ')}`);
+  }
+  if (valid.length === 0) {
+    warnings.push('No valid dimensions provided, falling back to process');
+    return { dimensions: ['process'], warnings };
+  }
+  return { dimensions: valid, warnings };
+}
+
 // ─── Tool Definitions ──────────────────────────────────────────────────────
 
 export function getToolDefinitions(): Tool[] {
@@ -16,7 +43,7 @@ export function getToolDefinitions(): Tool[] {
     {
       name: 'profiler',
       description:
-        '性能分析工具。snapshot: 快照（FPS/内存/绘制调用/物理统计）。start/stop: 开始/停止分析会话。get_data: 收集帧级数据，含百分位统计、尖峰检测、帧预算分析、内存统计。get_active_processes: 遍历场景树查找有 _process/_physics_process 的节点。get_signal_connections: 列出子树所有信号连接。' +
+        '性能分析工具。snapshot: 快照（FPS/内存/绘制调用/物理统计）。start/stop: 开始/停止分析会话。get_data: 收集帧级数据，含多维度采样、p99百分位、趋势退化检测、内存趋势、渲染统计。get_active_processes: 遍历场景树查找有 _process/_physics_process 的节点。get_signal_connections: 列出子树所有信号连接。' +
         NON_PERSIST,
       inputSchema: {
         type: 'object' as const,
@@ -29,6 +56,12 @@ export function getToolDefinitions(): Tool[] {
           },
           target_fps: { type: 'number', description: '目标帧率，用于帧预算分析（get_data，默认 60）' },
           frame_count: { type: 'number', description: '采样帧数（get_data，默认 60）' },
+          dimensions: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '采样维度列表（get_data，默认 ["process"]）。有效值: process, physics, nav_process',
+          },
+          leak_threshold_mb: { type: 'number', description: '内存泄漏嫌疑阈值 MB（get_data，默认 2.0）' },
           node_path: { type: 'string', description: '子树根节点路径（get_active_processes/get_signal_connections，默认 root）' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
@@ -80,75 +113,153 @@ func _initialize():
 `;
 }
 
-function genGetData(targetFps: number, frameCount: number): string {
+function genGetData(
+  targetFps: number,
+  frameCount: number,
+  dimensions: string[],
+  leakThresholdMb: string,
+): string {
+  const dimDeclarations: string[] = [];
+  const dimSampling: string[] = [];
+  const dimAnalysis: string[] = [];
+
+  for (const dim of dimensions) {
+    const { gdConstant, label } = DIMENSION_MAP[dim];
+    const varName = `_mcp_dim_${label}`;
+    dimDeclarations.push(`var ${varName}: Array = []`);
+    dimSampling.push(`${varName}.append(Performance.get_monitor(${gdConstant}) * 1000.0)`);
+    dimAnalysis.push(`
+\tvar _${label}_n: int = ${varName}.size()
+\tif _${label}_n > 0:
+\t\tvar _${label}_sorted: Array = ${varName}.duplicate()
+\t\t_${label}_sorted.sort()
+\t\tvar _${label}_total: float = 0.0
+\t\tfor _t in ${varName}:
+\t\t\t_${label}_total += _t
+\t\tvar _${label}_avg: float = _${label}_total / float(_${label}_n)
+\t\tvar _${label}_min: float = _${label}_sorted[0]
+\t\tvar _${label}_max: float = _${label}_sorted[_${label}_n - 1]
+\t\tvar _${label}_p50: float = _${label}_sorted[int(_${label}_n * 0.5)]
+\t\tvar _${label}_p95_idx: int = int(_${label}_n * 0.95)
+\t\tif _${label}_p95_idx >= _${label}_n:
+\t\t\t_${label}_p95_idx = _${label}_n - 1
+\t\tvar _${label}_p95: float = _${label}_sorted[_${label}_p95_idx]
+\t\tvar _${label}_p99_idx: int = int(_${label}_n * 0.99)
+\t\tif _${label}_p99_idx >= _${label}_n:
+\t\t\t_${label}_p99_idx = _${label}_n - 1
+\t\tvar _${label}_p99: float = _${label}_sorted[_${label}_p99_idx]
+\t\tvar _${label}_over: int = 0
+\t\tfor _t in ${varName}:
+\t\t\tif _t > _frame_budget_ms:
+\t\t\t\t_${label}_over += 1
+\t\t# Degradation detection (require at least 2 samples for comparison)
+\t\tvar _${label}_degradation_pct: float = 0.0
+\t\tvar _${label}_degradation_detected: bool = false
+\t\tvar _${label}_first_half_avg_ms: float = 0.0
+\t\tvar _${label}_second_half_avg_ms: float = 0.0
+\t\tif _${label}_n >= 2:
+\t\t\tvar _${label}_half: int = _${label}_n / 2
+\t\t\tvar _${label}_fh_sum: float = 0.0
+\t\t\tvar _${label}_sh_sum: float = 0.0
+\t\t\tfor _i in range(_${label}_half):
+\t\t\t\t_${label}_fh_sum += ${varName}[_i]
+\t\t\tfor _i in range(_${label}_half, _${label}_n):
+\t\t\t\t_${label}_sh_sum += ${varName}[_i]
+\t\t\t_${label}_first_half_avg_ms = _${label}_fh_sum / float(_${label}_half)
+\t\t\t_${label}_second_half_avg_ms = _${label}_sh_sum / float(_${label}_n - _${label}_half)
+\t\t\tif _${label}_first_half_avg_ms > 0.0:
+\t\t\t\t_${label}_degradation_pct = ((_${label}_second_half_avg_ms - _${label}_first_half_avg_ms) / _${label}_first_half_avg_ms) * 100.0
+\t\t\t\t_${label}_degradation_detected = _${label}_degradation_pct > 10.0
+\t\tvar _${label}_data: Dictionary = {}
+\t\t_${label}_data["label"] = "${label}"
+\t\t_${label}_data["frame_count"] = _${label}_n
+\t\t_${label}_data["avg_ms"] = _${label}_avg
+\t\t_${label}_data["min_ms"] = _${label}_min
+\t\t_${label}_data["max_ms"] = _${label}_max
+\t\t_${label}_data["p50_ms"] = _${label}_p50
+\t\t_${label}_data["p95_ms"] = _${label}_p95
+\t\t_${label}_data["p99_ms"] = _${label}_p99
+\t\t_${label}_data["over_budget_count"] = _${label}_over
+\t\t_${label}_data["over_budget_pct"] = (float(_${label}_over) / float(_${label}_n)) * 100.0
+\t\t_${label}_data["degradation_pct"] = _${label}_degradation_pct
+\t\t_${label}_data["degradation_detected"] = _${label}_degradation_detected
+\t\t_${label}_data["first_half_avg_ms"] = _${label}_first_half_avg_ms
+\t\t_${label}_data["second_half_avg_ms"] = _${label}_second_half_avg_ms
+\t\t_dim_results.append(_${label}_data)
+`.trimStart());
+  }
+
   return `${SCENE_TREE_HEADER}
-var _mcp_frame_times: Array = []
+${dimDeclarations.join('\n')}
 var _mcp_target_fps: float = ${targetFps}
 var _mcp_frame_count: int = ${frameCount}
 var _mcp_collected: int = 0
+var _frame_budget_ms: float = 1000.0 / _mcp_target_fps
+var _mem_start: Dictionary = {}
+var _mem_end: Dictionary = {}
+var _render_start: Dictionary = {}
+var _render_end: Dictionary = {}
+
+func _capture_memory() -> Dictionary:
+\treturn {
+\t\t"static_mb": Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0,
+\t\t"object_count": Performance.get_monitor(Performance.OBJECT_COUNT),
+\t\t"resource_count": Performance.get_monitor(Performance.OBJECT_RESOURCE_COUNT),
+\t\t"node_count": Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
+\t}
 
 func _initialize():
 \t_mcp_load_main_scene()
+\t_mem_start = _capture_memory()
+\t_render_start = {
+\t\t"draw_calls": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+\t\t"objects_drawn": int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)),
+\t}
 
 func _process(_delta: float):
-\tvar _pt: float = Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
-\t_mcp_frame_times.append(_pt)
+\t${dimSampling.join('\n\t')}
 \t_mcp_collected += 1
 \tif _mcp_collected >= _mcp_frame_count:
 \t\t_analyze_and_report()
 
 func _analyze_and_report():
-\tvar _times: Array = _mcp_frame_times
-\tvar _n: int = _times.size()
-\tif _n == 0:
-\t\t_mcp_output("error", "No frame data collected")
-\t\t_mcp_done()
-\t\treturn
-\tvar _sorted: Array = _times.duplicate()
-\t_sorted.sort()
-\tvar _total: float = 0.0
-\tvar _min_val: float = _sorted[0]
-\tvar _max_val: float = _sorted[_n - 1]
-\tfor _t in _times:
-\t\t_total += _t
-\tvar _avg: float = _total / float(_n)
-\tvar _p50: float = _sorted[int(_n * 0.5)]
-\tvar _p95_idx: int = int(_n * 0.95)
-\tif _p95_idx >= _n:
-\t\t_p95_idx = _n - 1
-\tvar _p95: float = _sorted[_p95_idx]
-\tvar _median: float = _sorted[int(_n * 0.5)]
-\tvar _spike_threshold: float = _median * 2.0
-\tvar _spikes: Array = []
-\tfor _i in range(_n):
-\t\tif _times[_i] > _spike_threshold:
-\t\t\t_spikes.append({"frame": _i, "time_ms": _times[_i]})
-\tvar _frame_budget_ms: float = 1000.0 / _mcp_target_fps
-\tvar _over_budget: int = 0
-\tfor _t in _times:
-\t\tif _t > _frame_budget_ms:
-\t\t\t_over_budget += 1
+\t_mem_end = _capture_memory()
+\t_render_end = {
+\t\t"draw_calls": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+\t\t"objects_drawn": int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)),
+\t}
+\tvar _dim_results: Array = []
+\t${dimAnalysis.join('\n\t')}
+\t# Frame budget summary
 \tvar _frame_data: Dictionary = {}
-\t_frame_data["frame_count"] = _n
 \t_frame_data["target_fps"] = _mcp_target_fps
 \t_frame_data["frame_budget_ms"] = _frame_budget_ms
-\t_frame_data["avg_ms"] = _avg
-\t_frame_data["min_ms"] = _min_val
-\t_frame_data["max_ms"] = _max_val
-\t_frame_data["p50_ms"] = _p50
-\t_frame_data["p95_ms"] = _p95
-\t_frame_data["spike_count"] = _spikes.size()
-\t_frame_data["spikes"] = _spikes
-\t_frame_data["over_budget_count"] = _over_budget
-\t_frame_data["over_budget_pct"] = (float(_over_budget) / float(_n)) * 100.0
+\t_frame_data["frame_count"] = _mcp_frame_count
+\t_frame_data["dimension_stats"] = _dim_results
 \t_mcp_output("frame_analysis", _frame_data)
+\t# Memory trend
+\tvar _mem_delta: float = _mem_end.get("static_mb", 0.0) - _mem_start.get("static_mb", 0.0)
 \tvar _mem_data: Dictionary = {}
-\t_mem_data["memory_static_mb"] = Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0
-\t_mem_data["object_count"] = int(Performance.get_monitor(Performance.OBJECT_COUNT))
-\t_mem_data["resource_count"] = int(Performance.get_monitor(Performance.OBJECT_RESOURCE_COUNT))
-\t_mem_data["node_count"] = int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
+\t_mem_data["start_static_mb"] = _mem_start.get("static_mb", 0.0)
+\t_mem_data["end_static_mb"] = _mem_end.get("static_mb", 0.0)
+\t_mem_data["object_count"] = _mem_end.get("object_count", 0)
+\t_mem_data["resource_count"] = _mem_end.get("resource_count", 0)
+\t_mem_data["node_count"] = _mem_end.get("node_count", 0)
 \t_mem_data["orphan_node_count"] = int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))
+\tvar _mem_trend: Dictionary = {}
+\t_mem_trend["start_static_mb"] = _mem_start.get("static_mb", 0.0)
+\t_mem_trend["end_static_mb"] = _mem_end.get("static_mb", 0.0)
+\t_mem_trend["delta_mb"] = _mem_delta
+\t_mem_trend["leak_suspected"] = _mem_delta > ${leakThresholdMb}
+\t_mem_data["memory_trend"] = _mem_trend
 \t_mcp_output("memory_stats", _mem_data)
+\t# Render stats (independent block)
+\tvar _render_data: Dictionary = {}
+\t_render_data["start_draw_calls"] = _render_start.get("draw_calls", 0)
+\t_render_data["end_draw_calls"] = _render_end.get("draw_calls", 0)
+\t_render_data["start_objects_drawn"] = _render_start.get("objects_drawn", 0)
+\t_render_data["end_objects_drawn"] = _render_end.get("objects_drawn", 0)
+\t_mcp_output("render_stats", _render_data)
 \t_mcp_done()
 `;
 }
@@ -277,9 +388,26 @@ export async function handleTool(
         const frameCount = args.frame_count !== undefined
           ? ensurePositiveInt(args.frame_count, 'frame_count', 1, 600)
           : 60;
-        code = genGetData(targetFps, frameCount);
+        const { dimensions, warnings: dimWarnings } = parseDimensions(args.dimensions);
+        const rawThreshold = Number(args.leak_threshold_mb);
+        const leakThresholdMb = args.leak_threshold_mb !== undefined
+          ? (Number.isFinite(rawThreshold) && rawThreshold > 0
+            ? Math.max(0.1, rawThreshold)
+            : 2.0)
+          : 2.0;
+        const leakThresholdStr = leakThresholdMb % 1 === 0
+          ? `${leakThresholdMb}.0`
+          : String(leakThresholdMb);
+        code = genGetData(targetFps, frameCount, dimensions, leakThresholdStr);
         timeout = 45;
-        break;
+        const gdResult = await executeGdscript({
+          godotPath,
+          projectPath,
+          code,
+          timeout,
+          loadAutoloads,
+        });
+        return parseGdscriptResult(gdResult, dimWarnings);
       }
       case 'get_active_processes': {
         const nodePath = (args.node_path as string) ?? '';

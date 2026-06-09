@@ -75,6 +75,22 @@ describe('profiler-ops getToolDefinitions', () => {
     expect(required).toContain('project_path');
     expect(required).toContain('action');
   });
+
+  it('has dimensions parameter in get_data schema', () => {
+    const defs = getToolDefinitions();
+    const schema = defs[0].inputSchema;
+    expect(schema.properties.dimensions).toBeDefined();
+    expect(schema.properties.dimensions.type).toBe('array');
+    expect(schema.properties.dimensions.description).toContain('维度');
+  });
+
+  it('has leak_threshold_mb parameter in get_data schema', () => {
+    const defs = getToolDefinitions();
+    const schema = defs[0].inputSchema;
+    expect(schema.properties.leak_threshold_mb).toBeDefined();
+    expect(schema.properties.leak_threshold_mb.type).toBe('number');
+    expect(schema.properties.leak_threshold_mb.description).toContain('泄漏');
+  });
 });
 
 // ─── TOOL_META ──────────────────────────────────────────────────────────────
@@ -198,6 +214,154 @@ describe('profiler-ops handleTool — profiler get_data', () => {
     const callArgs = executeGdscript.mock.calls[0][0];
     expect(callArgs.code).toContain('_mcp_target_fps: float = 60');
     expect(callArgs.code).toContain('_mcp_frame_count: int = 60');
+  });
+
+  it('rejects invalid dimension strings and falls back to process', async () => {
+    const ctx = createMockCtx();
+    const result = await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+      dimensions: ['typo', 'process'],
+    }, ctx);
+
+    expect(result).not.toBeNull();
+    const callArgs = executeGdscript.mock.calls[0][0];
+    expect(callArgs.code).toContain('Performance.TIME_PROCESS');
+    expect(callArgs.code).not.toContain('Performance.TIME_NAVIGATION');
+    // Check warning in result
+    const text = result.content[0].text;
+    expect(text).toContain('typo');
+  });
+
+  it('falls back to process when all dimensions are invalid', async () => {
+    const ctx = createMockCtx();
+    const result = await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+      dimensions: ['bogus'],
+    }, ctx);
+
+    expect(result).not.toBeNull();
+    const callArgs = executeGdscript.mock.calls[0][0];
+    expect(callArgs.code).toContain('Performance.TIME_PROCESS');
+  });
+
+  it('accepts valid dimensions array', async () => {
+    const ctx = createMockCtx();
+    await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+      dimensions: ['process', 'physics'],
+    }, ctx);
+
+    const callArgs = executeGdscript.mock.calls[0][0];
+    expect(callArgs.code).toContain('Performance.TIME_PROCESS');
+    expect(callArgs.code).toContain('Performance.TIME_PHYSICS_PROCESS');
+  });
+
+  it('generates multi-dimension sampling code', async () => {
+    const ctx = createMockCtx();
+    await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+      dimensions: ['process', 'physics'],
+    }, ctx);
+
+    const code = executeGdscript.mock.calls[0][0].code;
+    expect(code).toContain('_mcp_dim_process');
+    expect(code).toContain('_mcp_dim_physics');
+  });
+
+  it('includes p99 percentile in generated code', async () => {
+    const ctx = createMockCtx();
+    await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+    }, ctx);
+
+    const code = executeGdscript.mock.calls[0][0].code;
+    expect(code).toContain('0.99');
+  });
+
+  it('includes degradation detection with division-by-zero guard', async () => {
+    const ctx = createMockCtx();
+    await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+    }, ctx);
+
+    const code = executeGdscript.mock.calls[0][0].code;
+    expect(code).toContain('degradation');
+    expect(code).toContain('>= 2');
+  });
+
+  it('includes memory trend sampling', async () => {
+    const ctx = createMockCtx();
+    await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+    }, ctx);
+
+    const code = executeGdscript.mock.calls[0][0].code;
+    expect(code).toContain('_capture_memory');
+    expect(code).toContain('memory_trend');
+    expect(code).toContain('leak_suspected');
+  });
+
+  it('includes render stats as independent block', async () => {
+    const ctx = createMockCtx();
+    await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+    }, ctx);
+
+    const code = executeGdscript.mock.calls[0][0].code;
+    expect(code).toContain('render_stats');
+    expect(code).toContain('RENDER_TOTAL_DRAW_CALLS_IN_FRAME');
+    expect(code).not.toContain('_mcp_dim_render');
+  });
+
+  it('uses leak_threshold_mb in generated code', async () => {
+    const ctx = createMockCtx();
+    await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+      leak_threshold_mb: 5.0,
+    }, ctx);
+
+    const code = executeGdscript.mock.calls[0][0].code;
+    expect(code).toContain('5.0');
+  });
+
+  it('preserves default behavior when no new params given', async () => {
+    const ctx = createMockCtx();
+    await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+    }, ctx);
+
+    const code = executeGdscript.mock.calls[0][0].code;
+    expect(code).toContain('frame_budget');
+    expect(code).toContain('_mcp_target_fps');
+    expect(code).toContain('_mcp_frame_count');
+  });
+
+  it('generates safe code for frame_count=1 (T2: no division-by-zero in degradation)', async () => {
+    const ctx = createMockCtx();
+    const result = await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+      frame_count: 1,
+    }, ctx);
+
+    expect(result).not.toBeNull();
+    const code = executeGdscript.mock.calls[0][0].code;
+    // Degradation guard must be present: _n >= 2 means with 1 frame, degradation is skipped
+    expect(code).toContain('>= 2');
+    // Should NOT produce division by zero - half = 0 scenario is avoided by the guard
+    expect(code).not.toContain('/ 0)');
+    // Should still produce valid output (no crash paths)
+    expect(code).toContain('_mcp_done()');
   });
 });
 
