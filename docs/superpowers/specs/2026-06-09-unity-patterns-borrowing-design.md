@@ -59,19 +59,21 @@ ListTools 返回：~35 核心工具 + 2 元工具（目录 + 代理）
 | 交付 | verify_delivery |
 | 元工具 | manage_tools, confirm_and_execute, godot_list_tools, godot_advanced_tool |
 
-**高级层（~17 个，按需发现）**：
+**高级层（17 个，按需发现）**：
 
 | 工具 | 归组 | 原因 |
 |------|------|------|
-| animtree | animation | 特化场景 |
-| ik | physics | 特化场景 |
+| animtree | animation | 特化场景（AnimationTree 状态机） |
+| ik | physics | 特化场景（IK 修饰器） |
 | recording | recording | 依赖 Bridge 连接 |
 | editor | editor | 依赖编辑器连接 |
-| batch | code | 低频使用 |
-| scene_commit | tilemap | 低频使用 |
-| game_design | code | 特化场景 |
-| godot_list_instances | multi_instance | 低频使用 |
-| godot_select_instance | multi_instance | 低频使用 |
+| batch | code | 低频批量操作 |
+| scene_commit | tilemap | 低频批量场景修改 |
+| game_design | code | 特化场景（GDD 验证） |
+| godot_list_instances | multi_instance | 低频多实例管理 |
+| godot_select_instance | multi_instance | 低频多实例管理 |
+
+> **注意**：`godot_list_tools` 和 `godot_advanced_tool` 属于核心层（元工具），始终暴露。
 
 #### 新文件：`src/tools/tool-catalog.ts`
 
@@ -190,9 +192,9 @@ getFilteredTools(): Tool[] {
   // ...
 
   // ── 新增：核心/高级分层 ──
-  // full 模式下也只暴露核心工具 + 元工具
-  // 用户可通过 godot_list_tools 发现高级工具
-  // slim/minimal/lite 模式不受影响（它们已有更严格的过滤）
+  // full 模式：暴露核心工具 + 元工具，高级工具通过 godot_advanced_tool 代理调用
+  // slim 模式：同样只暴露核心工具（slim 等效 minimal + proxy，CORE_TOOLS 已包含 proxy）
+  // lite/minimal/profile 模式：由上面的 LITE/MINIMAL/PROFILE 过滤处理，不重复过滤
   if (this.options.mode === 'full' || this.options.mode === 'slim') {
     allTools = allTools.filter(t => CORE_TOOLS.has(t.name));
   }
