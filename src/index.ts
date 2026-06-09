@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
 import { GodotServer } from './GodotServer.js';
