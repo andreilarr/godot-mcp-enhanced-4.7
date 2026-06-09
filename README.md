@@ -121,15 +121,36 @@ read_scene/read_script → 理解结构 → write_script → run_and_verify
 - AI 模型对中文工具描述的理解能力与英文相当
 - 如需国际化支持，欢迎提交 Issue 或 PR
 
-## 安装
+## 快速开始
 
+### 1 分钟配置（推荐）
+
+#### Claude Code
 ```bash
-git clone https://github.com/wgt19861219/godot-mcp-enhanced.git
-cd godot-mcp-enhanced
-npm install
+claude mcp add godot -- npx -y godot-mcp-enhanced
 ```
 
-## 首次使用
+#### Cursor / Cline / 其他
+在项目的 `.cursor/mcp.json` 或 MCP 配置中添加：
+
+```json
+{
+  "mcpServers": {
+    "godot": {
+      "command": "npx",
+      "args": ["-y", "godot-mcp-enhanced"]
+    }
+  }
+}
+```
+
+### 一键配置
+```bash
+npx godot-mcp-enhanced setup
+# 自动检测：Godot 路径 + AI 客户端 + 写入配置
+```
+
+### 首次使用
 
 连接 Godot 项目后，建议立即运行以下工具一键配置项目规则：
 
@@ -143,97 +164,31 @@ setup_project_rules(project_path="你的项目路径")
 
 如果已有配置想更新，使用 `force=true` 覆盖。如只需其中一项，用 `hooks=false` 或 `claude_md=false` 跳过。
 
-## 配置
-
-### Cursor
-
-在项目中创建 `.cursor/mcp.json`：
-
-```json
-{
-  "mcpServers": {
-    "godot": {
-      "command": "node",
-      "args": ["D:/GitHub/godot-mcp-enhanced/build/index.js"],
-      "env": {
-        "GODOT_PATH": "C:/path/to/godot.exe",
-        "DEBUG": "true"
-      }
-    }
-  }
-}
-```
-
-### Cline / Claude Code
-
-添加到 MCP 设置中：
-
-```json
-{
-  "mcpServers": {
-    "godot": {
-      "command": "node",
-      "args": ["D:/GitHub/godot-mcp-enhanced/build/index.js"],
-      "env": {
-        "GODOT_PATH": "C:/path/to/godot.exe",
-        "DEBUG": "true"
-      },
-      "autoApprove": [
-        "launch_editor", "run_project", "stop_project",
-        "get_debug_output", "capture_screenshot", "analyze_screenshot", "run_tests",
-        "get_godot_version", "list_projects", "get_project_info",
-        "list_files", "read_project_config", "create_project", "setup_project_rules",
-        "read_scene", "create_scene", "add_node", "save_scene", "load_sprite",
-        "edit_node", "remove_node", "batch_add_nodes",
-        "read_script", "write_script", "edit_script",
-        "generate_test", "create_test_scene", "project_replace",
-        "query_scene_tree", "inspect_node",
-        "validate_project", "import_resources",
-        "run_and_verify", "analyze_error", "validate_scripts",
-        "signal_connect", "signal_disconnect", "signal_emit", "signal_list",
-        "physics_raycast", "physics_body_info", "diagnose_physics",
-        "query_spatial", "collision_overlay", "node_create_3d", "nav_query_path",
-        "audio_play", "audio_stop", "audio_set_param", "audio_query",
-        "tilemap_read", "tilemap_set_cell", "tilemap_erase_cell", "tilemap_fill_rect",
-        "tilemap_clear", "tilemap_copy", "tilemap_paste", "tilemap_set_transform",
-        "material_read", "material_write", "shader_edit",
-        "game_bridge_install", "game_bridge_uninstall",
-        "game_query", "game_input", "game_wait",
-        "dev_loop", "scene_snapshot", "batch_validate", "batch_create_files", "batch_run_verify",
-        "animation", "profiler", "spatial_info",
-        "get_class_info", "search_classes", "find_method", "get_inheritance",
-        "test_assert", "test_stress", "export_list_presets", "export_get_preset", "export_build",
-        "particles_create", "particles_set_emission", "particles_set_process",
-        "particles_load_preset", "particles_set_material",
-        "nav_create_region", "nav_bake_mesh", "nav_create_agent", "nav_set_params", "nav_create_link",
-        "animtree_create", "animtree_add_state", "animtree_add_transition",
-        "animtree_set_blend", "animtree_play",
-        "ik_modifier_create", "ik_modifier_get", "ik_modifier_set", "ik_list_bones",
-        "verify_delivery", "list_templates", "apply_template",
-        "ui_create_control", "ui_build_layout", "ui_set_layout", "ui_get_layout",
-        "ui_anchor_preset", "ui_set_theme", "ui_container_add", "ui_draw_recipe",
-        "theme_create", "theme_set_property",
-        "recording_start", "recording_stop", "recording_save", "recording_load", "recording_play",
-        "editor_sync_start", "editor_sync_stop",
-        "quick_scene", "diff_scenes", "detach_instance"
-      ]
-    }
-  }
-```
-
-> ⚠️ **安全提示 (A-07):** `execute_gdscript`、`write_script`、`edit_script`、`project_replace` 等高风险工具在 `autoApprove` 列表中意味着 AI 可不经确认执行任意 GDScript 代码和文件修改。在安全敏感项目中，建议将这些工具从 `autoApprove` 中移除，改为手动确认。
-}
-```
-
 ### 环境变量
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `GODOT_PATH` | Godot 可执行文件路径 | 自动检测 |
-| `GODOT_PROJECT_PATH` | 指定 Godot 项目路径（跳过自动检测） | 自动检测 |
-| `GODOT_MCP_SEARCH_PATHS` | 额外 Godot 二进制搜索目录（分号分隔） | — |
+| `GODOT_PATH` | Godot 可执行文件路径 | 自动搜索（PATH/注册表/Scoop/Downloads） |
+| `GODOT_PROJECT_PATH` | 默认项目路径 | 自动检测 cwd（向上搜索 project.godot） |
+| `GODOT_MCP_SEARCH_PATHS` | 额外 Godot 搜索目录（分号分隔） | 无 |
 | `DEBUG` | 启用详细日志 | `false` |
-| `ALLOW_OUTSIDE_PROJECT_PATHS` | 允许工具访问项目目录外的文件（如截图输出路径） | `false` |
+
+> **注意：** 项目路径有 30 秒缓存。切换项目后等待 30 秒或重启 MCP server 使新路径生效。
+
+### 手动配置（高级用户）
+
+<details>
+<summary>展开查看手动安装步骤</summary>
+
+```bash
+git clone https://github.com/wgt19861219/godot-mcp-enhanced.git
+cd godot-mcp-enhanced
+npm install && npm run build
+```
+
+在 MCP 配置中指向 `build/index.js`，并设置所需环境变量。
+
+</details>
 
 ## 工具列表（140+ 个）
 
