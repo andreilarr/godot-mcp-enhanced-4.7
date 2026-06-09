@@ -9,7 +9,6 @@ import {
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync } from 'fs';
 import { join } from 'path';
 import { waitForEditorSecret } from './core/editor-auth.js';
 import {
