@@ -1,0 +1,63 @@
+# Development files
+.git/
+.github/
+.vscode/
+.cursor/
+.claude/
+.ruff_cache/
+node_modules/.cache/
+node_modules/.package-lock.json
+
+# Source files (not needed in bundle)
+src/
+docs/
+test/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+
+# Build artifacts
+*.map
+*.d.ts
+tsconfig.json
+
+# MCPB output itself
+*.mcpb
+
+# Config
+.editorconfig
+.eslintrc.json
+.prettierrc
+smithery.yaml
+smithery.json
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+
+# Dev/build-only deps (not needed at runtime)
+node_modules/typescript/
+node_modules/@rolldown/
+node_modules/lightningcss-win32-x64-msvc/
+node_modules/@typescript-eslint/
+node_modules/eslint/
+node_modules/@eslint*/
+node_modules/vite/
+node_modules/vitest/
+node_modules/@vitest/
+node_modules/fast-check/
+node_modules/rolldown/
+node_modules/uglify-js/
+node_modules/esquery/
+node_modules/@babel/
+
+# Deps docs and tests
+node_modules/**/README*
+node_modules/**/CHANGELOG*
+node_modules/**/*.md
+node_modules/**/test/
+node_modules/**/tests/
+node_modules/**/__tests__/
+node_modules/**/*.ts
+node_modules/**/docs/
+node_modules/**/*.png
+node_modules/**/*.jpg
