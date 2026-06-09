@@ -185,8 +185,8 @@ export function getRunningProcess(): ChildProcess | null {
   return _runningProcess;
 }
 
-export function setRunningProcess(proc: ChildProcess | null, _skipBusyCheck = false): void {
-  if (!_skipBusyCheck && _processBusy && proc !== null) {
+export function setRunningProcess(proc: ChildProcess | null, skipBusyCheck = false): void {
+  if (!skipBusyCheck && _processBusy && proc !== null) {
     throw new Error('Cannot replace process while another operation is using it');
   }
   // Clearing the process always clears busy state
