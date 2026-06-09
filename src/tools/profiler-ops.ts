@@ -2,7 +2,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { requireProjectPath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
-import { gdEscape } from './shared.js';
+import { gdEscape, ff } from './shared.js';
 import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } from './shared.js';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -124,7 +124,9 @@ function genGetData(
   const dimAnalysis: string[] = [];
 
   for (const dim of dimensions) {
-    const { gdConstant, label } = DIMENSION_MAP[dim];
+    const entry = DIMENSION_MAP[dim];
+    if (!entry) continue;
+    const { gdConstant, label } = entry;
     const varName = `_mcp_dim_${label}`;
     dimDeclarations.push(`var ${varName}: Array = []`);
     dimSampling.push(`${varName}.append(Performance.get_monitor(${gdConstant}) * 1000.0)`);
@@ -395,9 +397,7 @@ export async function handleTool(
             ? Math.max(0.1, rawThreshold)
             : 2.0)
           : 2.0;
-        const leakThresholdStr = leakThresholdMb % 1 === 0
-          ? `${leakThresholdMb}.0`
-          : String(leakThresholdMb);
+        const leakThresholdStr = ff(leakThresholdMb);
         code = genGetData(targetFps, frameCount, dimensions, leakThresholdStr);
         timeout = 45;
         const gdResult = await executeGdscript({
