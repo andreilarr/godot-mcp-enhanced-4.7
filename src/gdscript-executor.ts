@@ -34,7 +34,8 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /OS\.(execute|shell_open|kill|set_restart_on_exit|crash)\b/, label: 'OS system command' },
   { pattern: /DirAccess\.(remove_absolute|remove)\b/, label: 'Directory removal' },
   // C-03: Allow FileAccess.READ, only flag write modes (WRITE / READ_WRITE / READ_WRITE_APPEND)
-  { pattern: /FileAccess\.open\s*\([^)]*FileAccess\.(?:WRITE|READ_WRITE|READ_WRITE_APPEND)\b/, label: 'File write access' },
+  // Use [^;]* to match to statement boundary — avoids truncation on ')' in file paths
+  { pattern: /FileAccess\.open\s*\([^;]*FileAccess\.(?:WRITE|READ_WRITE|READ_WRITE_APPEND)\b/, label: 'File write access' },
   { pattern: /Engine\.(set_singleton)\b/, label: 'Engine singleton modification' },
   // C-03: Engine.get_singleton bypasses class-level restrictions (e.g. FileAccess, DirAccess)
   { pattern: /Engine\.get_singleton\b/, label: 'Engine singleton access (sandbox bypass)' },

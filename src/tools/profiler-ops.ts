@@ -159,6 +159,12 @@ function genGetData(
 \t\tfor _t in ${varName}:
 \t\t\tif _t > _frame_budget_ms:
 \t\t\t\t_${label}_over += 1
+\t\t# Spike detection (single-frame anomaly: frame time > 2x median)
+\t\tvar _${label}_spike_threshold: float = _${label}_p50 * 2.0
+\t\tvar _${label}_spikes: Array = []
+\t\tfor _i in range(_${label}_n):
+\t\t\tif ${varName}[_i] > _${label}_spike_threshold:
+\t\t\t\t_${label}_spikes.append({"frame": _i, "time_ms": ${varName}[_i]})
 \t\t# Degradation detection (require at least 2 samples for comparison)
 \t\tvar _${label}_degradation_pct: float = 0.0
 \t\tvar _${label}_degradation_detected: bool = false
@@ -188,6 +194,8 @@ function genGetData(
 \t\t_${label}_data["p99_ms"] = _${label}_p99
 \t\t_${label}_data["over_budget_count"] = _${label}_over
 \t\t_${label}_data["over_budget_pct"] = (float(_${label}_over) / float(_${label}_n)) * 100.0
+\t\t_${label}_data["spike_count"] = _${label}_spikes.size()
+\t\t_${label}_data["spikes"] = _${label}_spikes
 \t\t_${label}_data["degradation_pct"] = _${label}_degradation_pct
 \t\t_${label}_data["degradation_detected"] = _${label}_degradation_detected
 \t\t_${label}_data["first_half_avg_ms"] = _${label}_first_half_avg_ms

@@ -429,6 +429,33 @@ describe('profiler-ops handleTool — profiler get_data', () => {
     const code = executeGdscript.mock.calls[0][0].code;
     expect(code).toContain('Performance.TIME_PROCESS');
   });
+
+  it('falls back to process when dimensions is empty array', async () => {
+    const ctx = createMockCtx();
+    const result = await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+      dimensions: [],
+    }, ctx);
+
+    expect(result).not.toBeNull();
+    const code = executeGdscript.mock.calls[0][0].code;
+    expect(code).toContain('Performance.TIME_PROCESS');
+  });
+
+  // IMPORTANT-02: spike detection restored
+  it('includes spike detection in generated code', async () => {
+    const ctx = createMockCtx();
+    await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+    }, ctx);
+
+    const code = executeGdscript.mock.calls[0][0].code;
+    expect(code).toContain('spike_threshold');
+    expect(code).toContain('spike_count');
+    expect(code).toContain('spikes');
+  });
 });
 
 // ─── handleTool — profiler get_active_processes ─────────────────────────────
