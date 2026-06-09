@@ -74,14 +74,15 @@ export function resolveProjectPath(explicitPath?: string): string | undefined {
     return _resolvedProjectPath;
   }
 
-  const envPath = process.env.GODOT_PROJECT_PATH;
-  if (envPath) {
+  const rawEnvPath = process.env.GODOT_PROJECT_PATH;
+  if (rawEnvPath) {
+    const envPath = resolvePath(rawEnvPath); // normalize relative → absolute
     if (existsSync(join(envPath, 'project.godot'))) {
       _resolvedProjectPath = envPath;
       _resolvedProjectPathTime = now;
       return envPath;
     }
-    getLogger().warn('godot-mcp', `GODOT_PROJECT_PATH="${envPath}" does not contain project.godot, ignoring`);
+    getLogger().warn('godot-mcp', `GODOT_PROJECT_PATH="${rawEnvPath}" does not contain project.godot, ignoring`);
   }
 
   let dir = process.cwd();
