@@ -25,6 +25,7 @@ import { opsErrorResult, COMMON_ERROR_CODES } from '../tools/shared.js';
 import { truncateResponse } from './response-limiter.js';
 import * as ps from './process-state.js';
 import { getLogger } from './logger.js';
+import { resolveProjectPath } from './path-utils.js';
 
 /** Known profile names for IDE autocomplete. Unknown strings fall through to resolveProfile(). */
 type KnownProfile = 'full' | 'lite' | 'minimal' | 'bridge_dev' | '3d_dev';
@@ -186,6 +187,19 @@ export class ToolDispatcher {
     const currentExecutor = this.editorExecutor;
 
     try {
+      // ── 0.5. Default project_path injection ──
+      if (!args.project_path) {
+        const resolved = resolveProjectPath();
+        if (!resolved) {
+          return opsErrorResult(
+            COMMON_ERROR_CODES.INVALID_PARAMS,
+            'project_path is required but not provided, and no default could be resolved. ' +
+            'Set GODOT_PROJECT_PATH env var, run from a Godot project directory, or pass project_path explicitly.',
+          );
+        }
+        args.project_path = resolved;
+      }
+
       // ── 0. Common arg type validation ──
       const typeErr = this.validateCommonArgs(args);
       if (typeErr) return typeErr;

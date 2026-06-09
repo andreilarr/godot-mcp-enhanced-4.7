@@ -5,6 +5,7 @@ import type { ReadOnlyGuard } from '../../src/core/ReadOnlyGuard.js';
 import type { EditorToolExecutor } from '../../src/core/EditorToolExecutor.js';
 import type { ToolResult } from '../../src/types.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { resolveProjectPath as _mockResolveProjectPath } from '../../src/core/path-utils.js';
 
 // ─── Hoisted Mocks (vi.hoisted ensures these are available inside vi.mock factories) ──
 
@@ -51,6 +52,11 @@ vi.mock('../../src/guard.js', () => ({
 vi.mock('../../src/helpers.js', () => ({
   isPathInAllowedRoots: mockIsPathInAllowedRoots,
   parseGodotConfig: vi.fn().mockReturnValue({}),
+}));
+
+vi.mock('../../src/core/path-utils.js', () => ({
+  resolveProjectPath: vi.fn().mockReturnValue('/default/project'),
+  _resetProjectPathCache: vi.fn(),
 }));
 
 vi.mock('../../src/tools/shared.js', () => ({
@@ -121,6 +127,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockGetAllToolDefinitions.mockReturnValue([...FIXTURE_TOOLS]);
   mockRequiresConfirmation.mockReturnValue(false);
+  (_mockResolveProjectPath as ReturnType<typeof vi.fn>).mockReturnValue('/default/project');
 });
 
 // ── getFilteredTools ────────────────────────────────────────────────────────
@@ -285,7 +292,7 @@ describe('ToolDispatcher.handleCall', () => {
     const dispatcher = createDispatcherForHandleCall({ readOnlyGuard: guard });
     const result = await dispatcher.handleCall({ params: { name: 'scene' } });
     expect(result).toBeTruthy();
-    expect(mockModule.handleTool).toHaveBeenCalledWith('scene', {}, expect.anything());
+    expect(mockModule.handleTool).toHaveBeenCalledWith('scene', expect.objectContaining({ project_path: '/default/project' }), expect.anything());
   });
 
   // [T2] 正常 camelCase → snake_case 转换
@@ -399,7 +406,7 @@ describe('ToolDispatcher.handleCall', () => {
     const dispatcher = createDispatcherForHandleCall({ readOnlyGuard: guard, connectionMode: 'editor' });
     dispatcher.setEditorExecutor(mockExecutor);
     await dispatcher.handleCall({ params: { name: 'scene', arguments: { action: 'add_node' } } });
-    expect(mockExecutor.execute).toHaveBeenCalledWith('scene', { action: 'add_node' });
+    expect(mockExecutor.execute).toHaveBeenCalledWith('scene', expect.objectContaining({ action: 'add_node', project_path: '/default/project' }));
   });
 
   // [T13] editor 模式 executor 为 null → fallback headless
@@ -599,16 +606,21 @@ describe('ToolDispatcher.handleCall', () => {
     expect(parsed.error).toContain('project_path');
   });
 
-  // [V10] project_path=null → INVALID_PARAMS
-  it('rejects null project_path', async () => {
+  // [V10] project_path=null → 注入默认值（null 视为未提供）
+  it('injects default project_path when project_path is null', async () => {
     const guard = createMockGuard(false);
+    const mockModule = { handleTool: vi.fn().mockResolvedValue(mockToolResult) };
+    mockGetModuleForTool.mockReturnValue(mockModule);
     const dispatcher = createDispatcherForHandleCall({ readOnlyGuard: guard });
     const result = await dispatcher.handleCall({
       params: { name: 'scene', arguments: { project_path: null } },
     });
-    expect(result.isError).toBe(true);
-    const parsed = JSON.parse((result.content[0] as { text: string }).text);
-    expect(parsed.error_code).toBe('INVALID_PARAMS');
+    expect(result.isError).toBeFalsy();
+    expect(mockModule.handleTool).toHaveBeenCalledWith(
+      'scene',
+      expect.objectContaining({ project_path: '/default/project' }),
+      expect.anything(),
+    );
   });
 
   // [V11] project_path=undefined (key missing) → 不报错
@@ -808,5 +820,61 @@ describe('getFilteredTools with activeGroups', () => {
     const tools = dispatcher.getFilteredTools();
     const toolNames = tools.map(t => t.name);
     expect(toolNames).toContain('confirm_and_execute');
+  });
+});
+
+// ── default project_path injection ─────────────────────────────────────────
+
+describe('ToolDispatcher: default project_path injection', () => {
+  it('injects default project_path when not provided', async () => {
+    (_mockResolveProjectPath as ReturnType<typeof vi.fn>).mockReturnValue('/injected/project');
+
+    const mockModule = { handleTool: vi.fn().mockResolvedValue(mockToolResult) };
+    mockGetModuleForTool.mockReturnValue(mockModule);
+
+    const dispatcher = new ToolDispatcher(createOptions());
+    await dispatcher.handleCall({
+      params: { name: 'scene', arguments: { action: 'read_scene' } },
+    });
+
+    expect(mockModule.handleTool).toHaveBeenCalledWith(
+      'scene',
+      expect.objectContaining({ project_path: '/injected/project', action: 'read_scene' }),
+      expect.anything(),
+    );
+  });
+
+  it('returns error when project_path cannot be resolved', async () => {
+    (_mockResolveProjectPath as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+
+    const dispatcher = new ToolDispatcher(createOptions());
+    const result = await dispatcher.handleCall({
+      params: { name: 'scene', arguments: { action: 'read_scene' } },
+    });
+
+    expect(result.isError).toBe(true);
+    const text = JSON.stringify(result.content);
+    expect(text).toContain('project_path');
+  });
+
+  it('preserves explicit project_path without calling resolveProjectPath', async () => {
+    const mockResolve = _mockResolveProjectPath as ReturnType<typeof vi.fn>;
+    mockResolve.mockReturnValue('/should-not-be-used');
+
+    const mockModule = { handleTool: vi.fn().mockResolvedValue(mockToolResult) };
+    mockGetModuleForTool.mockReturnValue(mockModule);
+
+    const dispatcher = new ToolDispatcher(createOptions());
+    await dispatcher.handleCall({
+      params: { name: 'scene', arguments: { project_path: '/explicit', action: 'read_scene' } },
+    });
+
+    expect(mockModule.handleTool).toHaveBeenCalledWith(
+      'scene',
+      expect.objectContaining({ project_path: '/explicit' }),
+      expect.anything(),
+    );
+    // resolveProjectPath should NOT be called when explicit path provided
+    expect(mockResolve).not.toHaveBeenCalled();
   });
 });
