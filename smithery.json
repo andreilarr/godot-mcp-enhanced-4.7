@@ -1,0 +1,25 @@
+{
+  "id": "wgt19861219/godot-mcp-enhanced",
+  "name": "Godot MCP Enhanced",
+  "description": "Enhanced MCP server for Godot game engine — closed-loop AI-assisted development with scene reading, script R/W, screenshots, dynamic GDScript execution, and more.",
+  "tags": ["godot", "game-dev", "mcp", "ai", "claude", "godot-engine"],
+  "deployment": {
+    "localOnly": true,
+    "requirements": [
+      {
+        "name": "Godot Engine",
+        "description": "Godot 4.x engine must be installed (auto-detected)",
+        "required": true
+      },
+      {
+        "name": "Node.js",
+        "description": "Node.js >= 18",
+        "required": true
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wgt19861219/godot-mcp-enhanced"
+  }
+}

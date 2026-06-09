@@ -1,0 +1,22 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      GODOT_PATH:
+        type: string
+        title: "Godot Path"
+        description: "Path to Godot executable (auto-detected if omitted)"
+      GODOT_PROJECT_PATH:
+        type: string
+        title: "Project Path"
+        description: "Default Godot project path (auto-detected from cwd if omitted)"
+  commandFunction: |
+    (config) => ({
+      command: 'npx',
+      args: ['-y', 'godot-mcp-enhanced'],
+      env: {
+        ...(config.GODOT_PATH ? { GODOT_PATH: config.GODOT_PATH } : {}),
+        ...(config.GODOT_PROJECT_PATH ? { GODOT_PROJECT_PATH: config.GODOT_PROJECT_PATH } : {})
+      }
+    })
