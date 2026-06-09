@@ -51,7 +51,7 @@ export function getToolDefinitions(): Tool[] {
           preset: { type: 'string', description: 'export_build: Export preset name' },
           output_path: { type: 'string', description: 'export_build: Output directory for the build' },
         },
-        required: ['project_path', 'action'],
+        required: ['action'],
       },
     },
   ];

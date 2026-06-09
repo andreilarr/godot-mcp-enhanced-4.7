@@ -29,7 +29,7 @@ export function getToolDefinitions(): Tool[] {
             description: 'Operation type',
           },
         },
-        required: ['project_path', 'action'],
+        required: ['action'],
       },
     },
   ];

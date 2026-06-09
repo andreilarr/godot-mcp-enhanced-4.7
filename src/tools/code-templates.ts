@@ -720,7 +720,7 @@ export function getToolDefinitions(): Tool[] {
             additionalProperties: { type: 'string' },
           },
         },
-        required: ['project_path', 'action'],
+        required: ['action'],
       },
     },
   ];

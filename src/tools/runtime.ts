@@ -72,7 +72,7 @@ export function getToolDefinitions(): Tool[] {
             enum: ['launch_editor', 'run_project', 'stop_project', 'get_debug_output', 'run_tests', 'get_godot_version'],
             description: '操作类型',
           },
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          project_path: { type: 'string', description: 'Godot 项目目录路径（可选，默认使用 GODOT_PROJECT_PATH 环境变量或当前目录）' },
           timeout: { type: 'number', description: '自动停止秒数（默认 30）', default: 30 },
           test_script: { type: 'string', description: '测试脚本或目录路径（默认 res://test/）', default: 'res://test/' },
         },

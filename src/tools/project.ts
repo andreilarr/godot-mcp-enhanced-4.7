@@ -41,7 +41,7 @@ export function getToolDefinitions(): Tool[] {
             enum: ['list_projects', 'get_project_info', 'list_files', 'read_project_config', 'create_project', 'setup_project_rules', 'write_config'],
             description: '操作类型',
           },
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          project_path: { type: 'string', description: 'Godot 项目目录路径（可选，默认使用 GODOT_PROJECT_PATH 环境变量或当前目录）' },
           search_dir: { type: 'string', description: '搜索目录（list_projects）', default: '.' },
           max_depth: { type: 'number', description: '最大搜索深度（默认 3）', default: 3 },
           extensions: { type: 'array', items: { type: 'string' }, description: '按扩展名过滤（如 [".gd", ".tscn"]）' },

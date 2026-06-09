@@ -37,7 +37,6 @@ describe('game-bridge tool definitions', () => {
   it('tool has required inputSchema', () => {
     expect(tools[0].inputSchema).toBeTruthy();
     expect(tools[0].inputSchema.properties).toBeTruthy();
-    expect(tools[0].inputSchema.required).toContain('project_path');
     expect(tools[0].inputSchema.required).toContain('action');
   });
 });

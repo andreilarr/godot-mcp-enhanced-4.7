@@ -69,7 +69,7 @@ export function getToolDefinitions(): Tool[] {
           value: { description: 'set_instance_property: 属性值（string/number/bool/null/array）' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'action'],
+        required: ['action'],
       },
     },
   ];

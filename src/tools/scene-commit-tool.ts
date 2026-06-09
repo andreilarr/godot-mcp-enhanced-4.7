@@ -17,7 +17,7 @@ export function getToolDefinitions(): Tool[] {
     inputSchema: {
       type: 'object' as const,
       properties: {
-        project_path: { type: 'string', description: 'Godot 项目目录路径' },
+        project_path: { type: 'string', description: 'Godot 项目目录路径（可选，默认使用 GODOT_PROJECT_PATH 环境变量或当前目录）' },
         scene_path: { type: 'string', description: '目标场景路径（如 res://scenes/Level.tscn）' },
         operations: {
           type: 'array',
@@ -46,7 +46,7 @@ export function getToolDefinitions(): Tool[] {
         save: { type: 'boolean', description: '是否保存到文件（默认 true）', default: true },
         stop_on_error: { type: 'boolean', description: '遇错是否停止（默认 true）', default: true },
       },
-      required: ['project_path', 'scene_path', 'operations'],
+      required: ['scene_path', 'operations'],
     },
   }];
 }

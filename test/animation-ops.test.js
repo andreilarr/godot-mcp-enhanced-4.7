@@ -35,7 +35,6 @@ describe('animation-ops exports', () => {
     const defs = getToolDefinitions();
     expect(defs.length).toBe(1);
     expect(defs[0].name).toBe('animation');
-    expect(defs[0].inputSchema.required).toContain('project_path');
     expect(defs[0].inputSchema.required).toContain('action');
   });
   it('TOOL_META marks animation as writable', () => {

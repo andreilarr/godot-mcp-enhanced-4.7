@@ -56,7 +56,7 @@ export function getToolDefinitions(): Tool[] {
             default: ['metadata/_edit_lock'],
           },
         },
-        required: ['project_path', 'action'],
+        required: ['action'],
       },
     },
   ];

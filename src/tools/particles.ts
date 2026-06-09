@@ -293,7 +293,7 @@ export function getToolDefinitions(): Tool[] {
             enum: ['particles_create', 'particles_set_emission', 'particles_set_process', 'particles_load_preset', 'particles_set_material'],
             description: '操作类型',
           },
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          project_path: { type: 'string', description: 'Godot 项目目录路径（可选，默认使用 GODOT_PROJECT_PATH 环境变量或当前目录）' },
           node_type: {
             type: 'string',
             enum: ['GPUParticles2D', 'GPUParticles3D'],
@@ -353,7 +353,7 @@ export function getToolDefinitions(): Tool[] {
           },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['action', 'project_path'],
+        required: ['action'],
       },
     },
   ];

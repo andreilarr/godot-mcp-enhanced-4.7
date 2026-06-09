@@ -30,7 +30,6 @@ describe('signal-ops getToolDefinitions', () => {
   it('definition has inputSchema with required fields', () => {
     const defs = getToolDefinitions();
     expect(defs[0].inputSchema).toBeTruthy();
-    expect(defs[0].inputSchema.required).toContain('project_path');
     expect(defs[0].inputSchema.required).toContain('action');
   });
 });

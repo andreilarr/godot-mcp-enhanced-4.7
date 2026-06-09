@@ -92,7 +92,7 @@ export function getToolDefinitions(): Tool[] {
             },
           },
         },
-        required: ['project_path', 'scope'],
+        required: ['scope'],
       },
     },
   ];

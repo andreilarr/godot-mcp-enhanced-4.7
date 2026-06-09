@@ -96,7 +96,6 @@ describe('delivery tool definitions', () => {
     expect(tool.inputSchema).toBeTruthy();
     expect(tool.description).toBeTruthy();
     const required = tool.inputSchema.required;
-    expect(required.includes('project_path')).toBeTruthy();
     expect(required.includes('scope')).toBeTruthy();
   });
 

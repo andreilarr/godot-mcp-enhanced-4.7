@@ -17,7 +17,6 @@ describe('instance_scene tool definition', () => {
     const def = defs[0];
     expect(def.name).toBe('scene');
     expect(def.inputSchema.properties.action.enum).toContain('instance_scene');
-    expect(def.inputSchema.required).toContain('project_path');
     expect(def.inputSchema.required).toContain('action');
     expect(def.inputSchema.properties.instance_path).toBeTruthy();
   });
@@ -67,7 +66,7 @@ describe('set_instance_property tool definition', () => {
     const defs = scene.getToolDefinitions();
     const actionEnum = defs[0].inputSchema.properties.action.enum;
     expect(actionEnum).toContain('set_instance_property');
-    expect(defs[0].inputSchema.required).toEqual(['project_path', 'action']);
+    expect(defs[0].inputSchema.required).toEqual(['action']);
   });
 
   it('should be marked as write tool', () => {
@@ -125,7 +124,7 @@ describe('detach_instance tool definition', () => {
     const defs = scene.getToolDefinitions();
     const actionEnum = defs[0].inputSchema.properties.action.enum;
     expect(actionEnum).toContain('detach_instance');
-    expect(defs[0].inputSchema.required).toEqual(['project_path', 'action']);
+    expect(defs[0].inputSchema.required).toEqual(['action']);
   });
 
   it('should be marked as write tool', () => {

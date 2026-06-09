@@ -53,7 +53,7 @@ export function getToolDefinitions(): Tool[] {
       inputSchema: {
         type: 'object' as const,
         properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          project_path: { type: 'string', description: 'Godot 项目目录路径（可选，默认使用 GODOT_PROJECT_PATH 环境变量或当前目录）' },
           action: {
             type: 'string',
             enum: ['snapshot', 'start', 'stop', 'get_data', 'get_active_processes', 'get_signal_connections'],
@@ -70,7 +70,7 @@ export function getToolDefinitions(): Tool[] {
           node_path: { type: 'string', description: '子树根节点路径（get_active_processes/get_signal_connections，默认 root）' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'action'],
+        required: ['action'],
       },
     },
   ];

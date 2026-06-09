@@ -32,10 +32,9 @@ describe('getToolDefinitions', () => {
     ]);
   });
 
-  it('tool has required fields: action, project_path', () => {
+  it('tool has required field: action', () => {
     const defs = getToolDefinitions();
     expect(defs[0].inputSchema.required).toContain('action');
-    expect(defs[0].inputSchema.required).toContain('project_path');
   });
 
   it('tool has optional events_json, file_name, speed parameters', () => {

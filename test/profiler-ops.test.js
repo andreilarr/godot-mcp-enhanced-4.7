@@ -72,7 +72,6 @@ describe('profiler-ops getToolDefinitions', () => {
   it('requires project_path and action', () => {
     const defs = getToolDefinitions();
     const required = defs[0].inputSchema.required;
-    expect(required).toContain('project_path');
     expect(required).toContain('action');
   });
 

@@ -578,7 +578,6 @@ describe('getToolDefinitions', () => {
     const def = defs[0];
     expect(def.inputSchema).toBeTruthy();
     expect(def.inputSchema.required).toContain('action');
-    expect(def.inputSchema.required).toContain('project_path');
   });
   it('action enum contains all 10 ACTIONS', () => {
     const defs = getToolDefinitions();

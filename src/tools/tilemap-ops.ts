@@ -260,7 +260,7 @@ export function getToolDefinitions(): Tool[] {
       inputSchema: {
         type: 'object' as const,
         properties: {
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          project_path: { type: 'string', description: 'Godot 项目目录路径（可选，默认使用 GODOT_PROJECT_PATH 环境变量或当前目录）' },
           action: {
             type: 'string',
             enum: [...ACTIONS],
@@ -337,7 +337,7 @@ export function getToolDefinitions(): Tool[] {
           transpose: { type: 'boolean', description: '转置（可选，默认 false）。tilemap_set_transform 使用' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'action'],
+        required: ['action'],
       },
     },
   ];

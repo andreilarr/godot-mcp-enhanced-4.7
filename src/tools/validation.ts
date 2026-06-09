@@ -451,7 +451,7 @@ export function getToolDefinitions(): Tool[] {
             enum: ['run_and_verify', 'analyze_error', 'validate_project', 'validate_scripts', 'import_resources'],
             description: '操作类型',
           },
-          project_path: { type: 'string', description: 'Godot 项目目录路径' },
+          project_path: { type: 'string', description: 'Godot 项目目录路径（可选，默认使用 GODOT_PROJECT_PATH 环境变量或当前目录）' },
           scene: { type: 'string', description: '可选场景文件路径（run_and_verify）' },
           timeout: { type: 'number', description: '超时秒数（默认 20）', default: 20 },
           capture_tree: { type: 'boolean', description: '同时捕获场景树快照（默认 false）', default: false },

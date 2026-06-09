@@ -197,7 +197,7 @@ export function getToolDefinitions(): Tool[] {
           },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
-        required: ['project_path', 'action'],
+        required: ['action'],
       },
     },
   ];

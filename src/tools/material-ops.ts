@@ -607,7 +607,7 @@ export function getToolDefinitions(): Tool[] {
           template_name: { type: 'string', description: 'shader_apply_template: template name' },
           load_autoloads: { type: 'boolean', description: 'Load Autoload context (default true)' },
         },
-        required: ['project_path', 'action'],
+        required: ['action'],
       },
     },
   ];

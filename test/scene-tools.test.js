@@ -33,9 +33,8 @@ describe('scene-tools getToolDefinitions', () => {
     expect(d.inputSchema.type).toBe('object');
   });
 
-  it('tool has project_path and action as required', () => {
+  it('tool has action as required', () => {
     const d = defs[0];
-    expect(d.inputSchema.required).toContain('project_path');
     expect(d.inputSchema.required).toContain('action');
   });
 });

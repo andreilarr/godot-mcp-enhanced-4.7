@@ -179,7 +179,7 @@ export function getToolDefinitions(): Tool[] {
             items: { type: 'string' },
           },
         },
-        required: ['project_path', 'action'],
+        required: ['action'],
       },
     },
   ];
