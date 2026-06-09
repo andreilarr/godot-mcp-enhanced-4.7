@@ -1,7 +1,6 @@
 // src/core/EditorToolExecutor.ts
 import type { EditorConnection } from './EditorConnection.js';
 import type { ToolResult } from '../types.js';
-import { isReadOnly, isKnownTool } from './tool-registry.js';
 
 export class EditorToolExecutor {
   private syncActive = false;
@@ -46,20 +45,12 @@ export class EditorToolExecutor {
         if (action === 'get_scene_tree') return this.handleGetSceneTree(args);
       }
 
-      // For write operations, attach _use_undo flag so the editor plugin
-      // can route through undo_manager. The plugin-side handlers already
-      // use undo_manager for mutating operations (add_node, particles_create,
-      // nav_create_region, etc.) — this flag enables future unified undo
-      // control across all editor tool handlers.
-      // TODO: 待编辑器插件后续集成 — 统一通过 _use_undo 标志控制 undo 行为
-      const isWriteOp = isKnownTool(toolName) && !isReadOnly(toolName);
-      const payload: Record<string, unknown> = {
-        ...args,
-        ...(isWriteOp ? { _use_undo: true } : {}),
-      };
+      // Forward to plugin. The plugin-side handlers use undo_manager for
+      // mutating operations (add_node, particles_create, etc.).
+      // TODO: Future — add _use_undo flag for unified undo control across all handlers.
 
       // Default: forward to plugin
-      const result = await this.conn.request(toolName, payload);
+      const result = await this.conn.request(toolName, args);
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result) }],
       };

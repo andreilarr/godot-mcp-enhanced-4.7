@@ -167,6 +167,7 @@ export class GodotServer {
     setInstanceManager(manager);
     setInstanceRouter(router);
     getLogger().info('instance', 'Multi-instance mode enabled');
+    getLogger().warn('instance', 'Multi-instance routing is EXPERIMENTAL and not fully implemented. Tool dispatching to specific instances is not yet available.');
   }
 
     /** Send tools/list_changed notification to client. Called when active groups change. */

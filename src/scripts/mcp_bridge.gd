@@ -178,6 +178,10 @@ func _process(_delta: float) -> void:
 func _start_server() -> void:
 	_crypto = Crypto.new()
 	_secret = _generate_secret()
+	if _secret.length() < 32:
+		push_error("[MCP Bridge][SECURITY] Secret generation failed — Bridge server not started")
+		_secret = ""
+		return
 	_server = TCPServer.new()
 	var err := _server.listen(PORT, "127.0.0.1")
 	if err != OK:
@@ -257,7 +261,8 @@ func _generate_secret() -> String:
 				continue
 			result += chars[b2 % chars.length()]
 	if result.length() < 32:
-		push_error("[MCP Bridge] Failed to generate 32-char secret, using truncated value")
+		push_error("[MCP Bridge] Failed to generate 32-char secret after 11 attempts — refusing to start with weak key")
+		return ""
 	return result
 
 func _get_project_dir() -> String:

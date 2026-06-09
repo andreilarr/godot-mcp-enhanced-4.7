@@ -207,3 +207,4 @@ func send_notification(method: String, params: Dictionary) -> void:
 	var plugin = get_parent()
 	if plugin and plugin.has_method("send_mcp_notification"):
 		plugin.send_mcp_notification(method, params)
+

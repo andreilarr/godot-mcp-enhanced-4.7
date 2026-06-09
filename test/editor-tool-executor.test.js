@@ -62,7 +62,7 @@ describe('EditorToolExecutor existing tests (real WS)', () => {
     conn.disconnect();
   });
 
-  it('attaches _use_undo=true for write operations', async () => {
+  it('forwards write operation args as-is to plugin', async () => {
     let capturedParams = null;
     wss.on('connection', (ws) => {
       ws.on('message', (data) => {
@@ -80,12 +80,12 @@ describe('EditorToolExecutor existing tests (real WS)', () => {
     const executor = new EditorToolExecutor(conn);
     await executor.execute('add_node', { project_path: '/test', node_type: 'Sprite2D', node_name: 'Player' });
     expect(capturedParams).toBeDefined();
-    expect(capturedParams._use_undo).toBe(true);
     expect(capturedParams.project_path).toBe('/test');
+    expect(capturedParams.node_type).toBe('Sprite2D');
     conn.disconnect();
   });
 
-  it('does NOT attach _use_undo for read-only operations', async () => {
+  it('forwards read-only operation args as-is to plugin', async () => {
     let capturedParams = null;
     wss.on('connection', (ws) => {
       ws.on('message', (data) => {
@@ -103,11 +103,11 @@ describe('EditorToolExecutor existing tests (real WS)', () => {
     const executor = new EditorToolExecutor(conn);
     await executor.execute('query_scene_tree', { project_path: '/test', scene_path: 'res://main.tscn' });
     expect(capturedParams).toBeDefined();
-    expect(capturedParams._use_undo).toBeUndefined();
+    expect(capturedParams.scene_path).toBe('res://main.tscn');
     conn.disconnect();
   });
 
-  it('does NOT attach _use_undo for unknown tools', async () => {
+  it('forwards unknown tool args as-is to plugin', async () => {
     let capturedParams = null;
     wss.on('connection', (ws) => {
       ws.on('message', (data) => {
@@ -125,7 +125,7 @@ describe('EditorToolExecutor existing tests (real WS)', () => {
     const executor = new EditorToolExecutor(conn);
     await executor.execute('some_unknown_tool', { project_path: '/test' });
     expect(capturedParams).toBeDefined();
-    expect(capturedParams._use_undo).toBeUndefined();
+    expect(capturedParams.project_path).toBe('/test');
     conn.disconnect();
   });
 });
@@ -335,9 +335,9 @@ describe('EditorToolExecutor execute branches (mocked conn)', () => {
     expect(result.isError).toBeFalsy();
   });
 
-  it('non-editor tool forwards to plugin with _use_undo for writes', async () => {
+  it('non-editor tool forwards args as-is to plugin for writes', async () => {
     const result = await executor.execute('add_node', { project_path: '/test' });
-    expect(mockConn.request).toHaveBeenCalledWith('add_node', { project_path: '/test', _use_undo: true });
+    expect(mockConn.request).toHaveBeenCalledWith('add_node', { project_path: '/test' });
     expect(result.isError).toBeFalsy();
   });
 });

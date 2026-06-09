@@ -243,7 +243,14 @@ export function isPathInAllowedRoots(requestedPath: string): boolean {
   const allowed = getAllowedProjectPaths();
   if (allowed.length === 0) {
     if (!_pathAllowLogged.has('unconfigured')) {
-      getLogger().info('security', 'ALLOWED_PROJECT_PATHS not configured — allowing all project paths. Set ALLOWED_PROJECT_PATHS=/path1;/path2 to restrict.');
+      const isCI = process.env.CI === 'true' || !process.stdout.isTTY;
+      const msg = 'ALLOWED_PROJECT_PATHS not configured — allowing all project paths. ' +
+        'Set ALLOWED_PROJECT_PATHS=/path1;/path2 to restrict access.';
+      if (isCI) {
+        getLogger().warn('security', msg + ' (CI/non-interactive environment detected)');
+      } else {
+        getLogger().info('security', msg);
+      }
       _pathAllowLogged.add('unconfigured');
     }
     return true;

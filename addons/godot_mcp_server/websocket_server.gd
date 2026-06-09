@@ -45,6 +45,10 @@ func _ready() -> void:
 
 func _generate_and_write_secret() -> void:
 	_secret = _generate_secret()
+	if _secret.length() < 32:
+		push_error("[MCP] Secret generation failed — WebSocket server will not start")
+		_secret = ""
+		return
 	var project_dir: String = _get_project_dir()
 	if project_dir == "":
 		push_warning("[MCP] Cannot determine project dir; editor auth disabled")
@@ -87,7 +91,8 @@ func _generate_secret() -> String:
 				continue
 			result += chars[b2 % chars.length()]
 	if result.length() < 32:
-		push_error("[MCP] Failed to generate 32-char secret, using truncated value")
+		push_error("[MCP] Failed to generate 32-char secret after 11 attempts — refusing to start with weak key")
+		return ""
 	return result
 
 func _get_project_dir() -> String:
@@ -104,6 +109,9 @@ func _delete_secret_file() -> void:
 	_secret = ""
 
 func _start_server() -> void:
+	if _secret == "":
+		push_error("[MCP] No valid auth secret — WebSocket server not started")
+		return
 	_server = TCPServer.new()
 	for port in range(BASE_PORT, MAX_PORT + 1):
 		if _server.listen(port, "127.0.0.1") == OK:

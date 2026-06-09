@@ -251,13 +251,15 @@ describe('isPathInAllowedRoots', () => {
     expect(isPathInAllowedRoots(resolve(tmp, 'subdir'))).toBe(true);
   });
 
-  it('should log info only once when no whitelist set', () => {
-    const infoSpy = vi.spyOn(getLogger(), 'info').mockImplementation(() => {});
+  it('should log warning only once when no whitelist set', () => {
+    // In test environment (non-TTY, no CI env), the code uses warn level
+    const warnSpy = vi.spyOn(getLogger(), 'warn').mockImplementation(() => {});
     _resetPathAllowWarned();
     isPathInAllowedRoots('/a');
     isPathInAllowedRoots('/b');
-    expect(infoSpy).toHaveBeenCalledTimes(1);
-    infoSpy.mockRestore();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][1]).toContain('ALLOWED_PROJECT_PATHS not configured');
+    warnSpy.mockRestore();
   });
 
   it('should support semicolon-separated multiple paths in whitelist', () => {

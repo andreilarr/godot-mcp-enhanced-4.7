@@ -44,12 +44,13 @@ export async function startMcpServer(args: string[]): Promise<void> {
 
   const activeProfile = profileFromArg || profileFromEnv;
 
-  const toolMode = activeProfile ? activeProfile as 'full' | 'lite' | 'minimal'
-    : args.includes('--minimal') ? 'minimal'
+  const toolMode: string = activeProfile ?? (
+    args.includes('--minimal') ? 'minimal'
     : args.includes('--lite') ? 'lite'
     : process.env.GODOT_MCP_MODE === 'minimal' ? 'minimal'
     : process.env.GODOT_MCP_MODE === 'lite' ? 'lite'
-    : 'full';
+    : 'full'
+  );
 
   const connectionMode = process.env.GODOT_MCP_MODE === 'editor' ? 'editor' : 'headless';
   const readOnly = process.env.GODOT_MCP_READ_ONLY === 'true' || process.env.READ_ONLY_MODE === 'true';

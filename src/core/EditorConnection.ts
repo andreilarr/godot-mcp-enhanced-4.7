@@ -122,10 +122,8 @@ export class EditorConnection {
 
   constructor(private readonly options: EditorConnectionOptions) {
     this.host = options.host ?? '127.0.0.1';
-    // A-05: Reject non-localhost hosts — WebSocket auth is plaintext (no TLS)
-    // I-02: Also reject 0.0.0.0 and :: which bind to all interfaces
-    if (this.host !== '127.0.0.1' && this.host !== 'localhost' && this.host !== '::1'
-        && this.host !== '0.0.0.0' && this.host !== '::') {
+    // Reject non-localhost hosts — WebSocket auth is plaintext (no TLS)
+    if (this.host !== '127.0.0.1' && this.host !== 'localhost' && this.host !== '::1') {
       throw new Error(`Editor WebSocket only supports localhost connections for security (got: ${this.host})`);
     }
     this.shouldReconnect = options.reconnect ?? true;

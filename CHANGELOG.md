@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-06-09
+
+### Security
+
+- **F-05**: `_generate_secret()` 截断时返回空字符串 + 拒绝启动 WebSocket/Bridge 服务 — 防止使用弱密钥运行（`websocket_server.gd` + `mcp_bridge.gd`）
+- **F-01**: CI/非 TTY 环境下 `isPathInAllowedRoots` 日志级别从 `info` 提升为 `warn`，提醒运维人员配置 `ALLOWED_PROJECT_PATHS`
+- **F-02**: `EditorConnection` 客户端白名单移除 `0.0.0.0` 和 `::` — 仅允许明确的 localhost 地址
+
+### Changed
+
+- **F-03**: 移除 `EditorToolExecutor` 中 `_use_undo` 半实现标志 — 插件端未准备好，参数改为原样透传
+- **F-04**: 多实例路由添加 `EXPERIMENTAL` 警告日志，明确告知用户功能未完成
+
+### Removed
+
+- A-04: `index.ts` Profile 类型从 `as` 强制断言改为显式 `string`
+
+### Added
+
+- A-03: `parseConfigValue` 递归深度限制（8 层）添加说明注释
+
 ## [0.17.1] - 2026-06-08
 
 ### Fixed

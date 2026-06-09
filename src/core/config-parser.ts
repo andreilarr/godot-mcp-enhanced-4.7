@@ -29,6 +29,8 @@ function splitRespectingQuotes(s: string): string[] {
 }
 
 export function parseConfigValue(raw: string, depth = 0): unknown {
+  // Depth limit 8 (max 9 nesting levels: 0-8). Godot .cfg/.godot files rarely exceed 3 levels.
+  // Prevents pathological input from causing excessive recursion.
   if (depth > 8) return raw;
   if (raw.startsWith('"') && raw.endsWith('"')) return raw.slice(1, -1);
   if (raw === 'true') return true;
