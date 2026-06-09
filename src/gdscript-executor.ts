@@ -33,7 +33,8 @@ import { needsImport, runImport } from './tools/import-check.js';
 const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /OS\.(execute|shell_open|kill|set_restart_on_exit|crash)\b/, label: 'OS system command' },
   { pattern: /DirAccess\.(remove_absolute|remove)\b/, label: 'Directory removal' },
-  { pattern: /FileAccess\.open\b/, label: 'File access (read/write)' },
+  // C-03: Allow FileAccess.READ, only flag write modes (WRITE / READ_WRITE / READ_WRITE_APPEND)
+  { pattern: /FileAccess\.open\s*\([^)]*FileAccess\.(?:WRITE|READ_WRITE|READ_WRITE_APPEND)\b/, label: 'File write access' },
   { pattern: /Engine\.(set_singleton)\b/, label: 'Engine singleton modification' },
   // C-03: Engine.get_singleton bypasses class-level restrictions (e.g. FileAccess, DirAccess)
   { pattern: /Engine\.get_singleton\b/, label: 'Engine singleton access (sandbox bypass)' },
@@ -136,6 +137,13 @@ export function scanGdscriptSandbox(code: string): string[] {
   for (const { pattern, label } of DANGEROUS_PATTERNS) {
     if (pattern.test(code)) {
       warnings.push(`[SANDBOX] Potential dangerous operation detected: ${label}`);
+    }
+  }
+
+  // C-03: In strict mode, also block FileAccess.READ (all file access)
+  if (process.env.GODOT_MCP_SANDBOX === 'strict') {
+    if (/FileAccess\.open\b/.test(code)) {
+      warnings.push('[SANDBOX] Potential dangerous operation detected: File access (strict mode)');
     }
   }
 
@@ -612,7 +620,9 @@ export async function executeGdscript(
   }
   if (sandboxWarnings.length > 0 && safetyDisabled) {
     // I-04: 结构化审计事件 — 记录安全绕过的完整上下文（代码摘要、时间戳、触发模式）
-    const codeSummary = code.slice(0, 120).replace(/\n/g, '\\n');
+    // I-10: Sanitize string literals in code summary to prevent credential leakage
+    const rawSummary = code.slice(0, 120).replace(/\n/g, '\\n');
+    const codeSummary = rawSummary.replace(/"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*'/g, '"***"');
     getLogger().warn('security', JSON.stringify({
       audit: 'SANDBOX_BYPASS',
       warnings: sandboxWarnings,

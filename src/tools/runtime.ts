@@ -266,6 +266,11 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           releaseShortRunningSlot();
           const passed = (out.match(/Tests: (\d+)/g) || []).map(m => m.replace('Tests: ', ''));
           const failed = (out.match(/Failed: (\d+)/g) || []).map(m => m.replace('Failed: ', ''));
+          // I-11: Truncate raw_output to prevent excessive MCP channel bandwidth
+          const MAX_RAW_OUTPUT = 50_000;
+          const rawOutput = out.length > MAX_RAW_OUTPUT
+            ? out.slice(0, MAX_RAW_OUTPUT) + `\n... [truncated, ${out.length} total bytes]`
+            : out;
           resolve({
             content: [{
               type: 'text',
@@ -273,7 +278,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
                 exit_code: code,
                 passed: passed.join(', '),
                 failed: failed.join(', '),
-                raw_output: out,
+                raw_output: rawOutput,
               }, null, 2),
             }],
           });

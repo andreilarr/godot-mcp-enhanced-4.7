@@ -1,5 +1,5 @@
 import { isAbsolute, resolve, join, extname } from 'path';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, statSync } from 'fs';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
@@ -140,6 +140,16 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       if (!existsSync(imagePath)) {
         return textResult(`Image not found: ${imagePath}`);
+      }
+
+      // I-02: Prevent OOM from reading huge image files (10 MB limit)
+      const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+      const fileSize = statSync(imagePath).size;
+      if (fileSize > MAX_IMAGE_SIZE) {
+        return textResult(
+          `Image file too large: ${(fileSize / 1024 / 1024).toFixed(1)} MB. ` +
+          `Maximum allowed: 10 MB.`,
+        );
       }
 
       const imageBuffer = readFileSync(imagePath);

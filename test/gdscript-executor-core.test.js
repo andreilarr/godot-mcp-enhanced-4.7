@@ -313,11 +313,11 @@ describe('scanGdscriptSandbox extended', () => {
     expect(warnings[0]).toContain('OS system command');
   });
 
-  it('flags FileAccess.open with READ mode (C-SEC-02: all file access blocked)', () => {
+  it('flags FileAccess.open with READ mode in strict mode (C-03: strict blocks all file access)', () => {
     process.env.GODOT_MCP_SANDBOX = 'strict';
     const warnings = scanGdscriptSandbox('FileAccess.open("user://data.txt", FileAccess.READ)');
     expect(warnings.length).toBeGreaterThanOrEqual(1);
-    expect(warnings[0]).toContain('File access');
+    expect(warnings.some(w => w.includes('File access'))).toBe(true);
   });
 
   it('flags DirAccess.remove_absolute', () => {

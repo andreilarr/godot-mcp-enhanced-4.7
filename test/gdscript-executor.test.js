@@ -78,11 +78,17 @@ describe('scanGdscriptSandbox', () => {
     expect(warnings[0]).toContain('Directory removal');
   });
 
-  it('should detect FileAccess.open (any mode) by default', () => {
+  it('should detect FileAccess.open WRITE mode by default (C-03: READ is allowed)', () => {
     delete process.env.GODOT_MCP_SANDBOX;
     const warnings = scanGdscriptSandbox('FileAccess.open("user://data.txt", FileAccess.WRITE)');
     expect(warnings.length).toBeGreaterThan(0);
-    expect(warnings[0]).toContain('File access');
+    expect(warnings[0]).toContain('File write access');
+  });
+
+  it('should allow FileAccess.open READ mode by default (C-03)', () => {
+    delete process.env.GODOT_MCP_SANDBOX;
+    const warnings = scanGdscriptSandbox('FileAccess.open("user://data.txt", FileAccess.READ)');
+    expect(warnings.length).toBe(0);
   });
 
   it('should detect Engine.set_singleton by default', () => {

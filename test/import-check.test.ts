@@ -33,6 +33,11 @@ vi.mock('../src/core/process-state.js', () => ({
   forceKillTree: vi.fn(),
 }));
 
+// Mock helpers (buildSafeEnv used in spawn options)
+vi.mock('../src/helpers.js', () => ({
+  buildSafeEnv: () => ({ PATH: '/usr/bin' }),
+}));
+
 import { needsImport, runImport, resetImportCache } from '../src/tools/import-check.js';
 import { spawn } from 'child_process';
 

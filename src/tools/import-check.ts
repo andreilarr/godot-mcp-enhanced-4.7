@@ -13,6 +13,7 @@ import { existsSync, statSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { forceKillTree } from '../core/process-state.js';
 import { getLogger } from '../core/logger.js';
+import { buildSafeEnv } from '../helpers.js';
 
 // ─── Cache state ──────────────────────────────────────────────────────────────
 
@@ -105,7 +106,7 @@ export async function runImport(
     const proc = spawn(
       godotPath,
       ['--headless', '--import', '--path', projectPath],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
+      { stdio: ['ignore', 'pipe', 'pipe'], env: buildSafeEnv() },
     );
 
     // C-PERF-01: Use Buffer[] to avoid O(n²) string concatenation
