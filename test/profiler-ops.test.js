@@ -363,6 +363,72 @@ describe('profiler-ops handleTool — profiler get_data', () => {
     // Should still produce valid output (no crash paths)
     expect(code).toContain('_mcp_done()');
   });
+
+  // A-02: leak_threshold_mb boundary tests
+  it('falls back to default when leak_threshold_mb is NaN', async () => {
+    const ctx = createMockCtx();
+    await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+      leak_threshold_mb: NaN,
+    }, ctx);
+
+    const code = executeGdscript.mock.calls[0][0].code;
+    expect(code).toContain('2.0'); // default fallback
+  });
+
+  it('falls back to default when leak_threshold_mb is negative', async () => {
+    const ctx = createMockCtx();
+    await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+      leak_threshold_mb: -5.0,
+    }, ctx);
+
+    const code = executeGdscript.mock.calls[0][0].code;
+    expect(code).toContain('2.0'); // default fallback
+  });
+
+  it('falls back to default when leak_threshold_mb is Infinity', async () => {
+    const ctx = createMockCtx();
+    await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+      leak_threshold_mb: Infinity,
+    }, ctx);
+
+    const code = executeGdscript.mock.calls[0][0].code;
+    expect(code).toContain('2.0'); // default fallback
+  });
+
+  it('falls back to default when leak_threshold_mb is zero', async () => {
+    const ctx = createMockCtx();
+    await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+      leak_threshold_mb: 0,
+    }, ctx);
+
+    const code = executeGdscript.mock.calls[0][0].code;
+    expect(code).toContain('2.0'); // default fallback
+  });
+
+  // I-03: non-string dimension elements warning
+  it('warns about non-string dimension elements', async () => {
+    const ctx = createMockCtx();
+    const result = await handleTool('profiler', {
+      project_path: '/fake/project',
+      action: 'get_data',
+      dimensions: [123, 'process', true],
+    }, ctx);
+
+    expect(result).not.toBeNull();
+    const text = result.content[0].text;
+    expect(text).toContain('Non-string');
+    // 'process' should still work
+    const code = executeGdscript.mock.calls[0][0].code;
+    expect(code).toContain('Performance.TIME_PROCESS');
+  });
 });
 
 // ─── handleTool — profiler get_active_processes ─────────────────────────────

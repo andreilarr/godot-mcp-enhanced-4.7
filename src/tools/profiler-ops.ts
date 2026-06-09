@@ -18,14 +18,19 @@ const VALID_DIMENSIONS = new Set(Object.keys(DIMENSION_MAP));
 
 function parseDimensions(raw: unknown): { dimensions: string[]; warnings: string[] } {
   let dims: string[];
+  const warnings: string[] = [];
   if (Array.isArray(raw) && raw.length > 0) {
+    const nonStrings = raw.filter(d => typeof d !== 'string');
+    if (nonStrings.length > 0) {
+      warnings.push(`Non-string dimension elements ignored: ${nonStrings.map(String).join(', ')}`);
+    }
     dims = raw.filter(d => typeof d === 'string');
   } else {
-    return { dimensions: ['process'], warnings: [] };
+    return { dimensions: ['process'], warnings };
   }
+  // Dimensions are validated against VALID_DIMENSIONS whitelist — no injection risk into GDScript template
   const invalid = dims.filter(d => !VALID_DIMENSIONS.has(d));
   const valid = dims.filter(d => VALID_DIMENSIONS.has(d));
-  const warnings: string[] = [];
   if (invalid.length > 0) {
     warnings.push(`Unknown dimensions ignored: ${invalid.join(', ')}. Valid: ${[...VALID_DIMENSIONS].join(', ')}`);
   }
