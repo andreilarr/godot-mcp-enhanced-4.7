@@ -50,6 +50,66 @@ export function validateProjectRoot(p: string): string {
   return resolved;
 }
 
+// ─── Project path resolution (shared with ToolDispatcher) ────────────────────
+
+/** 30s TTL cache — project path rarely changes mid-session */
+let _resolvedProjectPath: string | undefined;
+let _resolvedProjectPathTime = 0;
+const PROJECT_PATH_CACHE_TTL_MS = 30_000;
+
+/**
+ * Resolve project path with priority chain:
+ * 1. explicitPath (tool call argument) → use directly, no validation
+ * 2. GODOT_PROJECT_PATH env → validate project.godot exists
+ * 3. cwd upward search → find project.godot (max 30 levels)
+ * 4. None → return undefined (caller decides error handling)
+ *
+ * Results are cached for 30s (PROJECT_PATH_CACHE_TTL_MS).
+ */
+export function resolveProjectPath(explicitPath?: string): string | undefined {
+  if (explicitPath) return explicitPath;
+
+  const now = Date.now();
+  if (_resolvedProjectPathTime > 0 && now - _resolvedProjectPathTime < PROJECT_PATH_CACHE_TTL_MS) {
+    return _resolvedProjectPath;
+  }
+
+  const envPath = process.env.GODOT_PROJECT_PATH;
+  if (envPath) {
+    if (existsSync(join(envPath, 'project.godot'))) {
+      _resolvedProjectPath = envPath;
+      _resolvedProjectPathTime = now;
+      return envPath;
+    }
+    getLogger().warn('godot-mcp', `GODOT_PROJECT_PATH="${envPath}" does not contain project.godot, ignoring`);
+  }
+
+  let dir = process.cwd();
+  const searchedPaths: string[] = [];
+  for (let i = 0; i < 30; i++) {
+    if (existsSync(join(dir, 'project.godot'))) {
+      _resolvedProjectPath = dir;
+      _resolvedProjectPathTime = now;
+      return dir;
+    }
+    searchedPaths.push(dir);
+    const parent = join(dir, '..');
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  getLogger().warn('godot-mcp', `resolveProjectPath: no project.godot found. Searched: ${searchedPaths.join(' → ')}`);
+  _resolvedProjectPath = undefined;
+  _resolvedProjectPathTime = now;
+  return undefined;
+}
+
+/** Reset cache state (test-only). */
+export function _resetProjectPathCache(): void {
+  _resolvedProjectPath = undefined;
+  _resolvedProjectPathTime = 0;
+}
+
 // ─── Symlink-safe path resolution ─────────────────────────────────────────────
 
 /** Safely resolve real path — walks up to find existing ancestor for symlink resolution. */
