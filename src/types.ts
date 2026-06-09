@@ -9,7 +9,7 @@ export interface ToolContext {
   opsScript: string;
   findGodot: () => Promise<string>;
   runningProcess: ChildProcess | null;
-  setRunningProcess: (proc: ChildProcess | null) => void;
+  setRunningProcess: (proc: ChildProcess | null, skipBusyCheck?: boolean) => void;
   outputBuffer: string[];
   setOutputBuffer: (buf: string[]) => void;
   processStartTime: number;

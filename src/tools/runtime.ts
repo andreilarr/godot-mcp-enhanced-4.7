@@ -169,7 +169,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         appendOutput([`Spawn error: ${err.message}`]);
       });
 
-      ctx.setRunningProcess(proc);
+      ctx.setRunningProcess(proc, true); // skip busy check — slot acquired via acquireProcessSlot above
 
       return textResult(warnPrefix + `Running project at ${p} (timeout: ${timeout}s). Use get_debug_output or stop_project to check.`);
     }

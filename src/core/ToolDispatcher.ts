@@ -76,7 +76,7 @@ export class ToolDispatcher {
       opsScript: options.opsScript,
       findGodot: options.findGodot,
       get runningProcess() { return ps.getRunningProcess(); },
-      setRunningProcess(proc: ChildProcess | null) { ps.setRunningProcess(proc); },
+      setRunningProcess(proc: ChildProcess | null, skipBusyCheck?: boolean) { ps.setRunningProcess(proc, skipBusyCheck); },
       get outputBuffer() { return ps.getOutputBuffer(); },
       setOutputBuffer(buf: string[]) { ps.setOutputBuffer(buf); },
       get processStartTime() { return ps.getProcessStartTime(); },
