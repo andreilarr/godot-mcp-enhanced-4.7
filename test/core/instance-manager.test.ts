@@ -190,6 +190,84 @@ describe('InstanceManager', () => {
     });
   });
 
+  describe('Phase 2 status field', () => {
+    it('treats compiling status as alive even when heartbeat is stale', () => {
+      const manager = new InstanceManager({ registryDir: TMP, staleTimeoutMs: 70000 });
+      const status = manager.getStatus({
+        id: 'uuid-1',
+        projectPath: 'D:/game',
+        projectName: 'game',
+        port: 9081,
+        pid: 100,
+        lastSeen: new Date(Date.now() - 80000).toISOString(),
+        godotVersion: '4.4',
+        capabilities: [],
+        status: 'compiling',
+      });
+      expect(status).toBe('alive');
+    });
+
+    it('treats ready status with stale heartbeat as stale', () => {
+      const manager = new InstanceManager({ registryDir: TMP, staleTimeoutMs: 70000 });
+      const status = manager.getStatus({
+        id: 'uuid-1',
+        projectPath: 'D:/game',
+        projectName: 'game',
+        port: 9081,
+        pid: 100,
+        lastSeen: new Date(Date.now() - 80000).toISOString(),
+        godotVersion: '4.4',
+        capabilities: [],
+        status: 'ready',
+      });
+      expect(status).toBe('stale');
+    });
+
+    it('treats unresponsive status as unreachable', () => {
+      const manager = new InstanceManager({ registryDir: TMP });
+      const status = manager.getStatus({
+        id: 'uuid-1',
+        projectPath: 'D:/game',
+        projectName: 'game',
+        port: 9081,
+        pid: 100,
+        lastSeen: new Date().toISOString(),
+        godotVersion: '4.4',
+        capabilities: [],
+        status: 'unresponsive',
+      });
+      expect(status).toBe('unreachable');
+    });
+
+    it('treats missing status as regular heartbeat-based detection', () => {
+      const manager = new InstanceManager({ registryDir: TMP, staleTimeoutMs: 70000 });
+      // No status field — falls through to stale logic
+      const alive = manager.getStatus({
+        id: 'uuid-1',
+        projectPath: 'D:/game',
+        projectName: 'game',
+        port: 9081,
+        pid: 100,
+        lastSeen: new Date().toISOString(),
+        godotVersion: '4.4',
+        capabilities: [],
+      });
+      expect(alive).toBe('alive');
+
+      const stale = manager.getStatus({
+        id: 'uuid-2',
+        projectPath: 'D:/game',
+        projectName: 'game',
+        port: 9081,
+        pid: 100,
+        lastSeen: new Date(Date.now() - 80000).toISOString(),
+        godotVersion: '4.4',
+        capabilities: [],
+      });
+      expect(stale).toBe('stale');
+    });
+  });
+
   describe('port range', () => {
     it('default port range is 9081-9090', () => {
       const manager = new InstanceManager({ registryDir: TMP });

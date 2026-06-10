@@ -25,6 +25,10 @@ export interface InstanceInfo {
   lastSeen: string;       // ISO 8601
   godotVersion: string;
   capabilities: string[];  // e.g. ['registry-heartbeat']
+
+  // Phase 2 新增（可选，旧插件不写此字段）
+  status?: 'ready' | 'compiling' | 'unresponsive';
+  registeredAt?: number;
 }
 
 export type InstanceStatus = 'alive' | 'stale' | 'unreachable';
@@ -119,6 +123,14 @@ export class InstanceManager {
 
   /** Determine status of an instance based on lastSeen timestamp. */
   getStatus(instance: InstanceInfo): InstanceStatus {
+    // Phase 2: compiling overrides stale detection
+    if (instance.status === 'compiling') {
+      return 'alive';
+    }
+    if (instance.status === 'unresponsive') {
+      return 'unreachable';
+    }
+    // Existing stale logic
     const lastSeen = new Date(instance.lastSeen).getTime();
     const elapsed = Date.now() - lastSeen;
     if (elapsed < this.staleTimeoutMs) return 'alive';
