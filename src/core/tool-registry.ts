@@ -259,3 +259,52 @@ export const OFFLINE_TOOLS = new Set([
 export function isOfflineCapable(toolName: string): boolean {
   return OFFLINE_TOOLS.has(toolName);
 }
+
+// ─── Legacy tool mapping (v0.18.0 migration) ────────────────────────────────
+
+/** 类型 A — 独立工具吸收的迁移映射。仅 GODOT_MCP_WARN_LEGACY 模式下生效。 */
+export const LEGACY_TOOL_MAP: Record<string, { tool: string; action: string }> = {
+  node_create_3d:  { tool: 'scene',      action: 'create_3d_node' },
+  scene_commit:    { tool: 'scene',      action: 'commit' },
+  recording:       { tool: 'runtime',    action: 'record_start' },
+  verify_delivery: { tool: 'validation', action: 'verify_delivery' },
+  test:            { tool: 'validation', action: 'assert' },
+  ik:              { tool: 'animation',  action: 'ik_modifier_create' },
+  templates:       { tool: 'project',    action: 'list' },
+  batch:           { tool: 'workflow',   action: 'create_files' },
+  game_design:     { tool: 'validation', action: 'validate_gdd' },
+};
+
+const WARN_LEGACY = () => !!process.env.GODOT_MCP_WARN_LEGACY;
+
+/** 尝试将旧工具名映射到新 (tool, action)。仅 WARN_LEGACY 模式下生效。 */
+export function tryLegacyMapping(toolName: string): { tool: string; action: string } | null {
+  if (!WARN_LEGACY()) return null;
+  const mapped = LEGACY_TOOL_MAP[toolName];
+  if (mapped) {
+    console.warn(`[LEGACY] "${toolName}" → ${mapped.tool}(action="${mapped.action}")`);
+    return mapped;
+  }
+  return null;
+}
+
+// ─── listChanged notification ────────────────────────────────────────────────
+
+import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+
+let mcpServer: Server | null = null;
+
+/** 注入 MCP Server 实例（GodotServer 启动时调用一次）。 */
+export function setMcpServer(server: Server): void {
+  mcpServer = server;
+}
+
+/** 通知客户端工具列表已变更。不支持时静默忽略。 */
+export function notifyToolsChanged(): void {
+  if (!mcpServer) return;
+  try {
+    mcpServer.notification({ method: 'notifications/tools/list_changed' });
+  } catch {
+    // 客户端不支持此通知
+  }
+}
