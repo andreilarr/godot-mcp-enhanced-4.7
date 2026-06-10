@@ -22,7 +22,7 @@ describe('FileStateStore', () => {
     expect(store.load()).toBeNull();
   });
 
-  it('保存并加载状态', () => {
+  it('保存并加载状态', async () => {
     const state = {
       version: 1 as const,
       savedAt: Date.now(),
@@ -38,7 +38,7 @@ describe('FileStateStore', () => {
     };
 
     store.markDirty(() => state);
-    store.flush();
+    await store.flush();
 
     const loaded = store.load();
     expect(loaded).not.toBeNull();
@@ -47,6 +47,7 @@ describe('FileStateStore', () => {
 
   it('验证并丢弃过期的 agent 状态', () => {
     const staleTime = Date.now() - 25 * 60 * 60 * 1000;
+    // 直接写入 stale 数据（绕过 flush 的 savedAt 更新），验证 load 时过期检测
     const state = {
       version: 1 as const,
       savedAt: staleTime,
@@ -61,15 +62,16 @@ describe('FileStateStore', () => {
       lastConnectedPort: null,
     };
 
-    store.markDirty(() => state);
-    store.flush();
+    const dir = path.join(tmpDir, '.godot');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'mcp-state.json'), JSON.stringify(state), 'utf-8');
 
     const loaded = store.load();
     expect(loaded).not.toBeNull();
     expect(Object.keys(loaded!.agents)).not.toContain('old-agent');
   });
 
-  it('多次 markDirty 调用会防抖', () => {
+  it('多次 markDirty 调用会防抖', async () => {
     let counter = 0;
     const getState = () => ({
       version: 1 as const,
@@ -82,7 +84,7 @@ describe('FileStateStore', () => {
     store.markDirty(getState);
     store.markDirty(getState);
     store.markDirty(getState);
-    store.flush();
+    await store.flush();
 
     const loaded = store.load();
     expect(loaded!.agents['__default__'].activeProfile).toBe('profile-2');

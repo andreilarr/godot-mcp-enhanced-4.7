@@ -98,7 +98,12 @@ export class AgentContextManager {
         item.reject(err);
       }
     }
+    // 防御：设 false 后二次检查，避免 await 期间新入队操作丢失
     this.engineRunning = false;
+    if (this.engineQueue.length > 0) {
+      this.engineRunning = true;
+      void this.drainEngineQueue();
+    }
   }
 
   // IO 操作：允许并发执行

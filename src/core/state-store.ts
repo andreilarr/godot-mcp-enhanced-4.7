@@ -51,23 +51,21 @@ export class FileStateStore {
     }
   }
 
-  flush(): void {
+  async flush(): Promise<void> {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
     if (!this.cachedState) return;
 
-    // 保留原始 savedAt 以便 load 时正确验证过期
-    const state = this.cachedState;
+    // 写入前更新 savedAt，确保下次 load 时过期判断正确
+    const state: PersistedState = { ...this.cachedState, savedAt: Date.now() };
     this.cachedState = null;
 
     try {
       const dir = path.dirname(this.filePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      fs.writeFileSync(this.filePath, JSON.stringify(state, null, 2), 'utf-8');
+      await fs.promises.mkdir(dir, { recursive: true });
+      await fs.promises.writeFile(this.filePath, JSON.stringify(state, null, 2), 'utf-8');
     } catch {
       // 静默失败 — 状态持久化是尽力而为
     }

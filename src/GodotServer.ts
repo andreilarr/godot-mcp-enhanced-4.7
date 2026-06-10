@@ -161,6 +161,13 @@ export class GodotServer {
         : undefined,
     });
     const sendToInstance: RouterDependencies['sendToInstance'] = async (instance, toolName, args) => {
+      // 安全：拒绝非法 tool name（防路径注入）
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(toolName)) {
+        return {
+          content: [{ type: 'text' as const, text: `Invalid tool name: ${toolName}` }],
+          isError: true,
+        };
+      }
       const url = `http://127.0.0.1:${instance.port}/api/${toolName}`;
       try {
         const response = await fetch(url, {
@@ -220,6 +227,7 @@ export class GodotServer {
           state.activeProfile = agentState.activeProfile;
           state.isEphemeral = false;
         }
+        this.markStateDirty();
       }
     }
 
@@ -298,6 +306,26 @@ export class GodotServer {
     }
   }
 
+  /** 标记状态为脏，触发防抖刷盘。 */
+  private markStateDirty(): void {
+    if (!this.stateStore) return;
+    this.stateStore.markDirty(() => ({
+      version: 1,
+      savedAt: Date.now(),
+      agents: Object.fromEntries(
+        [...this.agentCtx['agents'].entries()]
+          .filter(([, s]) => !s.isEphemeral)
+          .map(([id, s]) => [id, {
+            selectedInstance: s.selectedInstance,
+            activeProfile: s.activeProfile,
+            contextMeta: null,
+          }]),
+      ),
+      globalProfile: 'full',
+      lastConnectedPort: null,
+    }));
+  }
+
   async close(): Promise<void> {
     if (this.editorConn) {
       this.editorConn.disconnect();
@@ -318,7 +346,7 @@ export class GodotServer {
     this.dispatcher?.getHealthMonitor().stopHeartbeat();
     // 状态持久化 — 刷盘并清理
     if (this.stateStore) {
-      this.stateStore.flush();
+      await this.stateStore.flush();
       this.stateStore.destroy();
     }
     this.agentCtx.destroy();

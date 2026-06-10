@@ -132,12 +132,12 @@ export class InstanceRouter {
       .sort((a, b) => Date.parse(b.lastSeen) - Date.parse(a.lastSeen));
 
     if (sameProject.length > 0) {
-      return sameProject[0].port;
+      return sameProject[0]!.port;
     }
 
     // 3. Single instance available
     if (this.deps.instances.length === 1) {
-      return this.deps.instances[0].port;
+      return this.deps.instances[0]!.port;
     }
 
     // 4. No match

@@ -22,7 +22,7 @@ describe('Agent integration', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('persists and restores agent state across restarts', () => {
+  it('persists and restores agent state across restarts', async () => {
     // 模拟第一次会话
     const agent = mgr.getOrCreate('agent-abc');
     agent.selectedInstance = { type: 'port', value: '65001' };
@@ -41,7 +41,7 @@ describe('Agent integration', () => {
       globalProfile: 'full',
       lastConnectedPort: 65001,
     }));
-    store.flush();
+    await store.flush();
 
     // 模拟重启 — 新 manager
     const mgr2 = new AgentContextManager();
