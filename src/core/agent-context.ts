@@ -77,11 +77,31 @@ export class AgentContextManager {
     }
   }
 
-  // Task 2 占位
+  // 引擎操作 FIFO 队列：串行化执行，防止并发冲突
   async enqueueEngine<T>(op: () => Promise<T>): Promise<T> {
-    return op();
+    return new Promise<T>((resolve, reject) => {
+      this.engineQueue.push({ op, resolve: resolve as (v: unknown) => void, reject });
+      if (!this.engineRunning) {
+        this.engineRunning = true;
+        void this.drainEngineQueue();
+      }
+    });
   }
 
+  private async drainEngineQueue(): Promise<void> {
+    while (this.engineQueue.length > 0) {
+      const item = this.engineQueue.shift()!;
+      try {
+        const result = await item.op();
+        item.resolve(result);
+      } catch (err) {
+        item.reject(err);
+      }
+    }
+    this.engineRunning = false;
+  }
+
+  // IO 操作：允许并发执行
   async enqueueIO<T>(op: () => Promise<T>): Promise<T> {
     return op();
   }
