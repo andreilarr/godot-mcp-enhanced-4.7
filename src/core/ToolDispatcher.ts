@@ -19,6 +19,7 @@ import {
   MINIMAL_TOOLS,
   registerInlineTool,
   resolveProfile,
+  tryLegacyMapping,
 } from './tool-registry.js';
 import { isPathInAllowedRoots, parseGodotConfig } from '../helpers.js';
 import { opsErrorResult, COMMON_ERROR_CODES } from '../tools/shared.js';
@@ -436,20 +437,33 @@ export class ToolDispatcher {
   }
 
   private async dispatchTool(toolName: string, args: Record<string, unknown>, startTime: number): Promise<ToolResult> {
-    const targetMod = getModuleForTool(toolName);
+    let targetMod = getModuleForTool(toolName);
+    let effectiveToolName = toolName;
+    let effectiveArgs = args;
+
+    // ── Legacy fallback: 旧工具名 → 新 (tool, action) ──
+    if (!targetMod) {
+      const legacy = tryLegacyMapping(toolName);
+      if (legacy) {
+        effectiveToolName = legacy.tool;
+        effectiveArgs = { ...args, action: legacy.action };
+        targetMod = getModuleForTool(effectiveToolName);
+      }
+    }
+
     if (!targetMod) {
       return opsErrorResult('UNKNOWN_TOOL', `Unknown tool: ${toolName}`);
     }
 
     const logger = getLogger();
-    const callId = logger.toolStart(toolName, args);
+    const callId = logger.toolStart(effectiveToolName, effectiveArgs);
 
     let result: ToolResult | null;
     try {
-      result = await targetMod.handleTool(toolName, args, this.ctx);
+      result = await targetMod.handleTool(effectiveToolName, effectiveArgs, this.ctx);
     } catch (err) {
       const duration = Date.now() - startTime;
-      logger.toolEnd(callId, toolName, duration, err instanceof Error ? err.message : String(err));
+      logger.toolEnd(callId, effectiveToolName, duration, err instanceof Error ? err.message : String(err));
       throw err;
     }
 
@@ -458,11 +472,11 @@ export class ToolDispatcher {
     if (result !== null) {
       // 判断是否有错误（使用 MCP 标准的 isError 字段）
       const hasError = result.isError === true;
-      logger.toolEnd(callId, toolName, duration, hasError ? 'tool_error' : undefined);
+      logger.toolEnd(callId, effectiveToolName, duration, hasError ? 'tool_error' : undefined);
       return truncateResponse({ ...result, content: [...result.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }] });
     }
-    logger.toolEnd(callId, toolName, duration, 'handler_null');
-    return opsErrorResult('HANDLER_NULL', `Tool "${toolName}" registered but handler returned null`);
+    logger.toolEnd(callId, effectiveToolName, duration, 'handler_null');
+    return opsErrorResult('HANDLER_NULL', `Tool "${effectiveToolName}" registered but handler returned null`);
   }
 
   private attachFallbackWarning(result: ToolResult): ToolResult {
@@ -470,7 +484,14 @@ export class ToolDispatcher {
       this._editorFallbackWarned = true;
       const first = result.content?.[0];
       if (first?.type === 'text') {
-        first.text += '\n\n⚠️ [EDITOR_FALLBACK] Running in Headless mode — Editor features (UndoRedo, live scene sync) unavailable.';
+        // H-04: Create new content array and text block instead of mutating original
+        return {
+          ...result,
+          content: [
+            { type: 'text' as const, text: first.text + '\n\n⚠️ [EDITOR_FALLBACK] Running in Headless mode — Editor features (UndoRedo, live scene sync) unavailable.' },
+            ...result.content.slice(1),
+          ],
+        };
       }
     }
     return result;

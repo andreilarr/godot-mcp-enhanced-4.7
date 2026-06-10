@@ -41,6 +41,8 @@ vi.mock('../../src/core/tool-registry.js', () => ({
   MINIMAL_TOOLS: mockMINIMAL_TOOLS,
   isToolAllowed: mockIsToolAllowed,
   setActiveGroups: mockSetActiveGroups,
+  resolveProfile: vi.fn().mockReturnValue(new Set()),
+  tryLegacyMapping: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock('../../src/guard.js', () => ({
