@@ -1,4 +1,7 @@
-/** 共享参数 schema 定义 — 所有工具引用而非重写。 */
+/**
+ * 共享参数 schema 定义 — 所有工具引用而非重写。
+ * @phase2 Phase 2 预留 — 统一 Action 路由启用后消费。
+ */
 export const COMMON_SCHEMAS = {
   project_path: {
     type: 'string' as const,

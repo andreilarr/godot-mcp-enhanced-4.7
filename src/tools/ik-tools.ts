@@ -163,7 +163,9 @@ func _initialize():
 
 // ─── Tool Definitions ──────────────────────────────────────────────────────
 
+/** @deprecated v0.18.0 — 已合并到 animation。仅保留供目标模块导入 handler。 */
 export function getToolDefinitions(): Tool[] {
+  console.warn(`[DEPRECATED] ik-tools module is absorbed into animation. Do not register directly.`);
   return [
     {
       name: 'ik',
@@ -207,9 +209,11 @@ export function getToolDefinitions(): Tool[] {
 
 // ─── Tool Handler ───────────────────────────────────────────────────────────
 
+/** @deprecated v0.18.0 — 已合并到 animation。仅保留供目标模块导入 handler。 */
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
+  console.warn(`[DEPRECATED] ik-tools module is absorbed into animation. Do not register directly.`);
   if (name !== 'ik') return null;
 
   const action = args.action as string;

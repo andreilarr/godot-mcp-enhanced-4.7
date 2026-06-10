@@ -136,7 +136,9 @@ func _initialize():
 
 // ─── Tool Definitions ───────────────────────────────────────────────────────
 
+/** @deprecated v0.18.0 — 已合并到 runtime。仅保留供目标模块导入 handler。 */
 export function getToolDefinitions(): Tool[] {
+  console.warn(`[DEPRECATED] recording module is absorbed into runtime. Do not register directly.`);
   return [
     {
       name: 'recording',
@@ -163,9 +165,11 @@ export function getToolDefinitions(): Tool[] {
 
 // ─── Tool Handler ───────────────────────────────────────────────────────────
 
+/** @deprecated v0.18.0 — 已合并到 runtime。仅保留供目标模块导入 handler。 */
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
+  console.warn(`[DEPRECATED] recording module is absorbed into runtime. Do not register directly.`);
   if (name !== 'recording') return null;
   const action = args.action as string;
   if (!(ACTIONS as readonly string[]).includes(action)) return null;

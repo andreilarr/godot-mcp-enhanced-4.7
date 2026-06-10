@@ -12,7 +12,9 @@ import { spawnGodot } from './spawn-helper.js';
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
+/** @deprecated v0.18.0 — 已合并到 workflow。仅保留供目标模块导入 handler。 */
 export function getToolDefinitions(): Tool[] {
+  console.warn(`[DEPRECATED] batch-tools module is absorbed into workflow. Do not register directly.`);
   return [
     {
       name: 'batch',
@@ -66,7 +68,9 @@ export function getToolDefinitions(): Tool[] {
 
 const ACTIONS = ['create_files', 'run_verify', 'diff_scenes'] as const;
 
+/** @deprecated v0.18.0 — 已合并到 workflow。仅保留供目标模块导入 handler。 */
 export async function handleTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
+  console.warn(`[DEPRECATED] batch-tools module is absorbed into workflow. Do not register directly.`);
   if (name !== 'batch') return null;
 
   const action = args.action as string;

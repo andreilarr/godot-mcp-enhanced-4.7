@@ -42,7 +42,9 @@ function safeReadFile(filePath: string): string | null {
 
 // ─── Tool Definition ────────────────────────────────────────────────────────
 
+/** @deprecated v0.18.0 — 已合并到 validation。仅保留供目标模块导入 handler。 */
 export function getToolDefinitions(): Tool[] {
+  console.warn(`[DEPRECATED] delivery module is absorbed into validation. Do not register directly.`);
   return [
     {
       name: 'verify_delivery',
@@ -188,7 +190,9 @@ export function findAssociatedScenes(projectPath: string, scriptPath: string, ca
 
 // ─── Tool Handler ───────────────────────────────────────────────────────────
 
+/** @deprecated v0.18.0 — 已合并到 validation。仅保留供目标模块导入 handler。 */
 export async function handleTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
+  console.warn(`[DEPRECATED] delivery module is absorbed into validation. Do not register directly.`);
   if (name !== 'verify_delivery') return null;
 
   if (typeof args.project_path !== 'string') {

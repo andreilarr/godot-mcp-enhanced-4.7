@@ -22,7 +22,7 @@ import { listPrompts, getPrompt } from './prompts.js';
 // C-ARCH-01: All tool modules centralized in module-loader.ts
 import { registerAllModules } from './core/module-loader.js';
 import { setToolCallDelegate, setDynamicSender } from './tools/advanced-proxy.js';
-import { setMcpServer } from './core/tool-registry.js';
+import { setMcpServer, clearMcpServer } from './core/tool-registry.js';
 registerAllModules();
 
 
@@ -373,6 +373,7 @@ export class GodotServer {
     this.agentCtx.destroy();
     await this.server.close();
     setOnGroupsChanged(null);
+    clearMcpServer();
     log('Server shut down');
   }
 }

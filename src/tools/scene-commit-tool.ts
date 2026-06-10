@@ -10,7 +10,9 @@ import { generateCommitScript, type CommitOperation } from './scene-commit.js';
 import { acquireShortRunningSlot, releaseShortRunningSlot } from '../core/process-state.js';
 import { opsErrorResult } from './shared.js';
 
+/** @deprecated v0.18.0 — 已合并到 scene。仅保留供目标模块导入 handler。 */
 export function getToolDefinitions(): Tool[] {
+  console.warn(`[DEPRECATED] scene-commit-tool module is absorbed into scene. Do not register directly.`);
   return [{
     name: 'scene_commit',
     description: '批量执行场景修改操作（tile_set/tile_fill/tile_erase/tile_clear/tileset_assign/node_property/node_add），合并为一次 Godot 进程调用。适合需要持久化的批量修改。',
@@ -108,9 +110,11 @@ export async function handleCommitAction(
 
 // ─── Tool Handler ───────────────────────────────────────────────────────────
 
+/** @deprecated v0.18.0 — 已合并到 scene。仅保留供目标模块导入 handler。 */
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext,
 ): Promise<ToolResult | null> {
+  console.warn(`[DEPRECATED] scene-commit-tool module is absorbed into scene. Do not register directly.`);
   if (name !== 'scene_commit') return null;
   return handleCommitAction(args, ctx);
 }

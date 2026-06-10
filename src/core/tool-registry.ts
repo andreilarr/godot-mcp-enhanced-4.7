@@ -306,6 +306,11 @@ export function setMcpServer(server: Server): void {
   mcpServer = server;
 }
 
+/** 清理 MCP Server 引用（GodotServer.close 时调用）。 */
+export function clearMcpServer(): void {
+  mcpServer = null;
+}
+
 /** 通知客户端工具列表已变更。不支持时静默忽略。 */
 export function notifyToolsChanged(): void {
   if (!mcpServer) return;

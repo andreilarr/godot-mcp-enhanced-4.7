@@ -1,7 +1,10 @@
 import { ErrorCodes } from './error-codes.js';
 import type { ToolResult } from '../types.js';
 
-/** 统一 Action 响应格式，包含 tool + action 用于调试追溯。 */
+/**
+ * 统一 Action 响应格式，包含 tool + action 用于调试追溯。
+ * @phase2 Phase 2 预留 — 统一 Action 路由启用后消费。
+ */
 export interface ActionResult {
   tool: string;
   action: string;
