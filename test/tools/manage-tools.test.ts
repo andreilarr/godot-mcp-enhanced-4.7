@@ -16,6 +16,10 @@ vi.mock('../../src/core/tool-registry.js', () => ({
   setActiveGroups: mockSetActiveGroups,
   getActiveGroups: mockGetActiveGroups,
   getGroupForTool: mockGetGroupForTool,
+  notifyToolsChanged: vi.fn(),
+  LEGACY_TOOL_MAP: {
+    node_create_3d: { tool: 'scene', action: 'create_3d_node' },
+  },
 }));
 
 vi.mock('../../src/tools/shared.js', () => ({

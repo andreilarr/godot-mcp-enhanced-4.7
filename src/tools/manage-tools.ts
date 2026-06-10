@@ -10,10 +10,12 @@ import {
   TOOL_GROUPS,
   setActiveGroups,
   getActiveGroups,
+  notifyToolsChanged,
+  LEGACY_TOOL_MAP,
 } from '../core/tool-registry.js';
 import { opsSuccess, opsError } from './shared.js';
 
-type ManageAction = 'list_groups' | 'activate' | 'deactivate' | 'sync' | 'reconnect';
+type ManageAction = 'list_groups' | 'activate' | 'deactivate' | 'sync' | 'reconnect' | 'migrate';
 
 /** Optional callback fired when groups change (set by GodotServer). */
 let _onGroupsChanged: (() => void) | null = null;
@@ -35,7 +37,7 @@ export function getToolDefinitions(): Tool[] {
         properties: {
           action: {
             type: 'string',
-            enum: ['list_groups', 'activate', 'deactivate', 'sync', 'reconnect'],
+            enum: ['list_groups', 'activate', 'deactivate', 'sync', 'reconnect', 'migrate'],
             description: '操作类型',
           },
           groups: {
@@ -65,6 +67,7 @@ export async function handleTool(
     case 'deactivate': return handleDeactivate(args);
     case 'sync': return handleSync();
     case 'reconnect': return handleReconnect();
+    case 'migrate': return handleMigrate();
     default:
       return textResult(JSON.stringify(opsError('INVALID_ACTION', `Unknown action: ${action}`)));
   }
@@ -95,6 +98,7 @@ function handleActivate(args: Record<string, unknown>): ToolResult {
   }
   setActiveGroups(updated);
   _onGroupsChanged?.();
+  notifyToolsChanged();
   return textResult(JSON.stringify(opsSuccess({
     activated: targetGroups,
     activeGroups: [...updated],
@@ -119,6 +123,7 @@ function handleDeactivate(args: Record<string, unknown>): ToolResult {
   for (const g of targetGroups) updated.delete(g);
   setActiveGroups(updated);
   _onGroupsChanged?.();
+  notifyToolsChanged();
   return textResult(JSON.stringify(opsSuccess({
     deactivated: targetGroups,
     activeGroups: [...updated],
@@ -136,3 +141,27 @@ function handleReconnect(): ToolResult {
 export const TOOL_META = {
   manage_tools: { readonly: true, long_running: false },
 };
+
+function handleMigrate(): ToolResult {
+  const mapping: Record<string, { tool: string; action: string }> = {};
+  const renamed: Record<string, string> = {};
+  const removed: string[] = [];
+  const unchanged = ['confirm_and_execute', 'godot_advanced_tool', 'manage_tools', 'godot_list_instances', 'godot_select_instance'];
+
+  for (const [oldName, target] of Object.entries(LEGACY_TOOL_MAP)) {
+    mapping[oldName] = target;
+    removed.push(oldName);
+    if (oldName.includes('_')) {
+      renamed[oldName] = `${target.tool}(action="${target.action}")`;
+    }
+  }
+
+  return textResult(JSON.stringify(opsSuccess({
+    version: '0.18.0',
+    description: '旧工具名到新 (tool, action) 的迁移映射',
+    mapping,
+    renamed,
+    removed,
+    unchanged,
+  })));
+}
