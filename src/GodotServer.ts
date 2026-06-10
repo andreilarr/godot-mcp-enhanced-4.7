@@ -21,7 +21,8 @@ import { listPrompts, getPrompt } from './prompts.js';
 // ─── Import and register tool modules ────────────────────────────────────────
 // C-ARCH-01: All tool modules centralized in module-loader.ts
 import { registerAllModules } from './core/module-loader.js';
-import { setToolCallDelegate } from './tools/advanced-proxy.js';
+import { setToolCallDelegate, setDynamicSender } from './tools/advanced-proxy.js';
+import { setMcpServer } from './core/tool-registry.js';
 registerAllModules();
 
 
@@ -38,6 +39,7 @@ import { setOnGroupsChanged } from './tools/manage-tools.js';
 import { InstanceManager } from './core/instance-manager.js';
 import { InstanceRouter, type RouterDependencies } from './core/instance-router.js';
 import { setInstanceManager, setInstanceRouter } from './tools/instance-tools.js';
+import { buildAuthHeaders } from './core/instance-api-auth.js';
 import { isFeatureEnabled } from './core/feature-flags.js';
 import * as ps from './core/process-state.js';
 import { killProcess } from './core/process-state.js';
@@ -91,6 +93,7 @@ export class GodotServer {
       { name: 'godot-mcp-enhanced', version: pkgVersion },
       { capabilities: { tools: {}, resources: {}, prompts: {} } }
     );
+    setMcpServer(this.server);
     this.setupHandlers();
   }
 
@@ -172,7 +175,7 @@ export class GodotServer {
       try {
         const response = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: buildAuthHeaders(instance.id),
           body: JSON.stringify(args),
           signal: AbortSignal.timeout(30000),
         });
@@ -197,6 +200,25 @@ export class GodotServer {
     });
     setInstanceManager(manager);
     setInstanceRouter(router);
+    // Phase 3: Wire dynamic route sender — resolves selected instance and POSTs to route
+    setDynamicSender(async (route: string, toolArgs: Record<string, unknown>) => {
+      const selected = router.getSelectedInstance();
+      if (!selected) {
+        return { content: [{ type: 'text' as const, text: 'No instance selected for dynamic routing.' }], isError: true };
+      }
+      const url = `http://127.0.0.1:${selected.port}/api/${route}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: buildAuthHeaders(selected.id),
+        body: JSON.stringify(toolArgs),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!response.ok) {
+        return { content: [{ type: 'text' as const, text: `Dynamic route ${route} error: HTTP ${response.status}` }], isError: true };
+      }
+      const data = await response.json();
+      return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+    });
     getLogger().info('instance', 'Multi-instance mode enabled');
   }
 
@@ -313,8 +335,7 @@ export class GodotServer {
       version: 1,
       savedAt: Date.now(),
       agents: Object.fromEntries(
-        [...this.agentCtx['agents'].entries()]
-          .filter(([, s]) => !s.isEphemeral)
+        this.agentCtx.getPersistableAgents()
           .map(([id, s]) => [id, {
             selectedInstance: s.selectedInstance,
             activeProfile: s.activeProfile,
