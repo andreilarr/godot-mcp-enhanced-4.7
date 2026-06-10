@@ -109,6 +109,41 @@ export class InstanceRouter {
     }
   }
 
+  /**
+   * Resolve the best port for the selected instance using a priority chain:
+   * 1. Original port still alive (same id + port in current instances)
+   * 2. Same projectPath — pick most recent heartbeat
+   * 3. Single instance available — use its port
+   * 4. No match — null
+   */
+  async resolvePort(): Promise<number | null> {
+    const selected = this.getSelectedInstance();
+    if (!selected) return null;
+
+    // 1. Original port still alive — use it
+    const current = this.deps.instances.find(i => i.port === selected.port);
+    if (current && current.id === selected.id) {
+      return selected.port;
+    }
+
+    // 2. Same projectPath — pick most recent heartbeat
+    const sameProject = this.deps.instances
+      .filter(i => i.projectPath === selected.projectPath)
+      .sort((a, b) => Date.parse(b.lastSeen) - Date.parse(a.lastSeen));
+
+    if (sameProject.length > 0) {
+      return sameProject[0].port;
+    }
+
+    // 3. Single instance available
+    if (this.deps.instances.length === 1) {
+      return this.deps.instances[0].port;
+    }
+
+    // 4. No match
+    return null;
+  }
+
   /** Update the available instances list (e.g. after rediscovery). */
   updateInstances(instances: InstanceInfo[]): void {
     this.deps.instances = instances;

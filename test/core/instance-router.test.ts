@@ -138,4 +138,76 @@ describe('InstanceRouter', () => {
     });
 
   });
+
+  describe('resolvePort', () => {
+    it('returns original port when still alive', async () => {
+      const inst = makeInstance({ id: 'i1', port: 65001 });
+      const router = new InstanceRouter({ instances: [inst], sendToInstance: vi.fn() });
+      router.updateInstances([inst]);
+      router.autoSelect();
+      const port = await router.resolvePort();
+      expect(port).toBe(65001);
+    });
+
+    it('returns null when no instances available', async () => {
+      const router = new InstanceRouter({ instances: [], sendToInstance: vi.fn() });
+      const port = await router.resolvePort();
+      expect(port).toBeNull();
+    });
+
+    it('returns null when no instance is selected', async () => {
+      const inst1 = makeInstance({ id: 'i1', port: 65001 });
+      const inst2 = makeInstance({ id: 'i2', port: 65002 });
+      const router = new InstanceRouter({ instances: [inst1, inst2], sendToInstance: vi.fn() });
+      // 2+ instances → autoSelect returns null, no manual selection
+      router.autoSelect();
+      const port = await router.resolvePort();
+      expect(port).toBeNull();
+    });
+
+    it('picks most recent heartbeat for same projectPath when original gone', async () => {
+      const inst1 = makeInstance({
+        id: 'i1',
+        port: 65001,
+        lastSeen: new Date(Date.now() - 60000).toISOString(),
+      });
+      const inst2 = makeInstance({
+        id: 'i2',
+        port: 65002,
+        lastSeen: new Date().toISOString(),
+      });
+      const router = new InstanceRouter({ instances: [inst1, inst2], sendToInstance: vi.fn() });
+      router.updateInstances([inst1, inst2]);
+      // Select i1, then simulate i1 gone by updating with only i2
+      await router.selectInstance('i1');
+      router.updateInstances([inst2]);
+      // Now selected id is cleared because i1 is gone, re-select via project
+      router.selectInstanceByProject(inst1.projectPath!);
+      const port = await router.resolvePort();
+      expect(port).toBe(65002);
+    });
+
+    it('falls back to single instance when projectPath differs', async () => {
+      const inst = makeInstance({ id: 'i1', port: 65001, projectPath: '/other-project' });
+      const router = new InstanceRouter({ instances: [inst], sendToInstance: vi.fn() });
+      router.updateInstances([inst]);
+      router.autoSelect();
+      const port = await router.resolvePort();
+      expect(port).toBe(65001);
+    });
+
+    it('returns null when selected instance gone and multiple candidates exist with different projects', async () => {
+      const inst1 = makeInstance({ id: 'i1', port: 65001, projectPath: '/proj-a' });
+      const inst2 = makeInstance({ id: 'i2', port: 65002, projectPath: '/proj-b' });
+      // Start with inst1 selected
+      const router = new InstanceRouter({ instances: [inst1], sendToInstance: vi.fn() });
+      router.updateInstances([inst1]);
+      router.autoSelect();
+      // Now inst1 is gone, only inst2 remains with different projectPath
+      router.updateInstances([inst2]);
+      // selectedId was cleared, so resolvePort returns null
+      const port = await router.resolvePort();
+      expect(port).toBeNull();
+    });
+  });
 });
