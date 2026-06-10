@@ -51,11 +51,11 @@ export function getToolDefinitions(): Tool[] {
   }];
 }
 
-export async function handleTool(
-  name: string, args: Record<string, unknown>, ctx: ToolContext,
-): Promise<ToolResult | null> {
-  if (name !== 'scene_commit') return null;
+// ─── Core handler (shared by handleTool and scene module) ─────────────────
 
+export async function handleCommitAction(
+  args: Record<string, unknown>, ctx: ToolContext,
+): Promise<ToolResult | null> {
   const p = requireProjectPath(args);
   const scenePath = normalizeUserProjectPath(args.scene_path as string);
   resolveWithinRoot(p, scenePath);
@@ -104,6 +104,15 @@ export async function handleTool(
   } finally {
     releaseShortRunningSlot();
   }
+}
+
+// ─── Tool Handler ───────────────────────────────────────────────────────────
+
+export async function handleTool(
+  name: string, args: Record<string, unknown>, ctx: ToolContext,
+): Promise<ToolResult | null> {
+  if (name !== 'scene_commit') return null;
+  return handleCommitAction(args, ctx);
 }
 
 /** Parse COMMIT_RESULT JSON from GDScript output. */

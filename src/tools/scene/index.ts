@@ -15,6 +15,8 @@ import { spawnGodot } from '../spawn-helper.js';
 import { ACTIONS, requireScenePath, gdScriptSetLine, TRY_SET_HELPER, writeAtomic, BLOCKED_PROPS } from './helpers.js';
 import { handleInstanceScene, handleSetInstanceProperty, handleDetachInstance } from './scene-instance.js';
 import { mergeTscn, checkSceneHealth } from './scene-merge.js';
+import { handleCreate3dNode } from '../node-3d-ops.js';
+import { handleCommitAction } from '../scene-commit-tool.js';
 
 export { mergeTscn, checkSceneHealth };
 
@@ -320,6 +322,11 @@ export async function handleTool(
       writeAtomic(fullPathA, mergeTscn(ours, theirs));
       return textResult(JSON.stringify({ merged_into: sceneA, source: sceneB, status: 'ok' }, null, 2));
     }
+
+    case 'create_3d_node':
+      return handleCreate3dNode(args, ctx);
+    case 'commit':
+      return handleCommitAction(args, ctx);
 
     default: return null;
   }

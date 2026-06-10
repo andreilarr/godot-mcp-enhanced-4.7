@@ -12,6 +12,7 @@ export const ACTIONS = [
   'edit_node', 'remove_node', 'instance_scene', 'set_instance_property', 'detach_instance',
   'health_check',
   'merge_scene',
+  'create_3d_node', 'commit',
 ] as const;
 
 /** Validate that a value is a non-empty string; returns opsErrorResult if not. */

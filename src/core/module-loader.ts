@@ -17,7 +17,6 @@ import * as scene from '../tools/scene.js';
 import * as script from '../tools/script.js';
 import * as validation from '../tools/validation.js';
 import * as docs from '../tools/docs.js';
-import * as node3dOps from '../tools/node-3d-ops.js';
 import * as physicsOps from '../tools/physics-ops.js';
 import * as audioOps from '../tools/audio-ops.js';
 import * as tilemapOps from '../tools/tilemap-ops.js';
@@ -40,7 +39,6 @@ import * as delivery from '../tools/delivery.js';
 import * as codeTemplates from '../tools/code-templates.js';
 import * as ikTools from '../tools/ik-tools.js';
 import * as gameDesign from '../tools/game-design.js';
-import * as sceneCommit from '../tools/scene-commit-tool.js';
 import * as manageTools from '../tools/manage-tools.js';
 import * as instanceTools from '../tools/instance-tools.js';
 import * as advancedProxy from '../tools/advanced-proxy.js';
@@ -50,11 +48,11 @@ import * as advancedProxy from '../tools/advanced-proxy.js';
 /** All tool modules in registration order. */
 const ALL_MODULES = [
   runtime, screenshot, project, scene, script, validation, docs,
-  node3dOps, physicsOps, audioOps, tilemapOps, materialOps,
+  physicsOps, audioOps, tilemapOps, materialOps,
   gameBridge, workflow, animationOps, animationTrack, profilerOps,
   testFramework, animtreeOps, navigationOps, particlesOps,
   signalOps, batchTools, uiOps, recordingOps, editorSync,
-  delivery, codeTemplates, ikTools, gameDesign, sceneCommit, manageTools, instanceTools, advancedProxy,
+  delivery, codeTemplates, ikTools, gameDesign, manageTools, instanceTools, advancedProxy,
 ];
 
 // ─── Tag injection ─────────────────────────────────────────────────────────────

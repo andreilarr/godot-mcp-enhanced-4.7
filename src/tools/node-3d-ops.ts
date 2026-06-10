@@ -120,42 +120,34 @@ export function getToolDefinitions(): Tool[] {
   ];
 }
 
-// ─── Tool Handler ───────────────────────────────────────────────────────────
+// ─── Core handler (shared by handleTool and scene module) ─────────────────
 
-export async function handleTool(
-  name: string, args: Record<string, unknown>, ctx: ToolContext
+export async function handleCreate3dNode(
+  args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
-  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
-
   try {
     const projectPath = requireProjectPath(args);
     const godot = await ctx.findGodot();
     const loadAutoloads = args.load_autoloads !== false;
-    let script: string;
 
-    switch (name) {
-      case 'node_create_3d': {
-        const nodeType = args.type as string;
-        const nodeName = args.name as string;
-        if (!TYPE_WHITELIST.includes(nodeType as typeof TYPE_WHITELIST[number])) {
-          return opsErrorResult('INVALID_TYPE', `Node type "${nodeType}" not in whitelist. Allowed: ${TYPE_WHITELIST.join(', ')}`);
-        }
-        validateIdentifier(nodeType, 'node_type');
-        validateIdentifier(nodeName, 'node_name');
-        const parentPath = normalizeNodePath((args.parent as string) || 'root');
-        const position = args.position ? validateVector3(args.position) : undefined;
-        const rotation = args.rotation ? validateVector3(args.rotation) : undefined;
-        const scale = args.scale ? validateVector3(args.scale) : undefined;
-        const properties = args.properties as Record<string, unknown> | undefined;
-        try {
-          script = genCreate3DScript(nodeType, nodeName, parentPath, position, rotation, scale, properties);
-        } catch (e) {
-          return opsErrorResult('INVALID_TYPE', (e as Error).message);
-        }
-        break;
-      }
-      default:
-        return null;
+    const nodeType = args.type as string;
+    const nodeName = args.name as string;
+    if (!TYPE_WHITELIST.includes(nodeType as typeof TYPE_WHITELIST[number])) {
+      return opsErrorResult('INVALID_TYPE', `Node type "${nodeType}" not in whitelist. Allowed: ${TYPE_WHITELIST.join(', ')}`);
+    }
+    validateIdentifier(nodeType, 'node_type');
+    validateIdentifier(nodeName, 'node_name');
+    const parentPath = normalizeNodePath((args.parent as string) || 'root');
+    const position = args.position ? validateVector3(args.position) : undefined;
+    const rotation = args.rotation ? validateVector3(args.rotation) : undefined;
+    const scale = args.scale ? validateVector3(args.scale) : undefined;
+    const properties = args.properties as Record<string, unknown> | undefined;
+
+    let script: string;
+    try {
+      script = genCreate3DScript(nodeType, nodeName, parentPath, position, rotation, scale, properties);
+    } catch (e) {
+      return opsErrorResult('INVALID_TYPE', (e as Error).message);
     }
 
     const result = await executeGdscript({
@@ -178,6 +170,15 @@ export async function handleTool(
     if (msg.includes('Vector3')) return opsErrorResult('INVALID_VECTOR', msg);
     return opsErrorResult('SCRIPT_EXEC_FAILED', msg);
   }
+}
+
+// ─── Tool Handler ───────────────────────────────────────────────────────────
+
+export async function handleTool(
+  name: string, args: Record<string, unknown>, ctx: ToolContext
+): Promise<ToolResult | null> {
+  if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
+  return handleCreate3dNode(args, ctx);
 }
 
 // ─── Tool Meta ──────────────────────────────────────────────────────────────
