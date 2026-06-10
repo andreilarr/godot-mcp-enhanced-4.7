@@ -30,7 +30,7 @@ godot-mcp-enhanced 当前为单 Agent 设计，随着 Claude Cowork 等多 Agent
 ### 现有代码基础
 
 - **34 工具模块**，39 MCP 工具，16 工具组，6 配置文件
-- **多实例发现**：`InstanceManager` 已有注册表读取 + stale 检测，但 `sendToInstance` 返回 `NOT_IMPLEMENTED`
+- **多实例发现**：`InstanceManager` 已有注册表读取 + stale 检测；`InstanceRouter` 通过 DI 接收 `sendToInstance`，但 `GodotServer` 注入的实现尚未完成实际的 HTTP 请求逻辑
 - **重连管理**：`ReconnectionManager` 已有指数退避（10 次，800ms-30s，50-100% jitter）
 - **无 Agent 跟踪、无状态持久化、无动态工具发现**
 
@@ -74,7 +74,7 @@ const EPHEMERAL_AGENT_TTL = 30 * 60 * 1000; // 30 分钟
 
 class AgentContextManager {
   private agents: Map<string, AgentState>;
-  private cleanupInterval: NodeJS.Timer | null;
+  private cleanupInterval: ReturnType<typeof setInterval> | null;
 
   // 引擎操作队列（Godot 单线程 → 全部串行）
   private engineQueue: Array<{
@@ -142,7 +142,7 @@ interface PersistedState {
 class FileStateStore {
   private filePath: string;
   private dirty: boolean;
-  private flushTimer: NodeJS.Timer | null;
+  private flushTimer: ReturnType<typeof setTimeout> | null;
 
   constructor(projectPath?: string);
 
@@ -209,18 +209,24 @@ AgentContextManager 状态变更
 
 **修改文件**：`src/core/instance-manager.ts`
 
-#### 显式状态信号
+#### 显式状态信号（扩展现有 InstanceInfo）
 
 ```typescript
+// 现有字段保持不变，仅追加 Phase 2 新增字段
 interface InstanceInfo {
+  // 现有字段（来自 src/core/instance-manager.ts）
+  id: string;
   port: number;
-  projectPath: string;
-  projectName: string;
+  pid: number;
+  lastSeen: string;        // 保持 ISO 8601（现有格式）
   godotVersion: string;
-  lastSeen: number;
-  registeredAt: number;
-  status: 'ready' | 'compiling' | 'unresponsive';
-  isAlive: boolean;
+  projectName: string;
+  projectPath: string;
+  capabilities: string[];
+
+  // Phase 2 新增（可选，旧插件不写此字段）
+  status?: 'ready' | 'compiling' | 'unresponsive';
+  registeredAt?: number;
 }
 ```
 
@@ -231,7 +237,7 @@ interface InstanceInfo {
 
 **MCP 端判定逻辑**：
 - `status === 'compiling'` → 保持选择，不触发重新发现
-- `status === 'ready'` && `lastSeen` > 70 秒 → 判定崩溃
+- `status === 'ready'` && `Date.parse(lastSeen)` 距今 > 70 秒 → 判定崩溃
 - `status === 'unresponsive'` → 需重新发现
 
 ### 2.2 实例路由补全
@@ -363,7 +369,7 @@ async function handleAdvancedTool(params: {
 #### Profile 对动态工具的控制
 
 - 所有现有 Profile 追加 `dynamic` 组
-- `full` → 包含 dynamic（默认全开）
+- `full` → 包含 dynamic（自动继承：`PROFILES.full = Object.keys(TOOL_GROUPS)`，新增 dynamic 组时自动包含）
 - `bridge_dev` → 包含 dynamic（Bridge 调试需要）
 - `minimal`/`slim` → 不包含 dynamic（保守）
 - 动态工具不受 Profile 已有 group 成员关系约束，仅检查 `dynamic` 组权限
@@ -424,8 +430,8 @@ async function listDynamicRoutes(params?: {
 |------|------|------|
 | `src/core/agent-context.ts` | 新增 | Agent 上下文管理器 + 请求队列 |
 | `src/core/state-store.ts` | 新增 | 文件状态持久化 |
-| `src/core/ToolDispatcher.ts` | 修改 | 提取 agentId，注入 AgentContext |
-| `src/core/tool-registry.ts` | 修改 | `getFilteredTools` 支持 per-agent profile |
+| `src/core/ToolDispatcher.ts` | 修改 | 提取 agentId，注入 AgentContext；`getFilteredTools(agentId)` 支持 per-agent profile |
+| `src/core/tool-registry.ts` | 修改 | Agent profile 解析支持 |
 | `src/GodotServer.ts` | 修改 | 启动恢复 + 关闭刷盘 + `_meta` 传递 |
 
 ### Phase 2（v0.19.0）
@@ -442,7 +448,7 @@ async function listDynamicRoutes(params?: {
 | 文件 | 操作 | 说明 |
 |------|------|------|
 | `src/tools/godot-advanced-tool.ts` | 修改 | 动态路由推导 + Profile 检查 + 错误分类 |
-| `src/core/tool-registry.ts` | 修改 | 追加 `dynamic` 组到相关 Profile |
+| `src/core/tool-registry.ts` | 修改 | `TOOL_GROUPS` 追加 `dynamic` 组；`PROFILES` 更新（`full` 自动继承） |
 | Godot 端插件 | 修改 | `_meta/routes` 端点 |
 
 ---
