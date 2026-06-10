@@ -1,10 +1,13 @@
 // src/tools/advanced-proxy.ts
 /**
- * Advanced proxy — godot_advanced_tool (Phase 3a)
+ * Advanced proxy — godot_advanced_tool + godot_list_dynamic_routes (Phase 3)
  *
- * Proxy tool that allows calling deactivated/advanced tools in slim mode.
- * Belongs to the 'core' group (always visible, cannot be deactivated).
- * Provides fuzzy matching suggestions for invalid tool names.
+ * Proxy tool that allows calling deactivated/advanced tools in slim mode,
+ * and dynamic routing for tools that exist on the Godot side but aren't
+ * registered on the MCP side.
+ *
+ * Belongs to the 'dynamic' group. Provides fuzzy matching suggestions for
+ * invalid tool names, and structured dynamic routing for unknown godot_ tools.
  */
 
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
@@ -14,7 +17,9 @@ import { opsError } from './shared.js';
 import {
   isToolAllowed,
   getAllToolNames,
+  getActiveGroups,
 } from '../core/tool-registry.js';
+import { toolNameToRoute } from '../core/dynamic-routes.js';
 
 // ─── Delegate (set by ToolDispatcher to enable re-dispatch) ─────────────────
 
@@ -86,6 +91,19 @@ export function getToolDefinitions(): Tool[] {
         required: ['tool_name'],
       },
     },
+    {
+      name: 'godot_list_dynamic_routes',
+      description: '查询 Godot 端已注册但 MCP 侧未定义的工具。需要 Godot 实例连接。',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          category: {
+            type: 'string',
+            description: '按类别过滤（可选）',
+          },
+        },
+      },
+    },
   ];
 }
 
@@ -96,6 +114,12 @@ export async function handleTool(
   args: Record<string, unknown>,
   _ctx: ToolContext,
 ): Promise<ToolResult | null> {
+  // Route: godot_list_dynamic_routes
+  if (toolName === 'godot_list_dynamic_routes') {
+    return handleListDynamicRoutes(args);
+  }
+
+  // Route: godot_advanced_tool
   if (toolName !== 'godot_advanced_tool') return null;
 
   const targetTool = args.tool_name as string | undefined;
@@ -103,15 +127,25 @@ export async function handleTool(
     return textResult(JSON.stringify(opsError('MISSING_TOOL_NAME', 'tool_name is required')));
   }
 
+  // Security gate: reject non-godot_ prefixed tools in dynamic path
+  const hasGodotPrefix = targetTool.startsWith('godot_');
+
   // Reject if the tool is already directly available
   if (isToolAllowed(targetTool)) {
     return textResult(JSON.stringify(opsError('TOOL_ALREADY_AVAILABLE',
       `Tool "${targetTool}" is already directly available. Call it directly instead of through the proxy.`)));
   }
 
-  // Check if tool exists at all
+  // Check if tool exists in the registry
   const allNames = getAllToolNames();
-  if (!allNames.includes(targetTool)) {
+  if (allNames.includes(targetTool)) {
+    // Tool is known but deactivated — delegate the call
+    return delegateCall(targetTool, args);
+  }
+
+  // ── Dynamic fallback: tool not in registry ─────────────────────────────────
+  // Only allow dynamic routing for godot_-prefixed tools
+  if (!hasGodotPrefix) {
     const suggestions = suggestTools(targetTool, allNames);
     return textResult(JSON.stringify({
       success: false,
@@ -121,7 +155,34 @@ export async function handleTool(
     }));
   }
 
-  // Delegate the call
+  // Check if 'dynamic' group is active
+  const activeGroups = getActiveGroups();
+  if (!activeGroups.has('dynamic')) {
+    return textResult(JSON.stringify(opsError('DYNAMIC_GROUP_INACTIVE',
+      `Dynamic routing is not enabled. The 'dynamic' tool group is not active in the current profile.`)));
+  }
+
+  // Derive route from tool name
+  const route = toolNameToRoute(targetTool);
+  if (!route) {
+    return textResult(JSON.stringify(opsError('INVALID_DYNAMIC_TOOL_NAME',
+      `Cannot derive route from '${targetTool}'. Tool name must follow 'godot_<category>_<action>' convention.`)));
+  }
+
+  // Return structured result for the dispatcher to make the actual HTTP call
+  const toolArgs = (args.arguments as Record<string, unknown>) ?? {};
+  return textResult(JSON.stringify({
+    dynamic: true,
+    route,
+    toolName: targetTool,
+    args: toolArgs,
+  }));
+}
+
+// ─── Delegate helper ────────────────────────────────────────────────────────
+
+/** Delegate a call to the target tool via the registered delegate. */
+async function delegateCall(targetTool: string, args: Record<string, unknown>): Promise<ToolResult> {
   if (!_delegate) {
     return textResult(JSON.stringify(opsError('NO_DELEGATE', 'Proxy delegate not configured')));
   }
@@ -134,8 +195,31 @@ export async function handleTool(
   }
 }
 
+// ─── godot_list_dynamic_routes handler ──────────────────────────────────────
+
+/** Handle godot_list_dynamic_routes: list registered vs dynamic tools. */
+function handleListDynamicRoutes(args: Record<string, unknown>): ToolResult {
+  const allNames = getAllToolNames();
+  const category = args.category as string | undefined;
+
+  const registered = allNames.filter(name => {
+    if (category && !name.includes(category)) return false;
+    return true;
+  });
+
+  return textResult(JSON.stringify({
+    success: true,
+    total_registered: registered.length,
+    registered,
+    dynamic_routing_enabled: getActiveGroups().has('dynamic'),
+    hint: 'Dynamic tools are discovered at runtime from the Godot instance. ' +
+      'Use godot_advanced_tool with tool_name starting with "godot_" to call dynamic tools.',
+  }));
+}
+
 export const TOOL_META = {
   // Proxy itself doesn't write — readonly=true so it works in read-only mode.
   // Target tool's readonly check happens inside handleCall's middleware chain.
   godot_advanced_tool: { readonly: true, long_running: true },
+  godot_list_dynamic_routes: { readonly: true, long_running: false },
 };

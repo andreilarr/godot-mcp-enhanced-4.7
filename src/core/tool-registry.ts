@@ -147,6 +147,7 @@ export const TOOL_GROUPS: Record<string, ToolGroupDef> = {
   ik:         { description: 'IK', tools: ['ik'], requires: [] },
   recording:  { description: '录制', tools: ['recording'], requires: ['bridge'] },
   multi_instance: { description: '多实例', tools: ['godot_list_instances', 'godot_select_instance'], requires: [] },
+  dynamic: { description: '动态工具（Godot 端注册但 MCP 侧未定义）', tools: ['godot_advanced_tool'], requires: [] },
 };
 
 /** 6 preset profiles. Each maps to an array of group names. */
@@ -156,7 +157,7 @@ export const PROFILES: Record<string, string[]> = {
   lite:        ['core', 'bridge', 'animation', 'audio', 'signal', 'visual', 'code', 'test', 'profiler'],
   minimal:     ['core'],
   slim:        ['core'],  // intentional alias of minimal - proxy tool is in core group,
-  bridge_dev:  ['core', 'bridge', 'profiler', 'test', 'recording'],
+  bridge_dev:  ['core', 'bridge', 'profiler', 'test', 'recording', 'dynamic'],
   '3d_dev':    ['core', 'animation', 'visual', 'physics', 'navigation', 'ik'],  // physics includes node_create_3d
 };
 

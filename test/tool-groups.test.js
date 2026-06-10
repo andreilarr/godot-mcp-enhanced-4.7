@@ -10,8 +10,8 @@ import {
 
 describe('tool-registry groups and profiles', () => {
   describe('TOOL_GROUPS', () => {
-    it('should define 17 tool groups', () => {
-      expect(Object.keys(TOOL_GROUPS)).toHaveLength(17);
+    it('should define 18 tool groups', () => {
+      expect(Object.keys(TOOL_GROUPS)).toHaveLength(18);
     });
 
     it('should have each group contain valid tool names as non-empty string arrays', () => {
@@ -83,7 +83,7 @@ describe('tool-registry groups and profiles', () => {
     });
 
     it('should have full profile include all 17 groups', () => {
-      expect(PROFILES.full).toHaveLength(17);
+      expect(PROFILES.full).toHaveLength(18);
     });
 
     it('should have minimal profile only include core', () => {
@@ -197,7 +197,7 @@ describe('tool-registry groups and profiles', () => {
       // code group
       expect(LITE_TOOLS.has('docs')).toBe(true);
       expect(LITE_TOOLS.has('templates')).toBe(true);
-      // test group â€” verify_delivery is the actual registered name
+      // test group â€?verify_delivery is the actual registered name
       expect(LITE_TOOLS.has('verify_delivery')).toBe(true);
     });
 

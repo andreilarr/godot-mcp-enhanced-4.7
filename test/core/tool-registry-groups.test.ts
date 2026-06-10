@@ -39,6 +39,16 @@ describe('TOOL_GROUPS enhanced', () => {
   it('editor group requires editor connection', () => {
     expect(TOOL_GROUPS.editor.requires).toContain('editor');
   });
+
+  it('dynamic group exists and has no connection requirements', () => {
+    expect(TOOL_GROUPS.dynamic).toBeDefined();
+    expect(TOOL_GROUPS.dynamic.tools).toContain('godot_advanced_tool');
+    expect(TOOL_GROUPS.dynamic.requires).toEqual([]);
+  });
+
+  it('dynamic group is not protected', () => {
+    expect(TOOL_GROUPS.dynamic.protected).toBeFalsy();
+  });
 });
 
 describe('activeGroups management', () => {
@@ -79,6 +89,26 @@ describe('activeGroups management', () => {
   it('isToolAllowed always returns true for confirm_and_execute', () => {
     setActiveGroups(new Set());
     expect(isToolAllowed('confirm_and_execute')).toBe(true);
+  });
+});
+
+describe('PROFILES with dynamic group', () => {
+  it('full profile includes dynamic group', () => {
+    const fullTools = resolveProfile('full');
+    // full profile uses Object.keys(TOOL_GROUPS), so dynamic is included
+    expect(PROFILES.full).toContain('dynamic');
+  });
+
+  it('bridge_dev profile includes dynamic group', () => {
+    expect(PROFILES.bridge_dev).toContain('dynamic');
+  });
+
+  it('minimal profile does not include dynamic group', () => {
+    expect(PROFILES.minimal).not.toContain('dynamic');
+  });
+
+  it('slim profile does not include dynamic group', () => {
+    expect(PROFILES.slim).not.toContain('dynamic');
   });
 });
 

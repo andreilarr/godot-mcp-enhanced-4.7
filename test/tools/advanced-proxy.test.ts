@@ -29,34 +29,44 @@ describe('advanced-proxy', () => {
   });
 
   describe('getToolDefinitions', () => {
-    it('returns single godot_advanced_tool definition', () => {
+    it('returns godot_advanced_tool and godot_list_dynamic_routes definitions', () => {
       const defs = getToolDefinitions();
-      expect(defs).toHaveLength(1);
-      expect(defs[0].name).toBe('godot_advanced_tool');
+      expect(defs).toHaveLength(2);
+      expect(defs.map(d => d.name)).toContain('godot_advanced_tool');
+      expect(defs.map(d => d.name)).toContain('godot_list_dynamic_routes');
     });
 
-    it('has tool_name and arguments in inputSchema', () => {
+    it('godot_advanced_tool has tool_name and arguments in inputSchema', () => {
       const defs = getToolDefinitions();
-      const schema = defs[0].inputSchema as any;
+      const proxy = defs.find(d => d.name === 'godot_advanced_tool')!;
+      const schema = proxy.inputSchema as any;
       expect(schema.properties.tool_name).toBeDefined();
       expect(schema.properties.arguments).toBeDefined();
       expect(schema.required).toContain('tool_name');
     });
 
-    it('has no inline annotations (tags injected by module-loader)', () => {
+    it('godot_list_dynamic_routes has category in inputSchema', () => {
       const defs = getToolDefinitions();
-      // Tags are injected at registration time by module-loader.injectTags(),
-      // not declared in the raw tool definition.
-      expect(defs[0].annotations).toBeUndefined();
+      const listRoutes = defs.find(d => d.name === 'godot_list_dynamic_routes')!;
+      const schema = listRoutes.inputSchema as any;
+      expect(schema.properties.category).toBeDefined();
     });
 
-    it('description mentions proxy functionality', () => {
+    it('has no inline annotations (tags injected by module-loader)', () => {
       const defs = getToolDefinitions();
-      expect(defs[0].description).toContain('proxy');
+      for (const def of defs) {
+        expect(def.annotations).toBeUndefined();
+      }
+    });
+
+    it('godot_advanced_tool description mentions proxy functionality', () => {
+      const defs = getToolDefinitions();
+      const proxy = defs.find(d => d.name === 'godot_advanced_tool')!;
+      expect(proxy.description).toContain('proxy');
     });
   });
 
-  describe('handleTool', () => {
+  describe('handleTool — routing', () => {
     it('returns null for unknown tool name', async () => {
       const result = await handleTool('unknown', {}, mockCtx);
       expect(result).toBeNull();
@@ -90,7 +100,7 @@ describe('advanced-proxy', () => {
       expect(parsed.error_code).toBe('TOOL_ALREADY_AVAILABLE');
     });
 
-    it('returns fuzzy suggestions for invalid tool_name without full tool list', async () => {
+    it('returns fuzzy suggestions for invalid tool_name without godot_ prefix', async () => {
       setToolCallDelegate(vi.fn());
 
       const result = await handleTool('godot_advanced_tool', {
@@ -193,6 +203,140 @@ describe('advanced-proxy', () => {
       const parsed = JSON.parse(text);
       expect(parsed.success).toBe(false);
       expect(parsed.error_code).toBe('TOOL_ALREADY_AVAILABLE');
+    });
+  });
+
+  describe('dynamic routing fallback', () => {
+    beforeEach(() => {
+      // Activate dynamic group + core
+      setActiveGroups(new Set(['core', 'dynamic']));
+    });
+
+    it('returns dynamic result for unknown godot_ tool when dynamic group is active', async () => {
+      const result = await handleTool('godot_advanced_tool', {
+        tool_name: 'godot_custom_light_bake',
+        arguments: { intensity: 1.0 },
+      }, mockCtx);
+
+      const text = (result?.content?.[0] as any)?.text;
+      const parsed = JSON.parse(text);
+      expect(parsed.dynamic).toBe(true);
+      expect(parsed.route).toBe('custom/light-bake');
+      expect(parsed.toolName).toBe('godot_custom_light_bake');
+      expect(parsed.args).toEqual({ intensity: 1.0 });
+    });
+
+    it('returns dynamic result with empty args when no arguments provided', async () => {
+      const result = await handleTool('godot_advanced_tool', {
+        tool_name: 'godot_terrain_sculpt',
+      }, mockCtx);
+
+      const text = (result?.content?.[0] as any)?.text;
+      const parsed = JSON.parse(text);
+      expect(parsed.dynamic).toBe(true);
+      expect(parsed.route).toBe('terrain/sculpt');
+      expect(parsed.args).toEqual({});
+    });
+
+    it('rejects dynamic tool when dynamic group is inactive', async () => {
+      // Deactivate dynamic group
+      setActiveGroups(new Set(['core']));
+
+      const result = await handleTool('godot_advanced_tool', {
+        tool_name: 'godot_custom_light_bake',
+        arguments: {},
+      }, mockCtx);
+
+      const text = (result?.content?.[0] as any)?.text;
+      const parsed = JSON.parse(text);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error_code).toBe('DYNAMIC_GROUP_INACTIVE');
+    });
+
+    it('rejects godot_ tool name that cannot derive a valid route', async () => {
+      // godot_ by itself only has one segment after prefix → route derivation returns null
+      const result = await handleTool('godot_advanced_tool', {
+        tool_name: 'godot_',
+        arguments: {},
+      }, mockCtx);
+
+      const text = (result?.content?.[0] as any)?.text;
+      const parsed = JSON.parse(text);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error_code).toBe('INVALID_DYNAMIC_TOOL_NAME');
+    });
+
+    it('rejects non-godot_ unknown tool with fuzzy suggestions', async () => {
+      const result = await handleTool('godot_advanced_tool', {
+        tool_name: 'animaton',
+        arguments: {},
+      }, mockCtx);
+
+      const text = (result?.content?.[0] as any)?.text;
+      const parsed = JSON.parse(text);
+      expect(parsed.error_code).toBe('UNKNOWN_TOOL');
+      expect(parsed.suggestions).toBeDefined();
+      // Must not return dynamic result
+      expect(parsed.dynamic).toBeUndefined();
+    });
+
+    it('godot_ tool not in registry but godot_advanced_tool itself is rejected as already available', async () => {
+      // godot_advanced_tool is in ALWAYS_ALLOWED, so it's "directly available"
+      const result = await handleTool('godot_advanced_tool', {
+        tool_name: 'godot_advanced_tool',
+        arguments: {},
+      }, mockCtx);
+
+      const text = (result?.content?.[0] as any)?.text;
+      const parsed = JSON.parse(text);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error_code).toBe('TOOL_ALREADY_AVAILABLE');
+    });
+  });
+
+  describe('godot_list_dynamic_routes', () => {
+    it('returns registered tools and dynamic routing status', async () => {
+      setActiveGroups(new Set(['core', 'dynamic']));
+
+      const result = await handleTool('godot_list_dynamic_routes', {}, mockCtx);
+
+      const text = (result?.content?.[0] as any)?.text;
+      const parsed = JSON.parse(text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.total_registered).toBeGreaterThanOrEqual(0);
+      expect(parsed.dynamic_routing_enabled).toBe(true);
+      expect(parsed.hint).toBeDefined();
+    });
+
+    it('shows dynamic_routing_enabled=false when dynamic group inactive', async () => {
+      setActiveGroups(new Set(['core']));
+
+      const result = await handleTool('godot_list_dynamic_routes', {}, mockCtx);
+
+      const text = (result?.content?.[0] as any)?.text;
+      const parsed = JSON.parse(text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.dynamic_routing_enabled).toBe(false);
+    });
+
+    it('filters by category when provided', async () => {
+      const result = await handleTool('godot_list_dynamic_routes', {
+        category: 'project',
+      }, mockCtx);
+
+      const text = (result?.content?.[0] as any)?.text;
+      const parsed = JSON.parse(text);
+      expect(parsed.success).toBe(true);
+      expect(Array.isArray(parsed.registered)).toBe(true);
+      // If any results, they should all contain 'project'
+      for (const name of parsed.registered) {
+        expect(name).toContain('project');
+      }
+    });
+
+    it('returns null for non-matching tool name', async () => {
+      const result = await handleTool('some_other_tool', {}, mockCtx);
+      expect(result).toBeNull();
     });
   });
 });
