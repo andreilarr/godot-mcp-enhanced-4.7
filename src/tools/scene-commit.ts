@@ -2,6 +2,8 @@
 // Generates a single GDScript that loads a scene, executes multiple operations,
 // optionally saves, and reports structured results via COMMIT_RESULT prefix.
 
+import { gdEscape } from './shared/value-serializer.js';
+
 export const COMMIT_OPERATIONS = [
   'tile_set', 'tile_fill', 'tile_erase', 'tile_clear',
   'tileset_assign', 'node_property', 'node_add',
@@ -63,6 +65,11 @@ export type CommitOperation =
   | TileSetOp | TileFillOp | TileEraseOp | TileClearOp
   | TilesetAssignOp | NodePropertyOp | NodeAddOp;
 
+/** Validate a string is a safe GDScript identifier (property name, type name, etc.) */
+function isSafeIdentifier(s: string): boolean {
+  return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(s);
+}
+
 /**
  * Generate a complete GDScript that executes all operations in sequence,
  * optionally saves the scene, and reports structured results.
@@ -81,8 +88,9 @@ export function generateCommitScript(
     opBlocks.push(generateOpBlock(i, op, stopOnError));
   }
 
+  const sp = gdEscape(scenePath);
   const saveBlock = save
-    ? `\t# --- Save ---\n\tvar packed = PackedScene.new()\n\tpacked.pack(inst)\n\tvar err = ResourceSaver.save(packed, "${scenePath}")\n\tprint("COMMIT_RESULT: " + JSON.stringify({"success": true, "saved": err == OK, "results": _results}))`
+    ? `\t# --- Save ---\n\tvar packed = PackedScene.new()\n\tpacked.pack(inst)\n\tvar err = ResourceSaver.save(packed, "${sp}")\n\tprint("COMMIT_RESULT: " + JSON.stringify({"success": true, "saved": err == OK, "results": _results}))`
     : `\tprint("COMMIT_RESULT: " + JSON.stringify({"success": true, "saved": false, "results": _results}))`;
 
   const fillHelper = hasFill
@@ -99,7 +107,7 @@ var _results = []
 var _has_error = false
 ${fillHelper}
 func _initialize():
-\tvar scene = load("${scenePath}")
+\tvar scene = load("${sp}")
 \tif scene == null:
 \t\tprint("COMMIT_RESULT: " + JSON.stringify({"success": false, "saved": false, "error": "Failed to load scene", "results": []}))
 \t\tquit()
@@ -120,92 +128,111 @@ function generateOpBlock(index: number, op: CommitOperation, stopOnError: boolea
   switch (op.op) {
     case 'tile_set': {
       const alt = op.alternative_tile ?? 0;
+      const np = gdEscape(op.node_path);
       return `
-\t# --- Op ${idx}: tile_set ${op.node_path} ---
-\tvar n${idx} = inst.get_node_or_null("${op.node_path}")
+\t# --- Op ${idx}: tile_set ---
+\tvar n${idx} = inst.get_node_or_null("${np}")
 \tif n${idx} == null:
-\t\t_results.append({"op": "tile_set", "node_path": "${op.node_path}", "ok": false, "error": "Node not found"})
+\t\t_results.append({"op": "tile_set", "node_path": "${np}", "ok": false, "error": "Node not found"})
 ${errAction}
 \telse:
 \t\tn${idx}.set_cell(Vector2i(${op.coords.x}, ${op.coords.y}), ${op.source_id}, Vector2i(${op.atlas.x}, ${op.atlas.y}), ${alt})
-\t\t_results.append({"op": "tile_set", "node_path": "${op.node_path}", "ok": true})`;
+\t\t_results.append({"op": "tile_set", "node_path": "${np}", "ok": true})`;
     }
     case 'tile_fill': {
       const alt = op.alternative_tile ?? 0;
       const cells = op.region.w * op.region.h;
+      const np = gdEscape(op.node_path);
       return `
-\t# --- Op ${idx}: tile_fill ${op.node_path} ---
-\tvar n${idx} = inst.get_node_or_null("${op.node_path}")
+\t# --- Op ${idx}: tile_fill ---
+\tvar n${idx} = inst.get_node_or_null("${np}")
 \tif n${idx} == null:
-\t\t_results.append({"op": "tile_fill", "node_path": "${op.node_path}", "ok": false, "error": "Node not found"})
+\t\t_results.append({"op": "tile_fill", "node_path": "${np}", "ok": false, "error": "Node not found"})
 ${errAction}
 \telse:
 \t\t_fill_tiles(n${idx}, ${op.region.x}, ${op.region.y}, ${op.region.w}, ${op.region.h}, ${op.source_id}, Vector2i(${op.atlas.x}, ${op.atlas.y}), ${alt})
-\t\t_results.append({"op": "tile_fill", "node_path": "${op.node_path}", "ok": true, "cells_affected": ${cells}})`;
+\t\t_results.append({"op": "tile_fill", "node_path": "${np}", "ok": true, "cells_affected": ${cells}})`;
     }
     case 'tile_erase': {
+      const np = gdEscape(op.node_path);
       return `
-\t# --- Op ${idx}: tile_erase ${op.node_path} ---
-\tvar n${idx} = inst.get_node_or_null("${op.node_path}")
+\t# --- Op ${idx}: tile_erase ---
+\tvar n${idx} = inst.get_node_or_null("${np}")
 \tif n${idx} == null:
-\t\t_results.append({"op": "tile_erase", "node_path": "${op.node_path}", "ok": false, "error": "Node not found"})
+\t\t_results.append({"op": "tile_erase", "node_path": "${np}", "ok": false, "error": "Node not found"})
 ${errAction}
 \telse:
 \t\tn${idx}.set_cell(Vector2i(${op.coords.x}, ${op.coords.y}), -1)
-\t\t_results.append({"op": "tile_erase", "node_path": "${op.node_path}", "ok": true})`;
+\t\t_results.append({"op": "tile_erase", "node_path": "${np}", "ok": true})`;
     }
     case 'tile_clear': {
+      const np = gdEscape(op.node_path);
       return `
-\t# --- Op ${idx}: tile_clear ${op.node_path} ---
-\tvar n${idx} = inst.get_node_or_null("${op.node_path}")
+\t# --- Op ${idx}: tile_clear ---
+\tvar n${idx} = inst.get_node_or_null("${np}")
 \tif n${idx} == null:
-\t\t_results.append({"op": "tile_clear", "node_path": "${op.node_path}", "ok": false, "error": "Node not found"})
+\t\t_results.append({"op": "tile_clear", "node_path": "${np}", "ok": false, "error": "Node not found"})
 ${errAction}
 \telse:
 \t\tn${idx}.clear()
-\t\t_results.append({"op": "tile_clear", "node_path": "${op.node_path}", "ok": true})`;
+\t\t_results.append({"op": "tile_clear", "node_path": "${np}", "ok": true})`;
     }
     case 'tileset_assign': {
+      const np = gdEscape(op.node_path);
+      const tsp = gdEscape(op.tileset_path);
       return `
-\t# --- Op ${idx}: tileset_assign ${op.node_path} ---
-\tvar n${idx} = inst.get_node_or_null("${op.node_path}")
+\t# --- Op ${idx}: tileset_assign ---
+\tvar n${idx} = inst.get_node_or_null("${np}")
 \tif n${idx} == null:
-\t\t_results.append({"op": "tileset_assign", "node_path": "${op.node_path}", "ok": false, "error": "Node not found"})
+\t\t_results.append({"op": "tileset_assign", "node_path": "${np}", "ok": false, "error": "Node not found"})
 ${errAction}
 \telse:
-\t\tn${idx}.tile_set = load("${op.tileset_path}")
-\t\t_results.append({"op": "tileset_assign", "node_path": "${op.node_path}", "ok": true})`;
+\t\tn${idx}.tile_set = load("${tsp}")
+\t\t_results.append({"op": "tileset_assign", "node_path": "${np}", "ok": true})`;
     }
     case 'node_property': {
+      const p = gdEscape(op.path);
+      if (!isSafeIdentifier(op.property)) {
+        return `
+\t# --- Op ${idx}: node_property ---
+\t_results.append({"op": "node_property", "path": "${p}", "ok": false, "error": "Invalid property name"})`;
+      }
       return `
-\t# --- Op ${idx}: node_property ${op.path} ---
-\tvar n${idx} = inst.get_node_or_null("${op.path}")
+\t# --- Op ${idx}: node_property ---
+\tvar n${idx} = inst.get_node_or_null("${p}")
 \tif n${idx} == null:
-\t\t_results.append({"op": "node_property", "path": "${op.path}", "ok": false, "error": "Node not found"})
+\t\t_results.append({"op": "node_property", "path": "${p}", "ok": false, "error": "Node not found"})
 ${errAction}
 \telse:
 \t\tn${idx}.${op.property} = ${serializeGdValue(op.value)}
-\t\t_results.append({"op": "node_property", "path": "${op.path}", "ok": true})`;
+\t\t_results.append({"op": "node_property", "path": "${p}", "ok": true})`;
     }
     case 'node_add': {
+      if (!isSafeIdentifier(op.type)) {
+        return `
+\t# --- Op ${idx}: node_add ---
+\t_results.append({"op": "node_add", "name": "${gdEscape(op.name)}", "ok": false, "error": "Invalid type name"})`;
+      }
       const propLines = op.properties
         ? Object.entries(op.properties)
+          .filter(([k]) => isSafeIdentifier(k))
           .map(([k, v]) => `\t\tchild${idx}.${k} = ${serializeGdValue(v)}`)
           .join('\n') + '\n'
         : '';
-      const parentPath = op.parent === '.' ? '' : op.parent;
+      const parentPath = op.parent === '.' ? '' : gdEscape(op.parent);
+      const name = gdEscape(op.name);
       return `
-\t# --- Op ${idx}: node_add ${op.name} ---
+\t# --- Op ${idx}: node_add ---
 \tvar child${idx} = ${op.type}.new()
-\tchild${idx}.name = "${op.name}"
+\tchild${idx}.name = "${name}"
 ${propLines}\tvar parent${idx} = inst.get_node_or_null("${parentPath}")
 \tif parent${idx} == null:
-\t\t_results.append({"op": "node_add", "name": "${op.name}", "ok": false, "error": "Parent not found: ${op.parent}"})
+\t\t_results.append({"op": "node_add", "name": "${name}", "ok": false, "error": "Parent not found"})
 ${errAction}
 \telse:
 \t\tparent${idx}.add_child(child${idx})
 \t\tchild${idx}.owner = inst
-\t\t_results.append({"op": "node_add", "name": "${op.name}", "ok": true})`;
+\t\t_results.append({"op": "node_add", "name": "${name}", "ok": true})`;
     }
   }
 }

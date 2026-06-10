@@ -72,20 +72,17 @@ describe('AgentContextManager', () => {
     });
   });
 
-  describe('enqueueIO', () => {
-    it('runs IO operations concurrently', async () => {
-      let concurrent = 0;
-      let maxConcurrent = 0;
+  describe('getPersistableAgents', () => {
+    it('returns only non-ephemeral agents', () => {
+      const defaultState = mgr.getOrCreate(undefined);
+      defaultState.selectedInstance = { type: 'port', value: '9081' };
+      const ephemeral = mgr.getOrCreate('ephemeral-agent');
+      ephemeral.selectedInstance = { type: 'path', value: '/tmp/proj' };
 
-      const ioOp = () => mgr.enqueueIO(async () => {
-        concurrent++;
-        maxConcurrent = Math.max(maxConcurrent, concurrent);
-        await new Promise(r => setTimeout(r, 20));
-        concurrent--;
-      });
-
-      await Promise.all([ioOp(), ioOp(), ioOp()]);
-      expect(maxConcurrent).toBeGreaterThan(1);
+      const persistable = mgr.getPersistableAgents();
+      expect(persistable.length).toBe(1);
+      expect(persistable[0]![0]).toBe('__default__');
+      expect(persistable[0]![1].selectedInstance).toEqual({ type: 'port', value: '9081' });
     });
   });
 

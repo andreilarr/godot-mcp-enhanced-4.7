@@ -504,3 +504,9 @@ func _initialize():
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   verify_delivery: { readonly: true, long_running: true },
 };
+
+// ─── Re-export for validation.ts absorption ──────────────────────────────────
+
+export async function handleVerifyDelivery(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
+  return handleTool('verify_delivery', args, ctx);
+}

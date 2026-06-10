@@ -241,3 +241,9 @@ func _initialize():
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   test: { readonly: true, long_running: false },
 };
+
+// ─── Re-export for validation.ts absorption ──────────────────────────────────
+
+export async function handleTestAction(action: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
+  return handleTool('test', { ...args, action }, ctx);
+}

@@ -4,6 +4,7 @@ extends SceneTree
 var debug_mode = false
 
 # ── Inline safe-value check (mirrors safe_values.gd, used when running outside project context) ──
+# C-03: Keep in sync with src/scripts/safe_values.gd — that is the canonical source.
 const _SAFE_MAX_DEPTH := 10
 
 func _is_safe_value(val: Variant, depth: int = 0) -> bool:
@@ -11,7 +12,7 @@ func _is_safe_value(val: Variant, depth: int = 0) -> bool:
 		return false
 	if val == null:
 		return true
-	if val is bool or val is int or val is float or val is String:
+	if val is bool or val is int or val is float or val is String or val is StringName:
 		return true
 	if val is Vector2 or val is Vector2i or val is Vector3 or val is Vector3i:
 		return true

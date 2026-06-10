@@ -17,13 +17,20 @@ export interface RouterDependencies {
 
 export class InstanceRouter {
   private deps: RouterDependencies;
+  /** H-01: O(1) lookup cache, rebuilt on updateInstances() */
+  private instanceMap = new Map<string, InstanceInfo>();
   private selectedId: string | null = null;
   private inflightCount = 0;
-  private inflightZero: Promise<void> = Promise.resolve();
   private inflightZeroResolve: (() => void) | null = null;
 
   constructor(deps: RouterDependencies) {
     this.deps = deps;
+    this.rebuildMap();
+  }
+
+  /** Rebuild the Map from the current instances array (copy-on-write). */
+  private rebuildMap(): void {
+    this.instanceMap = new Map(this.deps.instances.map(i => [i.id, i]));
   }
 
   /** Get currently selected instance id. */
@@ -34,7 +41,7 @@ export class InstanceRouter {
   /** Get the currently selected InstanceInfo, or null. */
   getSelectedInstance(): InstanceInfo | null {
     if (!this.selectedId) return null;
-    return this.deps.instances.find(i => i.id === this.selectedId) ?? null;
+    return this.instanceMap.get(this.selectedId) ?? null;
   }
 
   /**
@@ -55,19 +62,21 @@ export class InstanceRouter {
 
   /** Select instance by id. Throws if not found. */
   async selectInstance(id: string): Promise<void> {
-    const inst = this.deps.instances.find(i => i.id === id);
+    const inst = this.instanceMap.get(id);
     if (!inst) throw new Error(`Instance not found: ${id}`);
 
-    // Wait for all in-flight requests to complete (with timeout to prevent livelock)
-    const deadline = Date.now() + 10_000; // 10s timeout
-    while (this.inflightCount > 0) {
-      if (Date.now() > deadline) {
-        throw new Error(`selectInstance timed out: ${this.inflightCount} in-flight requests still pending after 10s`);
-      }
-      this.inflightZero = new Promise<void>(resolve => {
-        this.inflightZeroResolve = resolve;
+    // Wait for all in-flight requests to complete (with timeout)
+    if (this.inflightCount > 0) {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error(`selectInstance timed out: ${this.inflightCount} in-flight requests still pending after 10s`)),
+          10_000,
+        );
+        this.inflightZeroResolve = () => {
+          clearTimeout(timer);
+          resolve();
+        };
       });
-      await this.inflightZero;
     }
 
     const prev = this.selectedId;
@@ -91,7 +100,7 @@ export class InstanceRouter {
     if (!this.selectedId) {
       return 'No instance selected. Use godot_select_instance first.';
     }
-    const instance = this.deps.instances.find(i => i.id === this.selectedId);
+    const instance = this.instanceMap.get(this.selectedId);
     if (!instance) {
       this.selectedId = null;
       return 'Selected instance no longer available. Use godot_list_instances to discover.';
@@ -147,8 +156,9 @@ export class InstanceRouter {
   /** Update the available instances list (e.g. after rediscovery). */
   updateInstances(instances: InstanceInfo[]): void {
     this.deps.instances = instances;
+    this.rebuildMap();
     // If selected instance is gone, clear selection
-    if (this.selectedId && !instances.find(i => i.id === this.selectedId)) {
+    if (this.selectedId && !this.instanceMap.has(this.selectedId)) {
       this.selectedId = null;
     }
   }

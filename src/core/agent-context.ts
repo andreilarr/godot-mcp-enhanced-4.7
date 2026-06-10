@@ -106,8 +106,13 @@ export class AgentContextManager {
     }
   }
 
-  // IO 操作：允许并发执行
-  async enqueueIO<T>(op: () => Promise<T>): Promise<T> {
-    return op();
+  /** 返回可持久化的 agent 列表（排除临时 agent）。 */
+  getPersistableAgents(): Array<[string, { selectedInstance: InstanceRef | null; activeProfile: string }]> {
+    return [...this.agents.entries()]
+      .filter(([, s]) => !s.isEphemeral)
+      .map(([id, s]) => [id, {
+        selectedInstance: s.selectedInstance,
+        activeProfile: s.activeProfile,
+      }]);
   }
 }

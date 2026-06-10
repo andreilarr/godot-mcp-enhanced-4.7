@@ -10,6 +10,7 @@ import { gdEscape } from './shared.js';
 import { batchValidateScripts } from './validation.js';
 import { sendToBridge, setBridgeProjectDir, BRIDGE_READ_ONLY_METHODS } from './game-bridge.js';
 import { spawnGodot } from './spawn-helper.js';
+import { handleBatchAction } from './batch-tools.js';
 
 // ─── Session State helpers (file-as-memory pattern) ──────────────────────────
 
@@ -546,6 +547,12 @@ func _snap(node: Node, max_depth: int, depth: int) -> Dictionary:
       return textResult(JSON.stringify(summary, null, 2));
     }
 
+    // ── Absorbed from batch-tools.ts ──
+    case 'create_files':
+    case 'run_verify':
+    case 'diff_scenes':
+      return handleBatchAction(action, args, ctx);
+
     default:
       return textResult(`Unknown action: ${action}. Use "dev_loop", "scene_snapshot", or "batch_validate".`);
   }
@@ -661,4 +668,6 @@ export function validateScreenshotAssertion(
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   workflow: { readonly: false, long_running: true },
+  // Absorbed tool meta
+  batch: { readonly: false, long_running: false },
 };

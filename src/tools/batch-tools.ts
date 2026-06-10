@@ -82,6 +82,18 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         return opsErrorResult('INVALID_PARAMS', '"files" must be a non-empty array.');
       }
 
+      // H-06: 批量文件限制 — 防止 OOM
+      const MAX_FILE_COUNT = 50;
+      const MAX_FILE_SIZE = 1_000_000; // 1 MB per file
+
+      if (files.length > MAX_FILE_COUNT) {
+        return opsErrorResult('INVALID_PARAMS', `Too many files: ${files.length}. Maximum is ${MAX_FILE_COUNT}.`);
+      }
+      const oversized = files.find(f => typeof f.content === 'string' && f.content.length > MAX_FILE_SIZE);
+      if (oversized) {
+        return opsErrorResult('INVALID_PARAMS', `File "${oversized.path}" exceeds maximum size of ${MAX_FILE_SIZE} bytes.`);
+      }
+
       const created: string[] = [];
       const skipped: string[] = [];
       const failed: Array<{ path: string; error: string }> = [];
@@ -337,3 +349,9 @@ function formatPropVal(val: unknown): string {
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   batch: { readonly: false, long_running: false },
 };
+
+// ─── Re-export for workflow.ts absorption ────────────────────────────────────
+
+export async function handleBatchAction(action: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
+  return handleTool('batch', { ...args, action }, ctx);
+}

@@ -72,21 +72,22 @@ function runScreenshot(
   timeout: number,
 ): Promise<{ code: number | null; output: string }> {
   return new Promise((resolve) => {
-    let out = '';
+    // H-05: Use Buffer[] to avoid O(n²) string concatenation
+    const chunks: Buffer[] = [];
     const proc = spawn(godotPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: buildSafeEnv(),
     });
 
-    proc.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
-    proc.stderr?.on('data', (d: Buffer) => { out += d.toString(); });
+    proc.stdout?.on('data', (d: Buffer) => { chunks.push(d); });
+    proc.stderr?.on('data', (d: Buffer) => { chunks.push(d); });
 
     let settled = false;
     const timer = setTimeout(() => {
       if (!settled && !proc.killed) {
         settled = true;
         forceKillTree(proc);
-        // SIGKILL fallback no longer needed
+        const out = Buffer.concat(chunks).toString('utf-8');
         resolve({ code: -1, output: out + `\n[TIMEOUT] Killed after ${timeout}s` });
       }
     }, timeout * 1000);
@@ -95,7 +96,7 @@ function runScreenshot(
       clearTimeout(timer);
       if (settled) return;
       settled = true;
-      resolve({ code, output: out });
+      resolve({ code, output: Buffer.concat(chunks).toString('utf-8') });
     });
 
     proc.on('error', (err) => {

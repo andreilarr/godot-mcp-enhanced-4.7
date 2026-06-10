@@ -20,6 +20,7 @@ import {
 import {
   handleTool,
   setToolCallDelegate,
+  setDynamicSender,
 } from '../../src/tools/advanced-proxy.js';
 import {
   TOOL_GROUPS,
@@ -38,25 +39,36 @@ const mockCtx = {} as ToolContext;
 // ─── 1. Dynamic route derivation 覆盖表 + 边界 ─────────────────────────────────
 
 describe('Dynamic route derivation integration', () => {
-  it('derives route that advanced-proxy would accept for unknown godot_ tool', async () => {
-    // 验证 toolNameToRoute 的输出直接被 advanced-proxy 使用
+  let mockSender: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    mockSender = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: '{"success":true}' }],
+    });
+    setDynamicSender(mockSender);
+  });
+
+  afterEach(() => {
+    setDynamicSender(null);
+  });
+
+  it('derives route that advanced-proxy passes to dynamic sender', async () => {
+    // 验证 toolNameToRoute 的输出直接被 advanced-proxy 传给 sender
     const toolName = 'godot_custom_light_bake';
     const route = toolNameToRoute(toolName);
 
     // 激活 dynamic 组
     setActiveGroups(new Set(['core', 'dynamic']));
 
-    const result = await handleTool('godot_advanced_tool', {
+    await handleTool('godot_advanced_tool', {
       tool_name: toolName,
       arguments: {},
     }, mockCtx);
 
-    const parsed = JSON.parse((result!.content[0] as any).text);
-    expect(parsed.dynamic).toBe(true);
-    expect(parsed.route).toBe(route);
+    expect(mockSender).toHaveBeenCalledWith(route, {});
   });
 
-  it('multi-segment route derivation matches proxy output', async () => {
+  it('multi-segment route derivation matches sender call', async () => {
     const toolName = 'godot_animation_play_forward';
     const expectedRoute = 'animation/play-forward';
 
@@ -64,13 +76,12 @@ describe('Dynamic route derivation integration', () => {
 
     setActiveGroups(new Set(['core', 'dynamic']));
 
-    const result = await handleTool('godot_advanced_tool', {
+    await handleTool('godot_advanced_tool', {
       tool_name: toolName,
       arguments: {},
     }, mockCtx);
 
-    const parsed = JSON.parse((result!.content[0] as any).text);
-    expect(parsed.route).toBe(expectedRoute);
+    expect(mockSender).toHaveBeenCalledWith(expectedRoute, {});
   });
 
   it('toolNameToRoute null results cause proxy to reject with INVALID_DYNAMIC_TOOL_NAME', async () => {
@@ -139,14 +150,20 @@ describe('Error classification informs retry eligibility', () => {
 
 describe('Dynamic group ↔ advanced-proxy ↔ registry integration', () => {
   let savedGroups: ReadonlySet<string>;
+  let mockSender: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     setToolCallDelegate(null);
+    mockSender = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: '{"success":true}' }],
+    });
+    setDynamicSender(mockSender);
     savedGroups = getActiveGroups();
   });
 
   afterEach(() => {
     setActiveGroups(new Set(savedGroups));
+    setDynamicSender(null);
   });
 
   it('dynamic group activation enables dynamic routing path', async () => {
@@ -159,16 +176,14 @@ describe('Dynamic group ↔ advanced-proxy ↔ registry integration', () => {
     let parsed = JSON.parse((result!.content[0] as any).text);
     expect(parsed.error_code).toBe('DYNAMIC_GROUP_INACTIVE');
 
-    // 再启用 dynamic
+    // 再启用 dynamic — sender 应被调用
+    mockSender.mockClear();
     setActiveGroups(new Set(['core', 'dynamic']));
     result = await handleTool('godot_advanced_tool', {
       tool_name: 'godot_custom_action',
       arguments: { param: 42 },
     }, mockCtx);
-    parsed = JSON.parse((result!.content[0] as any).text);
-    expect(parsed.dynamic).toBe(true);
-    expect(parsed.route).toBe('custom/action');
-    expect(parsed.args).toEqual({ param: 42 });
+    expect(mockSender).toHaveBeenCalledWith('custom/action', { param: 42 });
   });
 
   it('godot_advanced_tool is always allowed even without dynamic group', () => {

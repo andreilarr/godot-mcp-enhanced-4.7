@@ -25,6 +25,7 @@ export class FileStateStore {
   private filePath: string;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private cachedState: PersistedState | null = null;
+  private generation = 0;
 
   constructor(projectPath: string) {
     const dir = projectPath
@@ -46,6 +47,7 @@ export class FileStateStore {
   markDirty(getState: () => PersistedState): void {
     // 立即调用 getState 捕获当前状态快照
     this.cachedState = getState();
+    this.generation++;
     if (!this.flushTimer) {
       this.flushTimer = setTimeout(() => this.flush(), DEBOUNCE_MS);
     }
@@ -58,16 +60,20 @@ export class FileStateStore {
     }
     if (!this.cachedState) return;
 
-    // 写入前更新 savedAt，确保下次 load 时过期判断正确
+    // C-01 fix: 记录写入前的 generation，写入完成后仅在没有新脏数据时清空
+    const genBeforeWrite = this.generation;
     const state: PersistedState = { ...this.cachedState, savedAt: Date.now() };
-    this.cachedState = null;
 
     try {
       const dir = path.dirname(this.filePath);
       await fs.promises.mkdir(dir, { recursive: true });
       await fs.promises.writeFile(this.filePath, JSON.stringify(state, null, 2), 'utf-8');
+      // 仅在没有新 markDirty 调用时清空缓存，避免覆盖更新快照
+      if (this.generation === genBeforeWrite) {
+        this.cachedState = null;
+      }
     } catch {
-      // 静默失败 — 状态持久化是尽力而为
+      // 写入失败 — 保留 cachedState，下次 markDirty 或 flush 时重试
     }
   }
 

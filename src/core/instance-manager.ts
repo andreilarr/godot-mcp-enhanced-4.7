@@ -147,8 +147,13 @@ export class InstanceManager {
         try {
           const content = await readFile(join(dir, file), 'utf-8');
           const parsed = JSON.parse(content);
-          // Validate required fields
-          if (parsed.id && parsed.port && parsed.projectPath) {
+          // Validate required fields: types, port range, path traversal guard
+          if (
+            typeof parsed.id === 'string' && parsed.id.length > 0 &&
+            typeof parsed.port === 'number' && parsed.port >= 1 && parsed.port <= 65535 &&
+            typeof parsed.projectPath === 'string' && parsed.projectPath.length > 0 &&
+            !parsed.projectPath.includes('..')
+          ) {
             results.push(parsed as InstanceInfo);
           }
         } catch {

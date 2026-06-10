@@ -24,9 +24,15 @@ import { toolNameToRoute } from '../core/dynamic-routes.js';
 // ─── Delegate (set by ToolDispatcher to enable re-dispatch) ─────────────────
 
 let _delegate: ToolCallDelegate | null = null;
+let _dynamicSender: ((route: string, args: Record<string, unknown>) => Promise<ToolResult>) | null = null;
 
 export function setToolCallDelegate(fn: ToolCallDelegate | null): void {
   _delegate = fn;
+}
+
+/** Inject HTTP sender for dynamic routing. Called by GodotServer during init. */
+export function setDynamicSender(fn: ((route: string, args: Record<string, unknown>) => Promise<ToolResult>) | null): void {
+  _dynamicSender = fn;
 }
 
 // ─── Fuzzy matching ─────────────────────────────────────────────────────────
@@ -169,14 +175,18 @@ export async function handleTool(
       `Cannot derive route from '${targetTool}'. Tool name must follow 'godot_<category>_<action>' convention.`)));
   }
 
-  // Return structured result for the dispatcher to make the actual HTTP call
+  // Execute the dynamic route via injected HTTP sender
   const toolArgs = (args.arguments as Record<string, unknown>) ?? {};
-  return textResult(JSON.stringify({
-    dynamic: true,
-    route,
-    toolName: targetTool,
-    args: toolArgs,
-  }));
+  if (!_dynamicSender) {
+    return textResult(JSON.stringify(opsError('NO_DYNAMIC_SENDER',
+      'Dynamic routing sender not configured. Multi-instance mode may not be enabled.')));
+  }
+
+  try {
+    return await _dynamicSender(route, toolArgs);
+  } catch (err) {
+    return textResult(JSON.stringify(opsError('DYNAMIC_ROUTE_ERROR', getErrorMessage(err))));
+  }
 }
 
 // ─── Delegate helper ────────────────────────────────────────────────────────

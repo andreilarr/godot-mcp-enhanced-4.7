@@ -3,6 +3,7 @@ import {
   getToolDefinitions,
   handleTool,
   setToolCallDelegate,
+  setDynamicSender,
 } from '../../src/tools/advanced-proxy.js';
 import {
   setActiveGroups,
@@ -19,6 +20,7 @@ describe('advanced-proxy', () => {
 
   beforeEach(() => {
     setToolCallDelegate(null);
+    setDynamicSender(null);
     // Save current active groups
     savedGroups = getActiveGroups();
   });
@@ -212,7 +214,7 @@ describe('advanced-proxy', () => {
       setActiveGroups(new Set(['core', 'dynamic']));
     });
 
-    it('returns dynamic result for unknown godot_ tool when dynamic group is active', async () => {
+    it('returns NO_DYNAMIC_SENDER when no sender configured', async () => {
       const result = await handleTool('godot_advanced_tool', {
         tool_name: 'godot_custom_light_bake',
         arguments: { intensity: 1.0 },
@@ -220,22 +222,51 @@ describe('advanced-proxy', () => {
 
       const text = (result?.content?.[0] as any)?.text;
       const parsed = JSON.parse(text);
-      expect(parsed.dynamic).toBe(true);
-      expect(parsed.route).toBe('custom/light-bake');
-      expect(parsed.toolName).toBe('godot_custom_light_bake');
-      expect(parsed.args).toEqual({ intensity: 1.0 });
+      expect(parsed.success).toBe(false);
+      expect(parsed.error_code).toBe('NO_DYNAMIC_SENDER');
     });
 
-    it('returns dynamic result with empty args when no arguments provided', async () => {
+    it('calls dynamic sender and returns result', async () => {
+      const mockSender = vi.fn().mockResolvedValue({
+        content: [{ type: 'text', text: '{"success":true,"data":"baked"}' }],
+      });
+      setDynamicSender(mockSender);
+
+      const result = await handleTool('godot_advanced_tool', {
+        tool_name: 'godot_custom_light_bake',
+        arguments: { intensity: 1.0 },
+      }, mockCtx);
+
+      expect(mockSender).toHaveBeenCalledWith('custom/light-bake', { intensity: 1.0 });
+      const text = (result?.content?.[0] as any)?.text;
+      expect(text).toContain('baked');
+    });
+
+    it('calls dynamic sender with empty args when no arguments provided', async () => {
+      const mockSender = vi.fn().mockResolvedValue({
+        content: [{ type: 'text', text: '{"success":true}' }],
+      });
+      setDynamicSender(mockSender);
+
       const result = await handleTool('godot_advanced_tool', {
         tool_name: 'godot_terrain_sculpt',
       }, mockCtx);
 
+      expect(mockSender).toHaveBeenCalledWith('terrain/sculpt', {});
+    });
+
+    it('returns DYNAMIC_ROUTE_ERROR when sender throws', async () => {
+      setDynamicSender(async () => { throw new Error('Connection refused'); });
+
+      const result = await handleTool('godot_advanced_tool', {
+        tool_name: 'godot_custom_light_bake',
+        arguments: {},
+      }, mockCtx);
+
       const text = (result?.content?.[0] as any)?.text;
       const parsed = JSON.parse(text);
-      expect(parsed.dynamic).toBe(true);
-      expect(parsed.route).toBe('terrain/sculpt');
-      expect(parsed.args).toEqual({});
+      expect(parsed.success).toBe(false);
+      expect(parsed.error_code).toBe('DYNAMIC_ROUTE_ERROR');
     });
 
     it('rejects dynamic tool when dynamic group is inactive', async () => {

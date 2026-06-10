@@ -36,8 +36,11 @@ export function spawnGodot(
   return new Promise<SpawnResult>((resolve) => {
     let proc: ChildProcess;
     let settled = false;
-    let out = '';
-    let errOut = '';  // A-04: 分离 stderr 收集
+    // H-05: Use Buffer[] to avoid O(n²) string concatenation
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
 
     try {
       proc = spawn(godot, args, { stdio: ['pipe', 'pipe', 'pipe'], env });
@@ -53,13 +56,24 @@ export function spawnGodot(
       return;
     }
 
-    proc.stdout!.on('data', (d: Buffer) => { if (out.length < maxOutput) out += d.toString(); });
-    proc.stderr!.on('data', (d: Buffer) => { if (errOut.length < maxOutput) errOut += d.toString(); });
+    proc.stdout!.on('data', (d: Buffer) => {
+      if (stdoutBytes < maxOutput) { stdoutChunks.push(d); stdoutBytes += d.byteLength; }
+    });
+    proc.stderr!.on('data', (d: Buffer) => {
+      if (stderrBytes < maxOutput) { stderrChunks.push(d); stderrBytes += d.byteLength; }
+    });
+
+    const collectOutput = () => {
+      const out = Buffer.concat(stdoutChunks).toString('utf-8');
+      const errOut = Buffer.concat(stderrChunks).toString('utf-8');
+      return { out, errOut };
+    };
 
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
       killFn(proc);
+      const { out, errOut } = collectOutput();
       resolve({ stdout: out, stderr: errOut, output: out + errOut, exitCode: null, timedOut: true });
     }, timeoutMs);
 
@@ -67,6 +81,7 @@ export function spawnGodot(
       clearTimeout(timer);
       if (settled) return;
       settled = true;
+      const { out, errOut } = collectOutput();
       resolve({ stdout: out, stderr: errOut, output: out + errOut, exitCode: code, timedOut: false });
     });
 
@@ -74,8 +89,8 @@ export function spawnGodot(
       clearTimeout(timer);
       if (settled) return;
       settled = true;
-      errOut += `\nError: ${err.message}`;
-      resolve({ stdout: out, stderr: errOut, output: out + errOut, exitCode: -1, timedOut: false });
+      const { out, errOut } = collectOutput();
+      resolve({ stdout: out, stderr: errOut + `\nError: ${err.message}`, output: out + errOut + `\nError: ${err.message}`, exitCode: -1, timedOut: false });
     });
   });
 }

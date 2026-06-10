@@ -1,5 +1,6 @@
 ## Shared safe-value whitelist for GDScript tool operations.
 ## Used by both godot_operations.gd and mcp_bridge.gd.
+## THIS IS THE CANONICAL SOURCE — inline copies in other files must match exactly.
 class_name SafeValues
 
 const MAX_DEPTH := 10
@@ -11,7 +12,7 @@ static func is_safe(val: Variant, depth: int = 0) -> bool:
 		return false
 	if val == null:
 		return true
-	if val is bool or val is int or val is float or val is String:
+	if val is bool or val is int or val is float or val is String or val is StringName:
 		return true
 	if val is Vector2 or val is Vector2i or val is Vector3 or val is Vector3i:
 		return true

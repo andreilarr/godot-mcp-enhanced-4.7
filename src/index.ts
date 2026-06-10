@@ -8,7 +8,25 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export async function startMcpServer(args: string[]): Promise<void> {
-  // I-05: Warn loudly when security bypass flags are active in production
+  // H-08: Reject security bypass flags in production unless explicitly acknowledged
+  const dangerousBypassFlags = [
+    'GODOT_MCP_DISABLE_SAFETY',
+    'GODOT_MCP_UNRESTRICTED',
+    'GODOT_MCP_SANDBOX',
+  ];
+  const isDev = process.env.NODE_ENV === 'development' || process.env.GODOT_MCP_ALLOW_UNSAFE === 'true';
+
+  if (!isDev) {
+    for (const flag of dangerousBypassFlags) {
+      if (process.env[flag] !== undefined) {
+        console.error(`[FATAL] ${flag} is set but NODE_ENV is not "development". ` +
+          `Set NODE_ENV=development or GODOT_MCP_ALLOW_UNSAFE=true to acknowledge the risk. Exiting.`);
+        process.exit(1);
+      }
+    }
+  }
+
+  // I-05: Warn loudly when security bypass flags are active
   const securityBypassFlags = [
     'GODOT_MCP_UNRESTRICTED',
     'GODOT_MCP_SANDBOX',

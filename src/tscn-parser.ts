@@ -83,8 +83,8 @@ function extractBalancedParenContent(input: string, typeName: string): string | 
  * unescape "" sequences — they pass through unchanged in the split result.
  * All unescaping of Godot's "" → " string escaping happens HERE, exactly once.
  */
-function parseValue(raw: string, maxDepth: number = 20): unknown {
-  if (!checkParseBudget()) return raw; // C-PERF-03: budget exhausted, return raw
+function parseValue(raw: string, maxDepth: number, budget: ParseBudget): unknown {
+  if (!checkParseBudget(budget)) return raw; // C-PERF-03: budget exhausted, return raw
   const trimmed = raw.trim();
 
   // String — Godot uses "" (two double-quotes) to escape a literal " inside strings.
@@ -115,13 +115,13 @@ function parseValue(raw: string, maxDepth: number = 20): unknown {
   // Array (with depth guard)
   if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
     if (maxDepth <= 0) return trimmed;
-    return parseArrayContent(trimmed.slice(1, -1), maxDepth - 1);
+    return parseArrayContent(trimmed.slice(1, -1), maxDepth - 1, budget);
   }
 
   // Dictionary (with depth guard)
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
     if (maxDepth <= 0) return trimmed;
-    return parseDictContent(trimmed.slice(1, -1), maxDepth - 1);
+    return parseDictContent(trimmed.slice(1, -1), maxDepth - 1, budget);
   }
 
   // NodePath("...")
@@ -170,16 +170,16 @@ function parseValue(raw: string, maxDepth: number = 20): unknown {
  */
 const MAX_SPLIT_ELEMENTS = 10000;
 const MAX_TSCN_INPUT_SIZE = 10 * 1024 * 1024; // 10MB
-// C-PERF-03: Global operation budget prevents pathological recursion.
-// Even with maxDepth=20 and 10k element limit, worst case is 200k recursive calls.
-// This counter is reset at each parseTscn() entry and decremented on every parseValue call.
+// C-PERF-03: Operation budget prevents pathological recursion.
+// H-10: Budget is now a parameter object instead of module-level mutable state,
+// preventing corruption if two parseTscn() calls interleave at await points.
 const MAX_PARSE_OPERATIONS = 1_000_000;
-let _parseOpsRemaining = MAX_PARSE_OPERATIONS;
-function checkParseBudget(): boolean {
-  return --_parseOpsRemaining >= 0;
+interface ParseBudget { opsRemaining: number }
+function checkParseBudget(budget: ParseBudget): boolean {
+  return --budget.opsRemaining >= 0;
 }
-function resetParseBudget(): void {
-  _parseOpsRemaining = MAX_PARSE_OPERATIONS;
+function createBudget(): ParseBudget {
+  return { opsRemaining: MAX_PARSE_OPERATIONS };
 }
 
 function splitTopLevel(input: string): string[] {
@@ -229,14 +229,14 @@ function splitTopLevel(input: string): string[] {
   return parts;
 }
 
-function parseArrayContent(inner: string, maxDepth: number): unknown[] {
+function parseArrayContent(inner: string, maxDepth: number, budget: ParseBudget): unknown[] {
   const trimmed = inner.trim();
   if (!trimmed) return [];
   const elements = splitTopLevel(trimmed);
-  return elements.map(el => parseValue(el, maxDepth));
+  return elements.map(el => parseValue(el, maxDepth, budget));
 }
 
-function parseDictContent(inner: string, maxDepth: number): Record<string, unknown> {
+function parseDictContent(inner: string, maxDepth: number, budget: ParseBudget): Record<string, unknown> {
   const trimmed = inner.trim();
   if (!trimmed) return {};
   const result: Record<string, unknown> = {};
@@ -261,12 +261,12 @@ function parseDictContent(inner: string, maxDepth: number): Record<string, unkno
     if (key.startsWith('"') && key.endsWith('"')) {
       key = key.slice(1, -1).replace(/""/g, '"');
     }
-    result[key] = parseValue(valRaw, maxDepth);
+    result[key] = parseValue(valRaw, maxDepth, budget);
   }
   return result;
 }
 
-function parseTypedValue(raw: string): NodeProperty {
+function parseTypedValue(raw: string, budget: ParseBudget): NodeProperty {
   const colonIdx = raw.indexOf(':');
   if (colonIdx === -1) {
     return { name: raw.trim(), type: 'unknown', value: raw.trim() };
@@ -277,10 +277,10 @@ function parseTypedValue(raw: string): NodeProperty {
   // Type is before the value if there's a space after a type name
   const typeMatch = rest.match(/^(\w+)\s+(.+)$/s);
   if (typeMatch) {
-    return { name, type: typeMatch[1]!, value: parseValue(typeMatch[2]!) };
+    return { name, type: typeMatch[1]!, value: parseValue(typeMatch[2]!, 20, budget) };
   }
 
-  return { name, type: 'unknown', value: parseValue(rest) };
+  return { name, type: 'unknown', value: parseValue(rest, 20, budget) };
 }
 
 function splitLines(content: string): string[] {
@@ -288,7 +288,7 @@ function splitLines(content: string): string[] {
 }
 
 export function parseTscn(content: string): ParsedScene {
-  resetParseBudget(); // C-PERF-03: reset per-file budget
+  const budget = createBudget(); // H-10: per-call budget, not module-level state
   if (content.length > MAX_TSCN_INPUT_SIZE) {
     throw new Error(`tscn input too large: ${content.length} bytes exceeds ${MAX_TSCN_INPUT_SIZE} byte limit`);
   }
@@ -450,7 +450,7 @@ export function parseTscn(content: string): ParsedScene {
 
     // Properties / attributes within sections
     if (trimmed.includes('=') && !trimmed.startsWith('[')) {
-      const prop = parseTypedValue(trimmed);
+      const prop = parseTypedValue(trimmed, budget);
 
       switch (currentSection) {
         case 'ext_resource':

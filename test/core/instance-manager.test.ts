@@ -155,6 +155,35 @@ describe('InstanceManager', () => {
       const instances = await manager.loadFromRegistry();
       expect(instances).toHaveLength(0);
     });
+
+    it('rejects registry entries with invalid fields', async () => {
+      mkdirSync(TMP, { recursive: true });
+      // Port out of range
+      writeFileSync(join(TMP, 'bad-port.json'), JSON.stringify({
+        id: 'x', projectPath: '/tmp/p', projectName: 'p', port: 99999, pid: 1,
+        lastSeen: new Date().toISOString(), godotVersion: '4.4', capabilities: [],
+      }));
+      // Path traversal
+      writeFileSync(join(TMP, 'traversal.json'), JSON.stringify({
+        id: 'y', projectPath: '/tmp/../etc/p', projectName: 'p', port: 9081, pid: 1,
+        lastSeen: new Date().toISOString(), godotVersion: '4.4', capabilities: [],
+      }));
+      // Missing id
+      writeFileSync(join(TMP, 'no-id.json'), JSON.stringify({
+        projectPath: '/tmp/p', projectName: 'p', port: 9081, pid: 1,
+        lastSeen: new Date().toISOString(), godotVersion: '4.4', capabilities: [],
+      }));
+      // Valid entry
+      writeFileSync(join(TMP, 'valid.json'), JSON.stringify({
+        id: 'uuid-valid', projectPath: 'D:/game', projectName: 'game', port: 9081, pid: 1,
+        lastSeen: new Date().toISOString(), godotVersion: '4.4', capabilities: [],
+      }));
+
+      const manager = new InstanceManager({ registryDir: TMP });
+      const instances = await manager.loadFromRegistry();
+      expect(instances).toHaveLength(1);
+      expect(instances[0].id).toBe('uuid-valid');
+    });
   });
 
   describe('zombie detection', () => {

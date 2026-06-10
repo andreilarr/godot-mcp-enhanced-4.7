@@ -53,6 +53,40 @@ const DEFAULTS: Required<HealthMonitorOptions> = {
 const RECENT_WINDOW = 10;
 const BASELINE_SAMPLE_COUNT = 10;
 
+// ─── Ring Buffer (H-02: O(1) push, avoids Array.shift() O(n)) ─────────────────
+
+class RingBuffer<T> {
+  private buf: (T | undefined)[];
+  private head = 0;
+  private count = 0;
+
+  constructor(private capacity: number) {
+    this.buf = new Array(capacity);
+  }
+
+  push(item: T): void {
+    this.buf[this.head] = item;
+    this.head = (this.head + 1) % this.capacity;
+    if (this.count < this.capacity) this.count++;
+  }
+
+  *[Symbol.iterator](): Iterator<T> {
+    const start = this.count < this.capacity ? 0 : this.head;
+    for (let i = 0; i < this.count; i++) {
+      yield this.buf[(start + i) % this.capacity] as T;
+    }
+  }
+
+  get length(): number { return this.count; }
+
+  toArray(): T[] { return [...this]; }
+
+  sliceLast(n: number): T[] {
+    const arr = this.toArray();
+    return arr.slice(-n);
+  }
+}
+
 // ─── HealthMonitor ────────────────────────────────────────────────────────────
 
 export class HealthMonitor {
@@ -65,17 +99,16 @@ export class HealthMonitor {
   private totalFailures = 0;
   private consecutiveFails = 0;
 
-  // Sliding window of response times (in ms) and success/failure flags
-  private responseTimes: number[] = [];
-  private recentSuccessFlags: boolean[] = []; // true=success, false=failure, last N
+  // H-02: Sliding windows using RingBuffer (O(1) push, no Array.shift)
+  private responseTimes!: RingBuffer<number>;
+  private recentSuccessFlags!: RingBuffer<boolean>;
+  private errors!: RingBuffer<ErrorRecord>;
 
   // Baseline (average of first BASELINE_SAMPLE_COUNT successful response times)
   private baselineResponseMs = 0;
   private baselineSamples: number[] = [];
   private baselineEstablished = false;
 
-  // Error history (circular buffer)
-  private errors: ErrorRecord[] = [];
   private lastError: ErrorRecord | null = null;
 
   // Heartbeat
@@ -85,6 +118,10 @@ export class HealthMonitor {
 
   constructor(opts: HealthMonitorOptions = {}) {
     this.opts = { ...DEFAULTS, ...opts };
+    // H-02: Initialize RingBuffers with actual opts (may override DEFAULTS)
+    this.responseTimes = new RingBuffer<number>(this.opts.sampleWindowSize);
+    this.recentSuccessFlags = new RingBuffer<boolean>(this.opts.sampleWindowSize);
+    this.errors = new RingBuffer<ErrorRecord>(this.opts.errorHistorySize);
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
@@ -96,9 +133,6 @@ export class HealthMonitor {
     this.consecutiveFails = 0;
 
     this.responseTimes.push(responseTimeMs);
-    if (this.responseTimes.length > this.opts.sampleWindowSize) {
-      this.responseTimes.shift();
-    }
 
     this.pushRecentFlag(true);
 
@@ -131,9 +165,6 @@ export class HealthMonitor {
       retriable: isRetriable(errorType),
     };
     this.errors.push(record);
-    if (this.errors.length > this.opts.errorHistorySize) {
-      this.errors.shift();
-    }
     this.lastError = record;
 
     this.evaluateState();
@@ -154,8 +185,9 @@ export class HealthMonitor {
 
   /** Get a snapshot of all health statistics. */
   getStats(): HealthStats {
-    const recentFlags = this.recentSuccessFlags.slice(-RECENT_WINDOW);
+    const recentFlags = this.recentSuccessFlags.sliceLast(RECENT_WINDOW);
     const recentFailures = recentFlags.filter(f => !f).length;
+    const rtArr = this.responseTimes.toArray();
 
     return {
       state: this.state,
@@ -163,13 +195,13 @@ export class HealthMonitor {
       totalSuccesses: this.totalSuccesses,
       totalFailures: this.totalFailures,
       consecutiveFails: this.consecutiveFails,
-      avgResponseMs: this.responseTimes.length > 0
-        ? avg(this.responseTimes)
+      avgResponseMs: rtArr.length > 0
+        ? avg(rtArr)
         : 0,
       baselineResponseMs: this.baselineResponseMs,
       recentFailures,
       lastError: this.lastError,
-      errors: [...this.errors],
+      errors: this.errors.toArray(),
     };
   }
 
@@ -194,9 +226,6 @@ export class HealthMonitor {
 
   private pushRecentFlag(success: boolean): void {
     this.recentSuccessFlags.push(success);
-    if (this.recentSuccessFlags.length > this.opts.sampleWindowSize) {
-      this.recentSuccessFlags.shift();
-    }
   }
 
   private evaluateState(): void {
@@ -212,7 +241,7 @@ export class HealthMonitor {
     }
 
     // Check degraded
-    const recentFlags = this.recentSuccessFlags.slice(-RECENT_WINDOW);
+    const recentFlags = this.recentSuccessFlags.sliceLast(RECENT_WINDOW);
     const recentFailures = recentFlags.filter(f => !f).length;
 
     if (this.state === 'connected') {
@@ -222,7 +251,7 @@ export class HealthMonitor {
       }
       // Also degrade if response time is > 2x baseline
       if (this.baselineEstablished && this.responseTimes.length >= RECENT_WINDOW) {
-        const recentAvg = avg(this.responseTimes.slice(-RECENT_WINDOW));
+        const recentAvg = avg(this.responseTimes.sliceLast(RECENT_WINDOW));
         if (recentAvg > this.baselineResponseMs * 2) {
           this.setState('degraded');
           return;
@@ -237,7 +266,7 @@ export class HealthMonitor {
           this.setState('connected');
           return;
         }
-        const recentAvg = avg(this.responseTimes.slice(-RECENT_WINDOW));
+        const recentAvg = avg(this.responseTimes.sliceLast(RECENT_WINDOW));
         if (recentAvg < this.baselineResponseMs * 1.5) {
           this.setState('connected');
           return;

@@ -313,8 +313,7 @@ describe('GodotServer', () => {
         'audio',
         'signal',
         'material', 'screenshot', 'particles',
-        'docs', 'batch', 'game_design',
-        'test', 'verify_delivery',
+        'docs',
         'profiler', 'workflow',
       ];
       for (const name of names) {

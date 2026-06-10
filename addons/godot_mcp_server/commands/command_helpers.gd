@@ -66,14 +66,65 @@ static func property_exists_and_type_ok(obj: Object, prop_name: String, val) -> 
 	# Allow float/int interchange
 	if (current_type == TYPE_FLOAT and val_type == TYPE_INT) or (current_type == TYPE_INT and val_type == TYPE_FLOAT):
 		return true
-	# C-03: String values only allowed for string properties, or when str_to_var
-	# can convert them to the expected type (e.g. "Vector2(1,2)" → TYPE_VECTOR2)
+	# C-03: String values only allowed for string properties, or when a safe
+	# type-specific constructor can convert them to the expected type.
 	if val_type == TYPE_STRING:
 		if current_type == TYPE_STRING:
 			return true
-		# Try str_to_var conversion and check the result type matches
-		var parsed: Variant = str_to_var(val)
-		if parsed != null:
-			return typeof(parsed) == current_type
-		return false
+		# C-02 fix: replace str_to_var with safe type-specific constructors.
+		# str_to_var can deserialize arbitrary objects; only allow known-safe scalar/math types.
+		return _try_safe_string_convert(val, current_type)
 	return false  # type mismatch — reject
+
+
+## Try to convert a string value to the expected type using safe constructors only.
+## Returns true if the string can be safely converted to match target_type.
+## C-02: Replaces str_to_var which can deserialize arbitrary objects.
+static func _try_safe_string_convert(val: String, target_type: int) -> bool:
+	match target_type:
+		TYPE_BOOL:
+			return val == "true" or val == "false" or val == "True" or val == "False"
+		TYPE_INT:
+			return val.is_valid_int()
+		TYPE_FLOAT:
+			return val.is_valid_float() or val.is_valid_int()
+		TYPE_VECTOR2:
+			var parsed: Variant = Vector2.from_string(val)
+			return parsed != null and typeof(parsed) == TYPE_VECTOR2
+		TYPE_VECTOR2I:
+			var parsed: Variant = Vector2i.from_string(val)
+			return parsed != null and typeof(parsed) == TYPE_VECTOR2I
+		TYPE_VECTOR3:
+			var parsed: Variant = Vector3.from_string(val)
+			return parsed != null and typeof(parsed) == TYPE_VECTOR3
+		TYPE_VECTOR3I:
+			var parsed: Variant = Vector3i.from_string(val)
+			return parsed != null and typeof(parsed) == TYPE_VECTOR3I
+		TYPE_COLOR:
+			var parsed: Variant = Color.from_string(val)
+			return parsed != null and typeof(parsed) == TYPE_COLOR
+		TYPE_RECT2:
+			var parsed: Variant = Rect2(val)
+			return typeof(parsed) == TYPE_RECT2
+		TYPE_RECT2I:
+			var parsed: Variant = Rect2i(val)
+			return typeof(parsed) == TYPE_RECT2I
+		TYPE_PLANE:
+			var parsed: Variant = Plane(val)
+			return typeof(parsed) == TYPE_PLANE
+		TYPE_QUATERNION:
+			var parsed: Variant = Quaternion(val)
+			return typeof(parsed) == TYPE_QUATERNION
+		TYPE_AABB:
+			var parsed: Variant = AABB(val)
+			return typeof(parsed) == TYPE_AABB
+		TYPE_BASIS:
+			var parsed: Variant = Basis(val)
+			return typeof(parsed) == TYPE_BASIS
+		TYPE_TRANSFORM2D:
+			var parsed: Variant = Transform2D(val)
+			return typeof(parsed) == TYPE_TRANSFORM2D
+		TYPE_TRANSFORM3D:
+			var parsed: Variant = Transform3D(val)
+			return typeof(parsed) == TYPE_TRANSFORM3D
+	return false

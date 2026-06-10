@@ -1286,6 +1286,7 @@ func _input(event: InputEvent) -> void:
 
 
 ## 内联安全类型检查（替代 SafeValues 类引用，autoload 环境无法引用 safe_values.gd）
+## C-03: Keep in sync with src/scripts/safe_values.gd — that is the canonical source.
 ## 覆盖 JSON 反序列化可产生的类型 + StringName（GDScript 内部调用）
 const _MAX_SAFE_DEPTH := 10
 

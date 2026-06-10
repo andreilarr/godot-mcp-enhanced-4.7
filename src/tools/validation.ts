@@ -13,6 +13,9 @@ import { analyzeOutput, type AnalysisResult } from '../error-analyzer.js';
 import { lintGDScript } from './gdscript-lint.js';
 import { spawnGodot } from './spawn-helper.js';
 import { getLogger } from '../core/logger.js';
+import { handleTestAction } from './test-framework.js';
+import { handleGameDesignAction } from './game-design.js';
+import { handleVerifyDelivery } from './delivery.js';
 
 // ─── Known base class methods/properties whitelist ───────────────────────────
 // The Godot headless parser cannot resolve inherited methods from base classes
@@ -97,10 +100,20 @@ const ACTIONS = [
   'validate_project',
   'validate_scripts',
   'import_resources',
+  // Absorbed from test-framework.ts
+  'assert', 'stress', 'export_list_presets', 'export_get_preset', 'export_build',
+  // Absorbed from game-design.ts
+  'validate_gdd', 'chain_verify',
+  // Absorbed from delivery.ts
+  'verify_delivery',
 ] as const;
 
 // ─── False-positive error filter ────────────────────────────────────────────
 // Exported for testing; used internally by batchValidateScripts.
+
+// H-12: Pre-compiled regex to extract method/property references from error lines.
+// Matches: .method_name, "method_name", method_name( — captures the identifier.
+const METHOD_REF_RE = /(?:\.|"|\b)([a-z_][a-z0-9_]{0,40})(?:\(|"|\.|\s|$)/gi;
 
 export function isErrorFalsePositive(line: string): boolean {
   const trimmedLine = line.trim();
@@ -114,20 +127,12 @@ export function isErrorFalsePositive(line: string): boolean {
   if (trimmedLine.includes('Condition') && trimmedLine.includes('is true')) return true;
 
   // 规则 1: 已知基类方法/属性 — "not found in base self" 但方法是合法继承的
+  // H-12: Extract method names via regex, then O(1) Set.has() check instead of O(n) linear scan.
   if (trimmedLine.includes('not found in base self')) {
-    for (const method of KNOWN_BASE_METHODS) {
-      if (trimmedLine.includes('.' + method) || trimmedLine.includes('"' + method + '"')) return true;
-      // Short names (4 chars or less): use word boundary to avoid substring matches
-      if (method.length <= 4) {
-        const pattern = method + '(';
-            let pi = trimmedLine.indexOf(pattern);
-            while (pi !== -1) {
-              if (pi === 0 || !/[\w]/.test(trimmedLine[pi - 1]!)) return true;
-              pi = trimmedLine.indexOf(pattern, pi + 1);
-            }
-      } else if (trimmedLine.includes(method + '(')) {
-        return true;
-      }
+    let match: RegExpExecArray | null;
+    METHOD_REF_RE.lastIndex = 0;
+    while ((match = METHOD_REF_RE.exec(trimmedLine)) !== null) {
+      if (KNOWN_BASE_METHODS.has(match[1]!)) return true;
     }
   }
 
@@ -973,9 +978,25 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         `Already imported (skipped): ${skippedFiles.length}\n` +
         `Extensions: ${extensions.join(', ')}\n\n` +
         (importedFiles.length > 0 ? `Newly imported:\n${importedFiles.slice(0, 50).map(f => '  ' + f).join('\n')}${importedFiles.length > 50 ? `\n  ... and ${importedFiles.length - 50} more` : ''}\n\n` : '') +
-        `Note: Open the project in Godot editor once to fully process imports.`
+        `⚠️ EXPERIMENTAL: Generated .import files use approximate uid values that may differ from Godot's internal algorithm. ` +
+        `Open the project in Godot editor to let it reconcile imports — Godot will regenerate correct uid values automatically.`
       );
     }
+
+    // ── Absorbed actions ──
+    case 'assert':
+    case 'stress':
+    case 'export_list_presets':
+    case 'export_get_preset':
+    case 'export_build':
+      return handleTestAction(action, args, ctx);
+
+    case 'validate_gdd':
+    case 'chain_verify':
+      return handleGameDesignAction(action, args, ctx);
+
+    case 'verify_delivery':
+      return handleVerifyDelivery(args, ctx);
 
     default:
       return null;
@@ -984,4 +1005,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   validation: { readonly: false, long_running: true },
+  // Absorbed tool meta
+  test: { readonly: true, long_running: false },
+  game_design: { readonly: true, long_running: false },
+  verify_delivery: { readonly: true, long_running: true },
 };

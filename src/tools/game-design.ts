@@ -358,3 +358,9 @@ export async function handleTool(
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   game_design: { readonly: true, long_running: false },
 };
+
+// ─── Re-export for validation.ts absorption ──────────────────────────────────
+
+export async function handleGameDesignAction(action: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
+  return handleTool('game_design', { ...args, action }, ctx);
+}

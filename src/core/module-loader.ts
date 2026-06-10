@@ -25,23 +25,27 @@ import * as gameBridge from '../tools/game-bridge.js';
 import * as workflow from '../tools/workflow.js';
 import * as animationOps from '../tools/animation-ops.js';
 import * as profilerOps from '../tools/profiler-ops.js';
-import * as testFramework from '../tools/test-framework.js';
+// test-framework → merged into validation (v0.18.0)
+// import * as testFramework from '../tools/test-framework.js';
 import * as animtreeOps from '../tools/animtree.js';
 import * as navigationOps from '../tools/navigation.js';
 import * as particlesOps from '../tools/particles.js';
 import * as signalOps from '../tools/signal-ops.js';
-import * as batchTools from '../tools/batch-tools.js';
+// batch-tools → merged into workflow (v0.18.0)
+// import * as batchTools from '../tools/batch-tools.js';
 import * as uiOps from '../tools/ui-tools.js';
 // recording → merged into runtime (v0.18.0)
 // import * as recordingOps from '../tools/recording.js';
 import * as editorSync from '../tools/editor-sync.js';
 import * as animationTrack from '../tools/animation-track.js';
-import * as delivery from '../tools/delivery.js';
+// delivery → merged into validation (v0.18.0)
+// import * as delivery from '../tools/delivery.js';
 // code-templates → merged into project (v0.18.0)
 // import * as codeTemplates from '../tools/code-templates.js';
 // ik-tools → merged into animation-ops (v0.18.0)
 // import * as ikTools from '../tools/ik-tools.js';
-import * as gameDesign from '../tools/game-design.js';
+// game-design → merged into validation (v0.18.0)
+// import * as gameDesign from '../tools/game-design.js';
 import * as manageTools from '../tools/manage-tools.js';
 import * as instanceTools from '../tools/instance-tools.js';
 import * as advancedProxy from '../tools/advanced-proxy.js';
@@ -53,9 +57,9 @@ const ALL_MODULES = [
   runtime, screenshot, project, scene, script, validation, docs,
   physicsOps, audioOps, tilemapOps, materialOps,
   gameBridge, workflow, animationOps, animationTrack, profilerOps,
-  testFramework, animtreeOps, navigationOps, particlesOps,
-  signalOps, batchTools, uiOps, /* recordingOps → runtime */ editorSync,
-  delivery, /* codeTemplates → project */ /* ikTools → animation-ops */ gameDesign, manageTools, instanceTools, advancedProxy,
+  /* testFramework → validation */ animtreeOps, navigationOps, particlesOps,
+  signalOps, /* batchTools → workflow */ uiOps, /* recordingOps → runtime */ editorSync,
+  /* delivery → validation */ /* codeTemplates → project */ /* ikTools → animation-ops */ /* gameDesign → validation */ manageTools, instanceTools, advancedProxy,
 ];
 
 // ─── Tag injection ─────────────────────────────────────────────────────────────
