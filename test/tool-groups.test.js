@@ -18,7 +18,7 @@ describe('tool-registry groups and profiles', () => {
     it('should have each group contain valid tool names as non-empty string arrays', () => {
       for (const [name, group] of Object.entries(TOOL_GROUPS)) {
         expect(Array.isArray(group.tools), `Group ${name} should have tools array`).toBe(true);
-        expect(group.tools.length, `Group ${name} should not be empty`).toBeGreaterThan(0);
+        // v0.18.0: merged groups may have empty tools array (tools absorbed into other modules)
         for (const t of group.tools) {
           expect(typeof t, `Tool in ${name} should be string`).toBe('string');
         }
@@ -44,24 +44,23 @@ describe('tool-registry groups and profiles', () => {
       expect(TOOL_GROUPS.visual.tools).toContain('particles');
     });
 
-    it('should have physics group with physics+node_create_3d', () => {
+    it('should have physics group with physics only (node_create_3d merged to scene, v0.18.0)', () => {
       expect(TOOL_GROUPS.physics.tools).toContain('physics');
-      expect(TOOL_GROUPS.physics.tools).toContain('node_create_3d');
+      expect(TOOL_GROUPS.physics.tools).not.toContain('node_create_3d');
     });
 
     it('should have navigation group with nav (not navigation)', () => {
       expect(TOOL_GROUPS.navigation.tools).toContain('nav');
     });
 
-    it('should have test group with test+verify_delivery', () => {
-      expect(TOOL_GROUPS.test.tools).toContain('test');
-      expect(TOOL_GROUPS.test.tools).toContain('verify_delivery');
+    it('should have test group empty (test+verify_delivery merged to validation, v0.18.0)', () => {
+      expect(TOOL_GROUPS.test.tools).toEqual([]);
     });
 
-    it('should have code group with docs+batch+game_design (templates merged to project, v0.18.0)', () => {
+    it('should have code group with docs only (batch→workflow, game_design→validation, v0.18.0)', () => {
       expect(TOOL_GROUPS.code.tools).toContain('docs');
-      expect(TOOL_GROUPS.code.tools).toContain('batch');
-      expect(TOOL_GROUPS.code.tools).toContain('game_design');
+      expect(TOOL_GROUPS.code.tools).not.toContain('batch');
+      expect(TOOL_GROUPS.code.tools).not.toContain('game_design');
     });
 
     it('should have animation group with animation+animtree+animation_track', () => {
@@ -189,15 +188,14 @@ describe('tool-registry groups and profiles', () => {
       expect(LITE_TOOLS.has('animtree')).toBe(true);
       expect(LITE_TOOLS.has('audio')).toBe(true);
       expect(LITE_TOOLS.has('signal')).toBe(true);
-      expect(LITE_TOOLS.has('test')).toBe(true);
       // visual group
       expect(LITE_TOOLS.has('material')).toBe(true);
       expect(LITE_TOOLS.has('screenshot')).toBe(true);
       expect(LITE_TOOLS.has('particles')).toBe(true);
-      // code group (templates merged to project in v0.18.0)
+      // code group (docs only, batch→workflow, game_design→validation v0.18.0)
       expect(LITE_TOOLS.has('docs')).toBe(true);
-      // test group �?verify_delivery is the actual registered name
-      expect(LITE_TOOLS.has('verify_delivery')).toBe(true);
+      // test group absorbed into validation (v0.18.0)
+      expect(LITE_TOOLS.has('validation')).toBe(true);
     });
 
     it('MINIMAL_TOOLS should contain only core 6 tools', () => {

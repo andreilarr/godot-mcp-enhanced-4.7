@@ -89,7 +89,7 @@ export function getToolDefinitions(): Tool[] {
           project_path: { type: 'string', description: 'Path to Godot project directory' },
           action: {
             type: 'string',
-            enum: ['dev_loop', 'scene_snapshot', 'batch_validate'],
+            enum: ['dev_loop', 'scene_snapshot', 'batch_validate', 'create_files', 'run_verify', 'diff_scenes'],
             description: 'Action type',
           },
           // dev_loop params

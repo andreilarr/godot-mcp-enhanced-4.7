@@ -136,16 +136,23 @@ export const TOOL_GROUPS: Record<string, ToolGroupDef> = {
   animation:  { description: '动画系统', tools: ['animation', 'animtree', 'animation_track'], requires: [] },
   audio:      { description: '音频', tools: ['audio'], requires: [] },
   visual:     { description: '视觉', tools: ['material', 'screenshot', 'particles'], requires: [] },
-  physics:    { description: '物理/导航', tools: ['physics', 'node_create_3d'], requires: [] },
+  physics:    { description: '物理', tools: ['physics'], requires: [] },
   navigation: { description: '导航', tools: ['nav'], requires: [] },
   ui:         { description: 'UI', tools: ['ui'], requires: [] },
-  tilemap:    { description: 'TileMap', tools: ['tilemap', 'scene_commit'], requires: [] },
+  tilemap:    { description: 'TileMap', tools: ['tilemap'], requires: [] },
   signal:     { description: '信号', tools: ['signal'], requires: [] },
   profiler:   { description: '性能分析', tools: ['profiler', 'workflow'], requires: [] },
-  test:       { description: '测试', tools: ['test', 'verify_delivery'], requires: [] },
-  code:       { description: '代码工具', tools: ['docs', 'batch', 'game_design'], requires: [] },
-  // ik merged into animation (v0.18.0) — actions available via animation tool
-  // recording merged into runtime (v0.18.0) — actions available via runtime tool
+  test:       { description: '测试（已并入 validation）', tools: [], requires: [] },
+  code:       { description: '代码工具', tools: ['docs'], requires: [] },
+  // v0.18.0 合并说明:
+  // ik → animation (ik_modifier_create/get/set/list_bones)
+  // recording → runtime (record_start/stop/save/load/play)
+  // node_create_3d → scene (create_3d_node)
+  // scene_commit → scene (commit)
+  // test/verify_delivery → validation (assert/stress/verify_delivery)
+  // batch → workflow (create_files/run_verify/diff_scenes)
+  // game_design → validation (validate_gdd/chain_verify)
+  // templates → project (list/apply)
   multi_instance: { description: '多实例', tools: ['godot_list_instances', 'godot_select_instance'], requires: [] },
   dynamic: { description: '动态工具（Godot 端注册但 MCP 侧未定义）', tools: ['godot_advanced_tool'], requires: [] },
 };

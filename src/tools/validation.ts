@@ -453,7 +453,10 @@ export function getToolDefinitions(): Tool[] {
         properties: {
           action: {
             type: 'string',
-            enum: ['run_and_verify', 'analyze_error', 'validate_project', 'validate_scripts', 'import_resources'],
+            enum: ['run_and_verify', 'analyze_error', 'validate_project', 'validate_scripts', 'import_resources',
+              // ── merged actions (v0.18.0) ──
+              'assert', 'stress', 'export_list_presets', 'export_get_preset', 'export_build',
+              'validate_gdd', 'chain_verify', 'verify_delivery'],
             description: '操作类型',
           },
           project_path: { type: 'string', description: 'Godot 项目目录路径（可选，默认使用 GODOT_PROJECT_PATH 环境变量或当前目录）' },

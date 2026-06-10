@@ -34,7 +34,7 @@ const INTENT_MAP: Array<{ intent: string; tool: string; action: string }> = [
   // Animation (3)
   { intent: '播放动画',                   tool: 'animation', action: 'play' },
   { intent: '添加动画关键帧',             tool: 'animation_track', action: 'add_keyframe' },
-  { intent: '创建动画树状态',             tool: 'animation_tree',  action: 'add_state' },
+  { intent: '创建动画树状态',             tool: 'animtree',  action: 'add_state' },
   // UI (3)
   { intent: '创建 UI 按钮控件',           tool: 'ui',       action: 'create_control' },
   { intent: '构建 UI 布局',              tool: 'ui',       action: 'build_layout' },
@@ -71,7 +71,7 @@ describe('意图→action 选准率测试', () => {
   it('每个 intent 映射到有效的 tool 名', () => {
     const validTools = new Set([
       'project', 'scene', 'script', 'runtime', 'validation', 'editor', 'game',
-      'animation', 'animation_tree', 'animation_track', 'audio', 'material',
+      'animation', 'animtree', 'animation_track', 'audio', 'material',
       'screenshot', 'particles', 'physics', 'nav', 'ui', 'tilemap', 'signal',
       'profiler', 'workflow', 'docs', 'manage_tools', 'confirm_and_execute',
       'godot_advanced_tool', 'godot_list_instances', 'godot_select_instance',
