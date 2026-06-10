@@ -169,7 +169,6 @@ export function getToolDefinitions(): Tool[] {
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
-  console.warn(`[DEPRECATED] recording module is absorbed into runtime. Do not register directly.`);
   if (name !== 'recording') return null;
   const action = args.action as string;
   if (!(ACTIONS as readonly string[]).includes(action)) return null;

@@ -114,7 +114,6 @@ export async function handleCommitAction(
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext,
 ): Promise<ToolResult | null> {
-  console.warn(`[DEPRECATED] scene-commit-tool module is absorbed into scene. Do not register directly.`);
   if (name !== 'scene_commit') return null;
   return handleCommitAction(args, ctx);
 }

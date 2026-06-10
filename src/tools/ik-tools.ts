@@ -213,7 +213,6 @@ export function getToolDefinitions(): Tool[] {
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
-  console.warn(`[DEPRECATED] ik-tools module is absorbed into animation. Do not register directly.`);
   if (name !== 'ik') return null;
 
   const action = args.action as string;

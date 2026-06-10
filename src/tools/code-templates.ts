@@ -754,7 +754,6 @@ export async function handleTemplateAction(
 export async function handleTool(
   name: string, args: Record<string, unknown>, _ctx: unknown
 ): Promise<ToolResult | null> {
-  console.warn(`[DEPRECATED] code-templates module is absorbed into project. Do not register directly.`);
   if (name !== 'templates') return null;
 
   const action = args.action as string;

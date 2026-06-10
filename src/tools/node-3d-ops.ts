@@ -180,7 +180,6 @@ export async function handleCreate3dNode(
 export async function handleTool(
   name: string, args: Record<string, unknown>, ctx: ToolContext
 ): Promise<ToolResult | null> {
-  console.warn(`[DEPRECATED] node-3d-ops module is absorbed into scene. Do not register directly.`);
   if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
   return handleCreate3dNode(args, ctx);
 }

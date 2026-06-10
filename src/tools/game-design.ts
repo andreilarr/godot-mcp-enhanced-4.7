@@ -313,7 +313,6 @@ export async function handleTool(
   args: Record<string, unknown>,
   _ctx: ToolContext,
 ): Promise<ToolResult | null> {
-  console.warn(`[DEPRECATED] game-design module is absorbed into validation. Do not register directly.`);
   if (name !== "game_design") return null;
 
   const action = args.action as string;

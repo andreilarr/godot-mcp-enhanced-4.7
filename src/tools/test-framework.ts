@@ -63,7 +63,6 @@ export function getToolDefinitions(): Tool[] {
 
 /** @deprecated v0.18.0 — 已合并到 validation。仅保留供目标模块导入 handler。 */
 export async function handleTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult | null> {
-  console.warn(`[DEPRECATED] test-framework module is absorbed into validation. Do not register directly.`);
   if (name !== 'test') return null;
 
   const action = args.action as string;
