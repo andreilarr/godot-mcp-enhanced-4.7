@@ -43,6 +43,8 @@ import * as ps from './core/process-state.js';
 import { killProcess } from './core/process-state.js';
 import { getLogger } from './core/logger.js';
 import { resolveProjectPath } from './core/path-utils.js';
+import { AgentContextManager } from './core/agent-context.js';
+import { FileStateStore } from './core/state-store.js';
 
 // Re-export for backward compatibility (tests import from GodotServer)
 export { clearGodotPathCache, getCachedGodotPath };
@@ -75,6 +77,8 @@ export class GodotServer {
   private editorExecutor: EditorToolExecutor | null = null;
   private connectionMode: 'headless' | 'editor';
   private noFallback: boolean;
+  private agentCtx: AgentContextManager;
+  private stateStore: FileStateStore | null = null;
 
   constructor(opsScript: string, options: ServerOptions = {}) {
     this.opsScript = opsScript;
@@ -82,6 +86,7 @@ export class GodotServer {
     this.readOnlyGuard = new ReadOnlyGuard(options.readOnly ?? false);
     this.connectionMode = options.connectionMode ?? 'headless';
     this.noFallback = options.noFallback ?? false;
+    this.agentCtx = new AgentContextManager();
     this.server = new Server(
       { name: 'godot-mcp-enhanced', version: pkgVersion },
       { capabilities: { tools: {}, resources: {}, prompts: {} } }
@@ -99,6 +104,7 @@ export class GodotServer {
       opsScript: this.opsScript,
       findGodot,
       toolCallDelegate: setToolCallDelegate,
+      agentContext: this.agentCtx,
     });
     this.dispatcher = dispatcher;
 
@@ -184,6 +190,21 @@ export class GodotServer {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     log('Godot MCP Enhanced server running on stdio');
+
+    // 状态持久化 — 加载已保存的 agent 状态
+    const projectPath = resolveProjectPath();
+    if (projectPath) {
+      this.stateStore = new FileStateStore(projectPath);
+      const saved = this.stateStore.load();
+      if (saved) {
+        for (const [id, agentState] of Object.entries(saved.agents)) {
+          const state = this.agentCtx.getOrCreate(id);
+          state.selectedInstance = agentState.selectedInstance;
+          state.activeProfile = agentState.activeProfile;
+          state.isEphemeral = false;
+        }
+      }
+    }
 
     // Phase 2b: Multi-instance initialization (async fs — C-02)
     await this.initMultiInstance();
@@ -278,6 +299,12 @@ export class GodotServer {
     guard.cleanup();
     // Stop health monitor heartbeat
     this.dispatcher?.getHealthMonitor().stopHeartbeat();
+    // 状态持久化 — 刷盘并清理
+    if (this.stateStore) {
+      this.stateStore.flush();
+      this.stateStore.destroy();
+    }
+    this.agentCtx.destroy();
     await this.server.close();
     setOnGroupsChanged(null);
     log('Server shut down');

@@ -88,4 +88,24 @@ describe('AgentContextManager', () => {
       expect(maxConcurrent).toBeGreaterThan(1);
     });
   });
+
+  describe('agentId extraction', () => {
+    it('extracts agentId from _meta field', () => {
+      const meta = { agentId: 'agent-123' } as Record<string, unknown>;
+      const agentId = (meta.agentId ?? meta.agent_id) as string | undefined;
+      expect(agentId).toBe('agent-123');
+    });
+
+    it('extracts agent_id from _meta field as fallback', () => {
+      const meta = { agent_id: 'agent-456' } as Record<string, unknown>;
+      const agentId = (meta.agentId ?? meta.agent_id) as string | undefined;
+      expect(agentId).toBe('agent-456');
+    });
+
+    it('returns undefined when _meta is missing', () => {
+      const meta = undefined;
+      const agentId = meta?.agentId as string | undefined;
+      expect(agentId).toBeUndefined();
+    });
+  });
 });

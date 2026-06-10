@@ -26,6 +26,7 @@ import { truncateResponse } from './response-limiter.js';
 import * as ps from './process-state.js';
 import { getLogger } from './logger.js';
 import { resolveProjectPath } from './path-utils.js';
+import type { AgentContextManager } from './agent-context.js';
 
 /** Known profile names for IDE autocomplete. Unknown strings fall through to resolveProfile(). */
 type KnownProfile = 'full' | 'lite' | 'minimal' | 'bridge_dev' | '3d_dev';
@@ -48,6 +49,7 @@ export interface DispatcherOptions {
   opsScript: string;
   findGodot: () => Promise<string>;
   toolCallDelegate: (fn: ToolCallDelegate | null) => void;
+  agentContext?: AgentContextManager;
 }
 
 export class ToolDispatcher {
@@ -173,6 +175,13 @@ export class ToolDispatcher {
     const { name, arguments: rawArgs } = request.params;
     const startTime = Date.now();
     const args = this.normalizeArgs(rawArgs);
+
+    // 从 _meta 中提取 agent 身份标识
+    const meta = (request as { params?: { _meta?: Record<string, unknown> } }).params?._meta;
+    const agentId = (meta?.agentId ?? meta?.agent_id) as string | undefined;
+    if (this.options.agentContext) {
+      this.options.agentContext.getOrCreate(agentId);
+    }
 
     const ctx: DispatchContext = { toolName: name, args, startTime, phase: 'before' };
 
