@@ -5,6 +5,7 @@ import { executeGdscript } from '../gdscript-executor.js';
 import { normalizeNodePath, gdEscape, validateIdentifier } from './shared.js';
 import { SCENE_TREE_HEADER, NON_PERSIST, opsErrorResult, parseGdscriptResult } from './shared.js';
 import { LOOP_MODES, TRACK_TYPES, ensureNumber, valueToGd, argsToGd, animErrorMapper } from './animation-shared.js';
+import { handleIkAction } from './ik-tools.js';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -33,6 +34,8 @@ export function getToolDefinitions(): Tool[] {
               'create', 'delete', 'update_props',
               'add_track', 'remove_track',
               'add_keyframe', 'remove_keyframe', 'update_keyframe',
+              // ── IK actions (merged from ik-tools.ts, v0.18.0) ──
+              'ik_modifier_create', 'ik_modifier_get', 'ik_modifier_set', 'ik_list_bones',
             ],
             description: '操作类型',
           },
@@ -62,6 +65,13 @@ export function getToolDefinitions(): Tool[] {
           blend_time: { type: 'number', description: '混合过渡时间（秒）（blend）' },
           speed: { type: 'number', description: '播放速度，默认 1.0（blend）' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
+          // ── IK parameters (merged, v0.18.0) ──
+          type: { type: 'string', enum: ['TwoBoneIK3D', 'FABRIK3D', 'CCDIK3D', 'SplineIK3D', 'JacobianIK3D'], description: 'IK：IK 类型' },
+          bone_name: { type: 'string', description: 'IK：骨骼名' },
+          target_nodepath: { type: 'string', description: 'IK：目标节点路径' },
+          parent: { type: 'string', description: 'IK：父节点路径' },
+          properties: { type: 'object', description: 'IK：属性键值对' },
+          limit: { type: 'number', description: 'IK：最大返回数量' },
         },
         required: ['action'],
       },
@@ -636,6 +646,13 @@ export async function handleTool(
             const blendSpeed = args.speed !== undefined ? ensureNumber(args.speed, 'speed') : 1.0;
             code = genAnimationBlend(nodePath, animName, blendTime, blendSpeed);
             break;
+          }
+          // ── IK actions (merged from ik-tools.ts, v0.18.0) ──
+          case 'ik_modifier_create':
+          case 'ik_modifier_get':
+          case 'ik_modifier_set':
+          case 'ik_list_bones': {
+            return handleIkAction(action, args, ctx);
           }
           default:
             return opsErrorResult('INVALID_ACTION', `Unknown action: ${action}`);

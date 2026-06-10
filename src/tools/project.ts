@@ -12,7 +12,7 @@ import {
 } from './claudemd-builder.js';
 import { DETAILED_RULE_TEMPLATES } from './rule-templates.js';
 import { validatePath, requireString, requireProjectPath, resolveWithinRoot, scanFiles, type GodotConfig } from '../helpers.js';
-import { getScaffoldFiles, PROJECT_TEMPLATES } from './code-templates.js';
+import { getScaffoldFiles, PROJECT_TEMPLATES, handleTemplateAction } from './code-templates.js';
 import { getLogger } from '../core/logger.js';
 import { projectWriteConfig, isAllowedConfigKey, validateConfigValue } from './project-config.js';
 
@@ -24,6 +24,9 @@ const ACTIONS = [
   'create_project',
   'setup_project_rules',
   'write_config',
+  // ── Template actions (merged from code-templates.ts, v0.18.0) ──
+  'list_templates',
+  'apply_template',
 ] as const;
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
@@ -38,7 +41,7 @@ export function getToolDefinitions(): Tool[] {
         properties: {
           action: {
             type: 'string',
-            enum: ['list_projects', 'get_project_info', 'list_files', 'read_project_config', 'create_project', 'setup_project_rules', 'write_config'],
+            enum: ['list_projects', 'get_project_info', 'list_files', 'read_project_config', 'create_project', 'setup_project_rules', 'write_config', 'list_templates', 'apply_template'],
             description: '操作类型',
           },
           project_path: { type: 'string', description: 'Godot 项目目录路径（可选，默认使用 GODOT_PROJECT_PATH 环境变量或当前目录）' },
@@ -56,6 +59,12 @@ export function getToolDefinitions(): Tool[] {
           force: { type: 'boolean', description: '覆盖已有配置（默认 false）', default: false },
           key: { type: 'string', description: '配置键（write_config，如 "application/config/name"）' },
           value: { type: 'string', description: '配置值（write_config）' },
+          // ── Template parameters (merged, v0.18.0) ──
+          tag: { type: 'string', description: '模板：按标签过滤' },
+          applies_to: { type: 'string', description: '模板：按适用类过滤' },
+          template_id: { type: 'string', description: '模板：模板 ID（如 T008）' },
+          script_path: { type: 'string', description: '模板：目标脚本路径' },
+          variables: { type: 'object', description: '模板：变量覆盖', additionalProperties: { type: 'string' } },
         },
         required: ['action'],
       },
@@ -490,6 +499,12 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         value,
         message: `Config "${key}" updated successfully.`,
       }, null, 2));
+    }
+
+    // ── Template actions (merged from code-templates.ts, v0.18.0) ──
+    case 'list_templates':
+    case 'apply_template': {
+      return handleTemplateAction(action, args, ctx);
     }
 
     default:

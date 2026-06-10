@@ -32,8 +32,12 @@ describe('TOOL_GROUPS enhanced', () => {
     expect(TOOL_GROUPS.bridge.requires).toContain('bridge');
   });
 
-  it('recording group requires bridge connection', () => {
-    expect(TOOL_GROUPS.recording.requires).toContain('bridge');
+  it('recording group removed — merged into runtime (v0.18.0)', () => {
+    expect(TOOL_GROUPS.recording).toBeUndefined();
+  });
+
+  it('ik group removed — merged into animation (v0.18.0)', () => {
+    expect(TOOL_GROUPS.ik).toBeUndefined();
   });
 
   it('editor group requires editor connection', () => {

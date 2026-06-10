@@ -313,7 +313,7 @@ describe('GodotServer', () => {
         'audio',
         'signal',
         'material', 'screenshot', 'particles',
-        'docs', 'templates', 'batch', 'game_design',
+        'docs', 'batch', 'game_design',
         'test', 'verify_delivery',
         'profiler', 'workflow',
       ];

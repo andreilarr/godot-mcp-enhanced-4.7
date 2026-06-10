@@ -384,3 +384,26 @@ export async function handleTool(
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   recording: { readonly: false, long_running: false },
 };
+
+// ─── Exported handler for runtime module merge (v0.18.0) ────────────────────
+
+/** action 名映射：目标模块使用 record_* 前缀 → 内部 recording_* */
+const RECORDING_ACTION_MAP: Record<string, string> = {
+  'record_start': 'recording_start',
+  'record_stop': 'recording_stop',
+  'record_save': 'recording_save',
+  'record_load': 'recording_load',
+  'record_play': 'recording_play',
+};
+
+/** 供 runtime 模块合并调用（v0.18.0 action 路由统一） */
+export async function handleRecordingAction(
+  action: string, args: Record<string, unknown>, ctx: ToolContext
+): Promise<ToolResult | null> {
+  const mappedAction = RECORDING_ACTION_MAP[action] ?? action;
+  // 如果不在映射表内也不是原生 recording_* action，返回 null
+  if (!(ACTIONS as readonly string[]).includes(mappedAction)) return null;
+  // 复用现有 handleTool，将 action 映射回内部格式
+  const patchedArgs = { ...args, action: mappedAction };
+  return handleTool('recording', patchedArgs, ctx);
+}

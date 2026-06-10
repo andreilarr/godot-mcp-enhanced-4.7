@@ -4,6 +4,7 @@ import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { appendOutput, clearOutputBuffer, killProcess, forceKillTree, setProcessBusy, acquireProcessSlot, acquireShortRunningSlot, releaseShortRunningSlot, buildBusyErrorMessage, killOrphanGodotProcesses } from '../core/process-state.js';
 import { requireProjectPath, checkVersionMismatch, buildSafeEnv } from '../helpers.js';
+import { handleRecordingAction } from './recording.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { getLogger } from '../core/logger.js';
@@ -15,6 +16,12 @@ const ACTIONS = [
   'get_debug_output',
   'run_tests',
   'get_godot_version',
+  // ── Recording actions (merged from recording.ts, v0.18.0) ──
+  'record_start',
+  'record_stop',
+  'record_save',
+  'record_load',
+  'record_play',
 ] as const;
 
 // ─── classifyOutput helper ──────────────────────────────────────────────────
@@ -69,12 +76,17 @@ export function getToolDefinitions(): Tool[] {
         properties: {
           action: {
             type: 'string',
-            enum: ['launch_editor', 'run_project', 'stop_project', 'get_debug_output', 'run_tests', 'get_godot_version'],
+            enum: ['launch_editor', 'run_project', 'stop_project', 'get_debug_output', 'run_tests', 'get_godot_version', 'record_start', 'record_stop', 'record_save', 'record_load', 'record_play'],
             description: '操作类型',
           },
           project_path: { type: 'string', description: 'Godot 项目目录路径（可选，默认使用 GODOT_PROJECT_PATH 环境变量或当前目录）' },
           timeout: { type: 'number', description: '自动停止秒数（默认 30）', default: 30 },
           test_script: { type: 'string', description: '测试脚本或目录路径（默认 res://test/）', default: 'res://test/' },
+          // ── Recording parameters (merged, v0.18.0) ──
+          events_json: { type: 'string', description: '录制：JSON 格式的事件序列字符串' },
+          file_name: { type: 'string', description: '录制：录制文件名（仅接受 recording_*.json 格式）' },
+          speed: { type: 'number', description: '录制：回放速度倍率（默认 1.0）' },
+          load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
         },
         required: ['action'],
       },
@@ -328,6 +340,15 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           resolve({ content: [{ type: 'text', text: `Error: ${err.message}` }] });
         });
       });
+    }
+
+    // ── Recording actions (merged from recording.ts, v0.18.0) ──
+    case 'record_start':
+    case 'record_stop':
+    case 'record_save':
+    case 'record_load':
+    case 'record_play': {
+      return handleRecordingAction(action, args, ctx);
     }
 
     default:

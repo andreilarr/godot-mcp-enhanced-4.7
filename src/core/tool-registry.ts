@@ -143,9 +143,9 @@ export const TOOL_GROUPS: Record<string, ToolGroupDef> = {
   signal:     { description: '信号', tools: ['signal'], requires: [] },
   profiler:   { description: '性能分析', tools: ['profiler', 'workflow'], requires: [] },
   test:       { description: '测试', tools: ['test', 'verify_delivery'], requires: [] },
-  code:       { description: '代码工具', tools: ['docs', 'templates', 'batch', 'game_design'], requires: [] },
-  ik:         { description: 'IK', tools: ['ik'], requires: [] },
-  recording:  { description: '录制', tools: ['recording'], requires: ['bridge'] },
+  code:       { description: '代码工具', tools: ['docs', 'batch', 'game_design'], requires: [] },
+  // ik merged into animation (v0.18.0) — actions available via animation tool
+  // recording merged into runtime (v0.18.0) — actions available via runtime tool
   multi_instance: { description: '多实例', tools: ['godot_list_instances', 'godot_select_instance'], requires: [] },
   dynamic: { description: '动态工具（Godot 端注册但 MCP 侧未定义）', tools: ['godot_advanced_tool'], requires: [] },
 };
@@ -157,8 +157,8 @@ export const PROFILES: Record<string, string[]> = {
   lite:        ['core', 'bridge', 'animation', 'audio', 'signal', 'visual', 'code', 'test', 'profiler'],
   minimal:     ['core'],
   slim:        ['core'],  // intentional alias of minimal - proxy tool is in core group,
-  bridge_dev:  ['core', 'bridge', 'profiler', 'test', 'recording', 'dynamic'],
-  '3d_dev':    ['core', 'animation', 'visual', 'physics', 'navigation', 'ik'],  // physics includes node_create_3d
+  bridge_dev:  ['core', 'bridge', 'profiler', 'test', 'dynamic'],
+  '3d_dev':    ['core', 'animation', 'visual', 'physics', 'navigation'],  // physics includes node_create_3d; ik actions via animation
 };
 
 /** Expand an array of group names to a deduplicated set of tool names. */

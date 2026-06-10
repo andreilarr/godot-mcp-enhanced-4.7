@@ -32,12 +32,15 @@ import * as particlesOps from '../tools/particles.js';
 import * as signalOps from '../tools/signal-ops.js';
 import * as batchTools from '../tools/batch-tools.js';
 import * as uiOps from '../tools/ui-tools.js';
-import * as recordingOps from '../tools/recording.js';
+// recording → merged into runtime (v0.18.0)
+// import * as recordingOps from '../tools/recording.js';
 import * as editorSync from '../tools/editor-sync.js';
 import * as animationTrack from '../tools/animation-track.js';
 import * as delivery from '../tools/delivery.js';
-import * as codeTemplates from '../tools/code-templates.js';
-import * as ikTools from '../tools/ik-tools.js';
+// code-templates → merged into project (v0.18.0)
+// import * as codeTemplates from '../tools/code-templates.js';
+// ik-tools → merged into animation-ops (v0.18.0)
+// import * as ikTools from '../tools/ik-tools.js';
 import * as gameDesign from '../tools/game-design.js';
 import * as manageTools from '../tools/manage-tools.js';
 import * as instanceTools from '../tools/instance-tools.js';
@@ -51,8 +54,8 @@ const ALL_MODULES = [
   physicsOps, audioOps, tilemapOps, materialOps,
   gameBridge, workflow, animationOps, animationTrack, profilerOps,
   testFramework, animtreeOps, navigationOps, particlesOps,
-  signalOps, batchTools, uiOps, recordingOps, editorSync,
-  delivery, codeTemplates, ikTools, gameDesign, manageTools, instanceTools, advancedProxy,
+  signalOps, batchTools, uiOps, /* recordingOps → runtime */ editorSync,
+  delivery, /* codeTemplates → project */ /* ikTools → animation-ops */ gameDesign, manageTools, instanceTools, advancedProxy,
 ];
 
 // ─── Tag injection ─────────────────────────────────────────────────────────────

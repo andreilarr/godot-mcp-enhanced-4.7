@@ -319,3 +319,14 @@ export async function handleTool(
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   ik: { readonly: false, long_running: false },
 };
+
+// ─── Exported handler for animation-ops module merge (v0.18.0) ──────────────
+
+/** 供 animation-ops 模块合并调用（v0.18.0 action 路由统一） */
+export async function handleIkAction(
+  action: string, args: Record<string, unknown>, ctx: ToolContext
+): Promise<ToolResult | null> {
+  if (!(ACTIONS as readonly string[]).includes(action)) return null;
+  // 复用现有 handleTool，透传 action
+  return handleTool('ik', { ...args, action }, ctx);
+}

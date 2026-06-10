@@ -730,6 +730,24 @@ export const TOOL_META: Record<string, { readonly: boolean; long_running: boolea
   templates: { readonly: true, long_running: false },
 };
 
+// ─── Exported handler for project module merge (v0.18.0) ────────────────────
+
+/** action 名映射：目标模块使用 list_templates/apply_template → 内部 list/apply */
+const TEMPLATE_ACTION_MAP: Record<string, string> = {
+  'list_templates': 'list',
+  'apply_template': 'apply',
+};
+
+/** 供 project 模块合并调用（v0.18.0 action 路由统一） */
+export async function handleTemplateAction(
+  action: string, args: Record<string, unknown>, ctx: unknown
+): Promise<ToolResult | null> {
+  const mappedAction = TEMPLATE_ACTION_MAP[action] ?? action;
+  if (mappedAction !== 'list' && mappedAction !== 'apply') return null;
+  const patchedArgs = { ...args, action: mappedAction };
+  return handleTool('templates', patchedArgs, ctx);
+}
+
 export async function handleTool(
   name: string, args: Record<string, unknown>, _ctx: unknown
 ): Promise<ToolResult | null> {

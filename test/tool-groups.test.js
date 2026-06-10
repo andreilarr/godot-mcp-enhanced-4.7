@@ -10,8 +10,9 @@ import {
 
 describe('tool-registry groups and profiles', () => {
   describe('TOOL_GROUPS', () => {
-    it('should define 18 tool groups', () => {
-      expect(Object.keys(TOOL_GROUPS)).toHaveLength(18);
+    it('should define 16 tool groups', () => {
+      // v0.18.0: recording→runtime, ik→animation removed as independent groups
+      expect(Object.keys(TOOL_GROUPS)).toHaveLength(16);
     });
 
     it('should have each group contain valid tool names as non-empty string arrays', () => {
@@ -57,9 +58,8 @@ describe('tool-registry groups and profiles', () => {
       expect(TOOL_GROUPS.test.tools).toContain('verify_delivery');
     });
 
-    it('should have code group with docs+templates+batch+game_design', () => {
+    it('should have code group with docs+batch+game_design (templates merged to project, v0.18.0)', () => {
       expect(TOOL_GROUPS.code.tools).toContain('docs');
-      expect(TOOL_GROUPS.code.tools).toContain('templates');
       expect(TOOL_GROUPS.code.tools).toContain('batch');
       expect(TOOL_GROUPS.code.tools).toContain('game_design');
     });
@@ -82,8 +82,8 @@ describe('tool-registry groups and profiles', () => {
       expect(Object.keys(PROFILES)).toHaveLength(6);
     });
 
-    it('should have full profile include all 17 groups', () => {
-      expect(PROFILES.full).toHaveLength(18);
+    it('should have full profile include all 16 groups', () => {
+      expect(PROFILES.full).toHaveLength(16);
     });
 
     it('should have minimal profile only include core', () => {
@@ -194,10 +194,9 @@ describe('tool-registry groups and profiles', () => {
       expect(LITE_TOOLS.has('material')).toBe(true);
       expect(LITE_TOOLS.has('screenshot')).toBe(true);
       expect(LITE_TOOLS.has('particles')).toBe(true);
-      // code group
+      // code group (templates merged to project in v0.18.0)
       expect(LITE_TOOLS.has('docs')).toBe(true);
-      expect(LITE_TOOLS.has('templates')).toBe(true);
-      // test group �?verify_delivery is the actual registered name
+      // test group �?verify_delivery is the actual registered name
       expect(LITE_TOOLS.has('verify_delivery')).toBe(true);
     });
 
