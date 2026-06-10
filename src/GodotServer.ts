@@ -36,7 +36,7 @@ import { EditorToolExecutor } from './core/EditorToolExecutor.js';
 import { findGodot, clearGodotPathCache, getCachedGodotPath } from './core/godot-finder.js';
 import { setOnGroupsChanged } from './tools/manage-tools.js';
 import { InstanceManager } from './core/instance-manager.js';
-import { InstanceRouter } from './core/instance-router.js';
+import { InstanceRouter, type RouterDependencies } from './core/instance-router.js';
 import { setInstanceManager, setInstanceRouter } from './tools/instance-tools.js';
 import { isFeatureEnabled } from './core/feature-flags.js';
 import * as ps from './core/process-state.js';
@@ -160,20 +160,37 @@ export class GodotServer {
         ? join(projectDir, '.godot', 'mcp-instances')
         : undefined,
     });
+    const sendToInstance: RouterDependencies['sendToInstance'] = async (instance, toolName, args) => {
+      const url = `http://127.0.0.1:${instance.port}/api/${toolName}`;
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(args),
+          signal: AbortSignal.timeout(30000),
+        });
+        if (!response.ok) {
+          return {
+            content: [{ type: 'text' as const, text: `Instance ${instance.id} error: HTTP ${response.status}` }],
+            isError: true,
+          };
+        }
+        const data = await response.json();
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      } catch (err) {
+        return {
+          content: [{ type: 'text' as const, text: `Instance ${instance.id} unreachable: ${err instanceof Error ? err.message : String(err)}` }],
+          isError: true,
+        };
+      }
+    };
     const router = new InstanceRouter({
       instances: await manager.loadFromRegistry(),
-      sendToInstance: async () => ({
-        content: [{ type: 'text' as const, text: JSON.stringify({
-          error: 'NOT_IMPLEMENTED',
-          message: 'Multi-instance routing is under development. The instance registry is available, but tool dispatching to a specific instance requires the upcoming Bridge routing layer.',
-          hint: 'Track progress via GODOT_MCP_MULTI_INSTANCE feature flag.',
-        }) }],
-      }),
+      sendToInstance,
     });
     setInstanceManager(manager);
     setInstanceRouter(router);
     getLogger().info('instance', 'Multi-instance mode enabled');
-    getLogger().warn('instance', 'Multi-instance routing is EXPERIMENTAL and not fully implemented. Tool dispatching to specific instances is not yet available.');
   }
 
     /** Send tools/list_changed notification to client. Called when active groups change. */
