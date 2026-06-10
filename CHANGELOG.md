@@ -6,6 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-06-10
+
+### Breaking Changes — 工具合并（39 → 27 MCP 工具）
+
+9 个独立 MCP 工具被吸收进相关工具组，工具名不再独立存在：
+
+| 旧工具名 | 新路由 | 说明 |
+|----------|--------|------|
+| `node_create_3d` | `scene(action="create_3d_node")` | 3D 节点创建并入场景工具 |
+| `scene_commit` | `scene(action="commit")` | 批量场景提交并入场景工具 |
+| `recording` | `runtime(action="record_start/stop/save/load/play")` | 录制系统并入运行时工具 |
+| `templates` | `project(action="list/apply")` | 代码模板并入项目工具 |
+| `ik` | `animation(action="ik_modifier_create/get/set/list_bones")` | IK 系统并入动画工具 |
+| `test` | `validation(action="assert/stress/export_*")` | 测试框架并入验证工具 |
+| `game_design` | `validation(action="validate_gdd/chain_verify")` | 游戏设计验证并入验证工具 |
+| `verify_delivery` | `validation(action="verify_delivery")` | 交付验证并入验证工具 |
+| `batch` | `workflow(action="create_files/run_verify/diff_scenes")` | 批量工具并入工作流工具 |
+
+### Migration Guide
+
+**自动迁移**：调用 `manage_tools(action="migrate")` 获取完整映射 JSON。
+
+**Legacy 兼容模式**：设置环境变量 `GODOT_MCP_WARN_LEGACY=1` 可让旧工具名继续工作（打 warning），保留一个版本后移除。
+
+**手动迁移**：将旧工具调用替换为新路由：
+```
+旧: node_create_3d(type="Node3D", name="Player", ...)
+新: scene(action="create_3d_node", type="Node3D", name="Player", ...)
+
+旧: recording(action="start", ...)
+新: runtime(action="record_start", ...)
+```
+
+### Added
+
+- **LEGACY_TOOL_MAP**: 旧工具名到新 (tool, action) 的迁移映射表
+- **notifyToolsChanged**: `manage_tools` 的 activate/deactivate 操作后发送 MCP `notifications/tools/list_changed`
+- **manage_tools migrate action**: 输出完整迁移映射 JSON
+- **ErrorCodes 集中定义**: `src/core/error-codes.ts` — MISSING_ACTION/UNKNOWN_ACTION/MISSING_REQUIRED_PARAM/HANDLER_ERROR
+- **ActionResult 统一响应**: `src/core/action-response.ts` — wrapResult/toToolResult 兼容旧格式
+- **Common Schema**: `src/core/common-schemas.ts` — 共享参数定义 + withCommonParams
+- **50 条意图→action 选准率测试**: 验证 action 命名语义化
+
+### Changed
+
+- `ToolDispatcher.dispatchTool`: 新增 legacy fallback 路由，旧工具名自动映射到新 (tool, action)
+- `GodotServer`: 注入 MCP Server 实例给 tool-registry（listChanged 支持）
+- `module-loader`: 移除 9 个被吸收模块的注册（文件保留，handler 被目标模块导入）
+
 ## [0.17.2] - 2026-06-09
 
 ### Security
