@@ -46,7 +46,7 @@ import { join } from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getLogger } from './core/logger.js';
-import { validatePath, isPathInAllowedRoots } from './core/path-utils.js';
+import { validatePath, isPathInAllowedRoots, getAllowedProjectPaths } from './core/path-utils.js';
 import { getErrorMessage } from './types.js';
 
 const execFileAsync = promisify(execFile);
@@ -78,6 +78,23 @@ export function requireNumber(args: Record<string, unknown>, key: string, fallba
     throw new Error(`${key} must be a finite number, got: ${JSON.stringify(v)}`);
   }
   return n;
+}
+
+/**
+ * Check whether the user has explicitly allowed paths outside the project root.
+ *
+ * Returns true when:
+ * - GODOT_MCP_UNRESTRICTED=true (dev mode), OR
+ * - ALLOWED_PROJECT_PATHS is configured (explicit opt-in)
+ *
+ * When false, callers should use resolveWithinRoot() to restrict paths.
+ * When true, callers should still validate with isPathInAllowedRoots().
+ *
+ * @deprecated since v0.18.0, removal in v0.20.0 — prefer isPathInAllowedRoots() directly.
+ */
+export function allowOutsideProjectPaths(): boolean {
+  if (process.env.GODOT_MCP_UNRESTRICTED === 'true') return true;
+  return getAllowedProjectPaths().length > 0;
 }
 
 /** Convenience: require and validate project_path in one call. */
