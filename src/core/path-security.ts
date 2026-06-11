@@ -54,17 +54,17 @@ export function sanitizePath(path: string, opts?: { allowedRoots?: string[] }): 
   // 合并多余斜杠（保留 :// 协议前缀）
   normalized = normalized.replace(/(?<!:)\/{2,}/g, '/');
 
-  // 2. 遍历检测
+  // 2. 遍历检测（C-03 安全：泛化错误消息，不泄露路径详情）
   if (TRAVERSAL_PATTERN.test(normalized)) {
-    throw new Error(`Path traversal detected: ${path}`);
+    throw new Error('Path traversal detected');
   }
 
-  // 3. 非法字符检测
+  // 3. 非法字符检测（C-03 安全：不泄露路径内容）
   if (ILLEGAL_CHARS.test(normalized)) {
-    throw new Error(`Illegal characters in path: ${path}`);
+    throw new Error('Illegal characters in path');
   }
 
-  // 4. 前缀白名单
+  // 4. 前缀白名单（C-03 安全：不枚举允许的根路径）
   const allowedRoots = getAllowedRoots(opts);
   const isAllowed = allowedRoots.some(root => {
     const normalizedRoot = root.replace(/\\/g, '/');
@@ -72,7 +72,7 @@ export function sanitizePath(path: string, opts?: { allowedRoots?: string[] }): 
   });
 
   if (!isAllowed) {
-    throw new Error(`Path prefix not in whitelist: ${path}. Allowed: ${allowedRoots.join(', ')}`);
+    throw new Error('Path prefix not allowed');
   }
 
   return normalized;

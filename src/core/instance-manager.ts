@@ -33,6 +33,26 @@ export interface InstanceInfo {
 
 export type InstanceStatus = 'alive' | 'stale' | 'unreachable';
 
+/**
+ * C-02 安全：类型守卫函数，验证 JSON 解析后的对象满足 InstanceInfo 必需字段。
+ * 防止损坏/恶意 JSON 通过 as 强制转型后产生 undefined 行为。
+ */
+function isInstanceInfo(obj: unknown): obj is InstanceInfo {
+  if (typeof obj !== 'object' || obj === null) return false;
+  const o = obj as Record<string, unknown>;
+  return (
+    typeof o.id === 'string' && o.id.length > 0 &&
+    typeof o.projectPath === 'string' && o.projectPath.length > 0 &&
+    typeof o.projectName === 'string' && o.projectName.length > 0 &&
+    typeof o.port === 'number' && o.port >= 1 && o.port <= 65535 &&
+    typeof o.pid === 'number' &&
+    typeof o.lastSeen === 'string' && o.lastSeen.length > 0 &&
+    typeof o.godotVersion === 'string' &&
+    Array.isArray(o.capabilities) &&
+    (o.capabilities as unknown[]).every(c => typeof c === 'string')
+  );
+}
+
 export interface InstanceManagerOptions {
   /** Machine-level registry directory. Defaults to ~/.godot-mcp/instances/ */
   registryDir?: string;
@@ -147,15 +167,11 @@ export class InstanceManager {
         try {
           const content = await readFile(join(dir, file), 'utf-8');
           const parsed = JSON.parse(content);
-          // Validate required fields: types, port range, path traversal guard
-          if (
-            typeof parsed.id === 'string' && parsed.id.length > 0 &&
-            typeof parsed.port === 'number' && parsed.port >= 1 && parsed.port <= 65535 &&
-            typeof parsed.projectPath === 'string' && parsed.projectPath.length > 0 &&
-            !parsed.projectPath.includes('..')
-          ) {
-            results.push(parsed as InstanceInfo);
-          }
+          // C-02 安全：使用类型守卫验证所有必需字段
+          if (!isInstanceInfo(parsed)) continue;
+          // C-02 安全：路径遍历检查 — 原始路径含 .. 或 normalize 后仍含 .. 段
+          if (parsed.projectPath.includes('..')) continue;
+          results.push(parsed);
         } catch {
           // Skip corrupt/invalid files (ENOENT, SyntaxError, etc.)
         }

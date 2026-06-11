@@ -202,6 +202,10 @@ export class GodotServer {
     setInstanceRouter(router);
     // Phase 3: Wire dynamic route sender — resolves selected instance and POSTs to route
     setDynamicSender(async (route: string, toolArgs: Record<string, unknown>) => {
+      // C-01 安全：校验 route 仅含安全字符（防路径注入）
+      if (!/^[a-zA-Z0-9\-/]+$/.test(route)) {
+        return { content: [{ type: 'text' as const, text: 'Invalid route: access denied' }], isError: true };
+      }
       const selected = router.getSelectedInstance();
       if (!selected) {
         return { content: [{ type: 'text' as const, text: 'No instance selected for dynamic routing.' }], isError: true };
