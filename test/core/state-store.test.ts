@@ -18,8 +18,8 @@ describe('FileStateStore', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('无状态文件时返回 null', () => {
-    expect(store.load()).toBeNull();
+  it('无状态文件时返回 null', async () => {
+    expect(await store.load()).toBeNull();
   });
 
   it('保存并加载状态', async () => {
@@ -40,12 +40,12 @@ describe('FileStateStore', () => {
     store.markDirty(() => state);
     await store.flush();
 
-    const loaded = store.load();
+    const loaded = await store.load();
     expect(loaded).not.toBeNull();
     expect(loaded!.agents['__default__'].activeProfile).toBe('full');
   });
 
-  it('验证并丢弃过期的 agent 状态', () => {
+  it('验证并丢弃过期的 agent 状态', async () => {
     const staleTime = Date.now() - 25 * 60 * 60 * 1000;
     // 直接写入 stale 数据（绕过 flush 的 savedAt 更新），验证 load 时过期检测
     const state = {
@@ -66,7 +66,7 @@ describe('FileStateStore', () => {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'mcp-state.json'), JSON.stringify(state), 'utf-8');
 
-    const loaded = store.load();
+    const loaded = await store.load();
     expect(loaded).not.toBeNull();
     expect(Object.keys(loaded!.agents)).not.toContain('old-agent');
   });
@@ -86,7 +86,7 @@ describe('FileStateStore', () => {
     store.markDirty(getState);
     await store.flush();
 
-    const loaded = store.load();
+    const loaded = await store.load();
     expect(loaded!.agents['__default__'].activeProfile).toBe('profile-2');
   });
 });

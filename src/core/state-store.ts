@@ -34,9 +34,9 @@ export class FileStateStore {
     this.filePath = path.join(dir, STATE_FILENAME);
   }
 
-  load(): PersistedState | null {
+  async load(): Promise<PersistedState | null> {
     try {
-      const raw = fs.readFileSync(this.filePath, 'utf-8');
+      const raw = await fs.promises.readFile(this.filePath, 'utf-8');
       const parsed = JSON.parse(raw) as PersistedState;
       return this.validate(parsed);
     } catch {

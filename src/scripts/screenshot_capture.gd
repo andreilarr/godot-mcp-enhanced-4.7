@@ -55,8 +55,9 @@ func _parse_args() -> void:
 
 	if param_idx < args.size():
 		_output_path = args[param_idx]
-		# I-06: Block path traversal in screenshot output path
-		if ".." in _output_path:
+		# I-06/I-08: Block path traversal in screenshot output path (raw + uri-decoded)
+		var decoded := _output_path.uri_decode()
+		if ".." in _output_path or ".." in decoded:
 			push_error("[SCREENSHOT] Error: output_path must not contain '..'")
 			_output_path = ""
 	if param_idx + 1 < args.size() and not args[param_idx + 1].is_valid_int():

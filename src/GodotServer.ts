@@ -245,7 +245,7 @@ export class GodotServer {
     const projectPath = resolveProjectPath();
     if (projectPath) {
       this.stateStore = new FileStateStore(projectPath);
-      const saved = this.stateStore.load();
+      const saved = await this.stateStore.load();
       if (saved) {
         for (const [id, agentState] of Object.entries(saved.agents)) {
           const state = this.agentCtx.getOrCreate(id);

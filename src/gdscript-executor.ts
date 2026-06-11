@@ -263,8 +263,9 @@ async function cleanupOldSessions(): Promise<void> {
 async function writeTempScript(code: string, sessionDir: string): Promise<string> {
   const id = randomUUID().replace(/-/g, '').substring(0, 8);
   const filePath = join(sessionDir, `${id}.gd`);
-  await writeFile(filePath, code, 'utf-8');
-  // I-S5: Restrict file permissions on Windows (icacls) and POSIX (chmod via mode on parent dir)
+  // I-24: POSIX — mode 0o600 restricts to owner read/write only
+  await writeFile(filePath, code, { encoding: 'utf-8', mode: 0o600 });
+  // I-S5: Restrict file permissions on Windows (icacls overrides POSIX mode)
   if (process.platform === 'win32') {
     try {
       const { execFileSync } = await import('node:child_process');
@@ -281,7 +282,7 @@ async function writeTempScript(code: string, sessionDir: string): Promise<string
 async function writeSessionFile(content: string, ext: string, sessionDir: string): Promise<string> {
   const id = randomUUID().replace(/-/g, '').substring(0, 8);
   const filePath = join(sessionDir, `${id}${ext}`);
-  await writeFile(filePath, content, 'utf-8');
+  await writeFile(filePath, content, { encoding: 'utf-8', mode: 0o600 });
   return filePath;
 }
 

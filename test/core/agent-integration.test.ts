@@ -45,7 +45,7 @@ describe('Agent integration', () => {
 
     // 模拟重启 — 新 manager
     const mgr2 = new AgentContextManager();
-    const loaded = store.load();
+    const loaded = await store.load();
     expect(loaded).not.toBeNull();
 
     for (const [id, agentState] of Object.entries(loaded!.agents)) {

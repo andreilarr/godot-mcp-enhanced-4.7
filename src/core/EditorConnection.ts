@@ -344,7 +344,7 @@ export class EditorConnection {
    * droppedNotifications > 0 after a batch of notify calls and trigger
    * a full scene-tree refresh if any were lost.
    */
-  async notify(method: string, params: Record<string, unknown> = {}): Promise<void> {
+  notify(method: string, params: Record<string, unknown> = {}): void {
     if (!this.ws || !this.connected) throw new Error('Not connected');
     try {
       this.ws.send(JSON.stringify({ jsonrpc: '2.0', method, params }));
