@@ -125,9 +125,18 @@ read_scene/read_script → 理解结构 → write_script → run_and_verify
 
 ### 1 分钟配置（推荐）
 
-#### Claude Code
+#### Claude Code — 全局安装（所有 Godot 项目自动可用）
+
 ```bash
-claude mcp add godot -- npx -y godot-mcp-enhanced
+claude mcp add -s user godot -- npx -y godot-mcp-enhanced
+```
+
+> **为什么用 `-s user`？** Godot MCP 是个人开发工具，你会在多个 Godot 项目中使用它。`-s user`（user scope）将配置写入 `~/.claude.json` 顶层，所有项目自动连接，无需每个项目重复安装。详见 [Claude Code MCP 文档](https://code.claude.com/docs/en/mcp#mcp-installation-scopes)。
+
+如果你只想在当前项目使用（不推荐，切项目会丢失）：
+
+```bash
+claude mcp add godot -- npx -y godot-mcp-enhanced  # local scope，仅当前项目
 ```
 
 #### Cursor / Cline / 其他
@@ -143,6 +152,8 @@ claude mcp add godot -- npx -y godot-mcp-enhanced
   }
 }
 ```
+
+> **注意：** Cursor 等客户端的项目级配置会跟随 git 仓库，团队成员 clone 后自动可用。如果你希望全局生效，请参考各客户端的全局配置文档。
 
 ### 一键配置
 ```bash

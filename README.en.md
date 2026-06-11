@@ -62,69 +62,85 @@ And now with `execute_gdscript`, the AI can perform **any operation** that GDScr
 
 ## Installation
 
+### Quick Start (Recommended)
+
+#### Claude Code — User Scope (available in all Godot projects)
+
 ```bash
-git clone https://github.com/wgt19861219/godot-mcp-enhanced.git
-cd godot-mcp-enhanced
-npm install
+claude mcp add -s user godot -- npx -y godot-mcp-enhanced
 ```
 
-## Configuration
+> **Why `-s user`?** Godot MCP is a personal development tool you'll use across multiple Godot projects. `-s user` (user scope) writes to `~/.claude.json` at the top level, making it available in every project automatically—no per-project setup needed. See [Claude Code MCP docs](https://code.claude.com/docs/en/mcp#mcp-installation-scopes).
 
-### Cursor
+If you only want it in the current project (not recommended—switching projects loses access):
 
-Create `.cursor/mcp.json` in your project:
+```bash
+claude mcp add godot -- npx -y godot-mcp-enhanced  # local scope, current project only
+```
+
+#### Cursor / Cline / Other MCP Clients
+
+Add to your project's `.cursor/mcp.json` or MCP configuration:
 
 ```json
 {
   "mcpServers": {
     "godot": {
-      "command": "node",
-      "args": ["D:/GitHub/godot-mcp-enhanced/build/index.js"],
-      "env": {
-        "GODOT_PATH": "C:/path/to/godot.exe",
-        "DEBUG": "true"
-      }
+      "command": "npx",
+      "args": ["-y", "godot-mcp-enhanced"]
     }
   }
 }
 ```
 
-### Cline / Claude Code
+> **Note:** Project-scoped configs in Cursor etc. follow the git repo—team members get access automatically after cloning.
 
-Add to your MCP settings:
+### One-Click Setup
 
-```json
-{
-  "mcpServers": {
-    "godot": {
-      "command": "node",
-      "args": ["D:/GitHub/godot-mcp-enhanced/build/index.js"],
-      "env": {
-        "GODOT_PATH": "C:/path/to/godot.exe",
-        "DEBUG": "true"
-      },
-      "autoApprove": [
-        "launch_editor", "run_project", "stop_project",
-        "get_debug_output", "capture_screenshot", "run_tests",
-        "get_godot_version", "list_projects", "get_project_info",
-        "list_files", "read_project_config",
-        "read_scene", "create_scene", "add_node", "save_scene", "load_sprite",
-        "read_script", "write_script",
-        "execute_gdscript", "query_scene_tree", "inspect_node",
-        "batch_add_nodes", "validate_project", "import_resources",
-        "run_and_verify", "analyze_error", "edit_script"
-      ]
-    }
-  }
-}
+```bash
+npx godot-mcp-enhanced setup
+# Auto-detects: Godot path + AI client + writes config
 ```
+
+### First-Time Use
+
+After connecting to a Godot project, run the project rules setup tool:
+
+```
+setup_project_rules(project_path="your/project/path")
+```
+
+This auto-generates:
+- **`.claude/settings.json`**: PostToolUse hook that reminds the AI to run `validate_scripts` after editing `.gd` files
+- **`CLAUDE.md`**: Project-level rules with GDScript validation and release gate (`verify_delivery` check)
+
+Use `force=true` to overwrite existing config. Use `hooks=false` or `claude_md=false` to skip individual items.
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `GODOT_PATH` | Path to Godot executable | Auto-detected |
+| `GODOT_PATH` | Path to Godot executable | Auto-search (PATH/registry/Scoop/Downloads) |
+| `GODOT_PROJECT_PATH` | Default project path | Auto-detect from cwd (searches up for project.godot) |
+| `GODOT_MCP_SEARCH_PATHS` | Extra Godot search directories (semicolon-separated) | None |
 | `DEBUG` | Enable verbose logging | `false` |
+
+> **Note:** Project path has a 30-second cache. Wait 30 seconds after switching projects or restart the MCP server.
+
+### Manual Setup (Advanced)
+
+<details>
+<summary>Expand for manual installation steps</summary>
+
+```bash
+git clone https://github.com/wgt19861219/godot-mcp-enhanced.git
+cd godot-mcp-enhanced
+npm install && npm run build
+```
+
+Point your MCP configuration to `build/index.js` and set the desired environment variables.
+
+</details>
 
 ## Tools (34 total)
 
