@@ -16,8 +16,17 @@ const ALLOWED_NODE_TYPES: Array = [
 func setup(undo_manager: Node) -> void:
 	_undo_manager = undo_manager
 
+# I-06: null-safe EditorInterface accessor
+func _get_ei() -> EditorInterface:
+	var ei := _get_ei()
+	if ei == null: return {"error": {"code": -32000, "message": "EditorInterface not available"}}
+	if ei == null:
+		push_error("[MCP] EditorInterface not available")
+	return ei
+
 func handle_add_node(params: Dictionary, request_id: int) -> Dictionary:
-	var ei = Engine.get_singleton("EditorInterface") as EditorInterface
+	var ei := _get_ei()
+	if ei == null: return {"error": {"code": -32000, "message": "EditorInterface not available"}}
 	var root = ei.get_edited_scene_root()
 	if not root:
 		return {"error": {"code": -32003, "message": "No scene loaded"}}

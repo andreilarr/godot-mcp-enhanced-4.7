@@ -29,6 +29,9 @@ func setup(plugin: EditorPlugin) -> void:
 
 func set_panel(panel: Control) -> void:
 	_panel = panel
+	# C-02: wire cancel callback to avoid hardcoded path in status_panel
+	if panel.has_method("set_cancel_callback"):
+		panel.set_cancel_callback(cancel_current_operation)
 
 func _ready() -> void:
 	_crypto = Crypto.new()
@@ -213,7 +216,7 @@ func _handle_message(text: String, peer: WebSocketPeer) -> void:
 
 	if parsed.get("method") == "operation_start":
 		var timeout = parsed.get("params", {}).get("timeout", 300)
-		_heartbeat.pause_for_operation(timeout)
+		_heartbeat.pause_for_operation(timeout, pid)  # C-01: pass peer_id for targeted timeout
 		_update_panel("MCP: Operation in progress...")
 		var _op_panel := _get_panel()
 		if _op_panel: _op_panel.set_operation_active(true)
@@ -288,15 +291,13 @@ func _get_panel() -> Node:
 # C-05: Fixed-length comparison (always 32 bytes) to prevent timing side-channel.
 func _constant_time_compare(a: String, b: String) -> bool:
 	const SECRET_LEN := 32
-	var result := 0
-	# Always compare exactly SECRET_LEN bytes regardless of input length
-	for i in range(SECRET_LEN):
-		var ca := ord(a[i]) if i < a.length() else 0
-		var cb := ord(b[i]) if i < b.length() else 0
-		result = result | (ca ^ cb)
-	# Reject if either input length differs from expected
+	# Reject early if lengths differ — avoids leaking length info through
+	# branch-prediction timing inside the loop.
 	if a.length() != SECRET_LEN or b.length() != SECRET_LEN:
 		return false
+	var result := 0
+	for i in range(SECRET_LEN):
+		result = result | (ord(a[i]) ^ ord(b[i]))
 	return result == 0
 
 func _exit_tree() -> void:

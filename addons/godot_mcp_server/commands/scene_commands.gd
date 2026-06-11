@@ -7,6 +7,13 @@ func setup(undo_manager: Node, editor_guards: Node) -> void:
 	_undo_manager = undo_manager
 	_editor_guards = editor_guards
 
+# I-06: null-safe EditorInterface accessor
+func _get_ei() -> EditorInterface:
+	var ei = Engine.get_singleton("EditorInterface") as EditorInterface
+	if ei == null:
+		push_error("[MCP] EditorInterface not available")
+	return ei
+
 
 func handle_open_scene(params: Dictionary) -> Dictionary:
 	var path: String = params.get("scene_path", "")
@@ -14,14 +21,18 @@ func handle_open_scene(params: Dictionary) -> Dictionary:
 		return {"error": {"code": -32004, "message": "scene_path is required"}}
 	if not path.begins_with("res://"):
 		return {"error": {"code": -32004, "message": "scene_path must start with res://"}}
-	var ei = Engine.get_singleton("EditorInterface") as EditorInterface
+	var ei := _get_ei()
+	if ei == null:
+		return {"error": {"code": -32000, "message": "EditorInterface not available"}}
 	ei.open_scene_from_path(path)
 	return {"result": {"status": "opened", "path": path}}
 
 
 func handle_save_scene(params: Dictionary) -> Dictionary:
 	var save_path: String = params.get("path", "")
-	var ei = Engine.get_singleton("EditorInterface") as EditorInterface
+	var ei := _get_ei()
+	if ei == null:
+		return {"error": {"code": -32000, "message": "EditorInterface not available"}}
 	var root = ei.get_edited_scene_root()
 
 	if root == null:
@@ -107,7 +118,10 @@ func handle_instance_scene(params: Dictionary) -> Dictionary:
 		if CommandHelpers.property_exists_and_type_ok(instance, key, val):
 			instance.set(key, val)
 
-	var ei = Engine.get_singleton("EditorInterface") as EditorInterface
+	var ei := _get_ei()
+	if ei == null:
+		instance.queue_free()
+		return {"error": {"code": -32000, "message": "EditorInterface not available"}}
 	var root = ei.get_edited_scene_root()
 	if root == null:
 		instance.queue_free()
@@ -143,7 +157,9 @@ func handle_set_instance_property(params: Dictionary, request_id: int = 0) -> Di
 	if node_path.is_empty() or prop_name.is_empty():
 		return {"error": {"code": -32004, "message": "node_path and property required"}}
 
-	var ei = Engine.get_singleton("EditorInterface") as EditorInterface
+	var ei := _get_ei()
+	if ei == null:
+		return {"error": {"code": -32000, "message": "EditorInterface not available"}}
 	var root = ei.get_edited_scene_root()
 	if root == null:
 		return {"error": {"code": -32003, "message": "No edited scene"}}

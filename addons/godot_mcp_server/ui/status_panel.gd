@@ -3,6 +3,7 @@ extends VBoxContainer
 
 var status_label: Label
 var cancel_button: Button
+var _cancel_fn: Callable = Callable()  # C-02: set by websocket_server to avoid hardcoded path
 
 func _ready() -> void:
 	status_label = Label.new()
@@ -23,7 +24,9 @@ func set_operation_active(active: bool) -> void:
 	if cancel_button:
 		cancel_button.disabled = not active
 
+func set_cancel_callback(fn: Callable) -> void:
+	_cancel_fn = fn
+
 func _on_cancel_pressed() -> void:
-	var server = get_node_or_null("/root/EditorNode/MCPServer")
-	if server:
-		server.cancel_current_operation()
+	if _cancel_fn.is_valid():
+		_cancel_fn.call()

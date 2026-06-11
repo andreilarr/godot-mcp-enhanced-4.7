@@ -8,6 +8,14 @@ var _node_paths: Dictionary = {}  # { instance_id (int): { path: String, type: S
 func setup(handler: Node) -> void:
 	_command_handler = handler
 
+# I-06: null-safe EditorInterface accessor
+func _get_ei() -> EditorInterface:
+	var ei := _get_ei()
+	if ei == null: return {"error": {"code": "NO_EDITOR", "message": "EditorInterface not available"}}
+	if ei == null:
+		push_error("[MCP] EditorInterface not available")
+	return ei
+
 
 func start_sync() -> Dictionary:
 	if _syncing:
@@ -38,7 +46,8 @@ func stop_sync() -> Dictionary:
 
 
 func get_scene_tree() -> Dictionary:
-	var ei = Engine.get_singleton("EditorInterface") as EditorInterface
+	var ei := _get_ei()
+	if ei == null: return {"error": {"code": "NO_EDITOR", "message": "EditorInterface not available"}}
 	var root = ei.get_edited_scene_root()
 	if not root:
 		return {"error": {"code": "NO_SCENE", "message": "No current scene"}}

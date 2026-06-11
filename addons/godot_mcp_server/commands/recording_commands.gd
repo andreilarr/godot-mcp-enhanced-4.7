@@ -113,25 +113,38 @@ var _playback_count: int = 0
 var _playback_timer: Timer = null
 
 func _schedule_next_event() -> void:
-	if _playback_index >= _playback_schedule.size():
-		_playback_schedule = []
-		_playback_index = 0
-		return
+	var zero_delay_count := 0
+	const MAX_ZERO_DELAY_PER_FRAME := 100
+	while _playback_index < _playback_schedule.size():
+		var entry: Dictionary = _playback_schedule[_playback_index]
+		var delay_ms: float = entry.get("delay", 0.0)
+		_playback_index += 1
 
-	var entry: Dictionary = _playback_schedule[_playback_index]
-	var delay_ms: float = entry.get("delay", 0.0)
-	_playback_index += 1
+		if delay_ms <= 1.0:
+			_fire_playback_event(entry.get("event"))
+			zero_delay_count += 1
+			if zero_delay_count >= MAX_ZERO_DELAY_PER_FRAME:
+				push_warning("[MCP] Recording: max zero-delay events per frame reached (%d), deferring" % MAX_ZERO_DELAY_PER_FRAME)
+				_ensure_playback_timer()
+				_playback_timer.start(0.001)
+				return
+			continue
+		else:
+			_ensure_playback_timer()
+			_playback_timer.start(delay_ms / 1000.0)
+			return
 
-	if delay_ms <= 1.0:
-		_fire_playback_event(entry.get("event"))
-		_schedule_next_event()
-	else:
-		if _playback_timer == null:
-			_playback_timer = Timer.new()
-			_playback_timer.one_shot = true
-			_playback_timer.timeout.connect(_on_playback_timer_timeout)
-			add_child(_playback_timer)
-		_playback_timer.start(delay_ms / 1000.0)
+	# All events processed
+	_playback_schedule = []
+	_playback_index = 0
+
+
+func _ensure_playback_timer() -> void:
+	if _playback_timer == null:
+		_playback_timer = Timer.new()
+		_playback_timer.one_shot = true
+		_playback_timer.timeout.connect(_on_playback_timer_timeout)
+		add_child(_playback_timer)
 
 func _on_playback_timer_timeout() -> void:
 	if _playback_index > 0 and _playback_index <= _playback_schedule.size():

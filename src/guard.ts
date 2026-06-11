@@ -67,6 +67,8 @@ export function requiresConfirmation(toolName: string, args?: Record<string, unk
 }
 
 export function createPendingToken(toolName: string, args: Record<string, unknown>): string {
+  // I-19: refuse token creation after shutdown — timer is stopped, token would never be cleaned
+  if (_shutdown) throw new Error('Token system has been shut down');
   ensureCleanupTimer();
   const now = Date.now();
   // A-05: Rate limit — prevent high-frequency token creation from evicting legitimate tokens

@@ -20,7 +20,6 @@ export {
   resolveWithinRoot,
   normalizeUserProjectPath,
   getAllowedProjectPaths,
-  allowOutsideProjectPaths,
   isPathInAllowedRoots,
   _resetPathAllowWarned,
 } from './core/path-utils.js';

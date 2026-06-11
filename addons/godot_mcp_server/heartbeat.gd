@@ -11,6 +11,7 @@ var _is_paused: bool = false
 var _ping_json: String = JSON.stringify({"jsonrpc": "2.0", "method": "ping", "params": {}})
 var _operation_timeout: float = 0.0
 var _operation_timer: float = 0.0
+var _operation_peer_id: int = -1  # C-01: Track which peer initiated the operation
 
 
 func reset_activity(peer_id: int = -1) -> void:
@@ -31,7 +32,9 @@ func tick(delta: float, peer: WebSocketPeer) -> void:
 		_operation_timer += delta
 		if _operation_timer > _operation_timeout:
 			_is_paused = false
-			emit_signal("timeout_detected", -1)
+			var timeout_peer := _operation_peer_id
+			_operation_peer_id = -1
+			emit_signal("timeout_detected", timeout_peer)
 		return
 
 	var pid: int = peer.get_instance_id()
@@ -52,10 +55,11 @@ func tick(delta: float, peer: WebSocketPeer) -> void:
 			peer.send_text(_ping_json)
 
 
-func pause_for_operation(timeout_sec: float) -> void:
+func pause_for_operation(timeout_sec: float, peer_id: int = -1) -> void:
 	_is_paused = true
 	_operation_timeout = min(timeout_sec, 600.0)
 	_operation_timer = 0.0
+	_operation_peer_id = peer_id
 
 
 func resume() -> void:

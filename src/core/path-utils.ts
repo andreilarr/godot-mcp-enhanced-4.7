@@ -198,18 +198,6 @@ export function getAllowedProjectPaths(): string[] {
   return env.split(';').filter(Boolean).map(p => resolvePath(p));
 }
 
-/**
- * @deprecated since v0.16.0, removal in v0.18.0
- * Migration: set ALLOWED_PROJECT_PATHS=/path1;/path2 instead.
- */
-export function allowOutsideProjectPaths(): boolean {
-  if (process.env.ALLOW_OUTSIDE_PROJECT_PATHS === 'true') {
-    getLogger().error('security', 'ALLOW_OUTSIDE_PROJECT_PATHS is deprecated (removes in v0.18.0) — migrate to ALLOWED_PROJECT_PATHS whitelist');
-    return true;
-  }
-  return false;
-}
-
 const _pathAllowLogged = new Set<string>();
 
 function ensureSep(p: string): string {
@@ -221,9 +209,9 @@ function ensureSep(p: string): string {
  *
  * Priority (highest wins):
  * 1. GODOT_MCP_UNRESTRICTED=true → allow everything (dev mode)
- * 2. ALLOW_OUTSIDE_PROJECT_PATHS=true → allow everything (deprecated, removal in v0.18.0)
- * 3. ALLOWED_PROJECT_PATHS=/path1;/path2 → allow only listed roots + children
- * 4. No config → allow all (allow-by-default for discoverability)
+ * 2. ALLOWED_PROJECT_PATHS=/path1;/path2 → allow only listed roots + children
+ * 3. No config (local) → allow all (allow-by-default for discoverability)
+ * 4. No config (CI) → restrict to process.cwd()
  *
  * Why allow-by-default? This MCP server is designed for local development
  * where the user runs it against their own projects. Restricting by default
@@ -239,18 +227,25 @@ export function isPathInAllowedRoots(requestedPath: string): boolean {
     }
     return true;
   }
-  if (allowOutsideProjectPaths()) return true;
   const allowed = getAllowedProjectPaths();
   if (allowed.length === 0) {
-    if (!_pathAllowLogged.has('unconfigured')) {
-      const isCI = process.env.CI === 'true' || !process.stdout.isTTY;
-      const msg = 'ALLOWED_PROJECT_PATHS not configured — allowing all project paths. ' +
-        'Set ALLOWED_PROJECT_PATHS=/path1;/path2 to restrict access.';
-      if (isCI) {
-        getLogger().warn('security', msg + ' (CI/non-interactive environment detected)');
-      } else {
-        getLogger().info('security', msg);
+    const isCI = process.env.CI === 'true' || !process.stdout.isTTY;
+    if (isCI) {
+      // C-07: CI/shared environments — deny-by-default, fall back to cwd only
+      if (!_pathAllowLogged.has('ci-cwd-fallback')) {
+        getLogger().warn('security',
+          'ALLOWED_PROJECT_PATHS not configured in CI — restricting to process.cwd(). ' +
+          'Set ALLOWED_PROJECT_PATHS=/path1;/path2 for explicit control.');
+        _pathAllowLogged.add('ci-cwd-fallback');
       }
+      const cwd = resolvePath('.');
+      const resolved = resolvePath(requestedPath);
+      return resolved === cwd || resolved.startsWith(ensureSep(cwd));
+    }
+    if (!_pathAllowLogged.has('unconfigured')) {
+      getLogger().info('security',
+        'ALLOWED_PROJECT_PATHS not configured — allowing all project paths. ' +
+        'Set ALLOWED_PROJECT_PATHS=/path1;/path2 to restrict access.');
       _pathAllowLogged.add('unconfigured');
     }
     return true;
