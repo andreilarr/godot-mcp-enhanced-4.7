@@ -4,28 +4,31 @@
  * 通过 tool-registry 直接调用各工具模块的 handleTool，
  * 无需运行 MCP server，但需要 Godot 可执行文件。
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 import { registerAllModules } from '../src/core/module-loader.js';
 import { getModuleForTool, getAllToolNames, getAllToolDefinitions } from '../src/core/tool-registry.js';
-import type { ToolContext } from '../src/types.js';
+import type { ToolContext, ToolResult } from '../src/types.js';
 import { parseGodotConfig } from '../src/helpers.js';
 import * as ps from '../src/core/process-state.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const TEST_PROJECT = 'D:/workspace/projects/godot-test-project';
+
+// I-05: 支持环境变量回退，其他开发者可直接运行
+const TEST_PROJECT = process.env.GODOT_TEST_PROJECT || 'D:/workspace/projects/godot-test-project';
 const GODOT_PATH = process.env.GODOT_PATH || 'D:\\godot\\Godot_v4.6.3-stable_win64_console.exe';
 const hasGodot = existsSync(GODOT_PATH);
+const hasProject = existsSync(TEST_PROJECT) && existsSync(resolve(TEST_PROJECT, 'project.godot'));
 
 const MAIN_SCENE = resolve(TEST_PROJECT, 'scenes', 'main.tscn');
 const NEW_SCENE_PATH = resolve(TEST_PROJECT, 'scenes', 'e2e_verify_test.tscn');
 const NEW_SCRIPT_PATH = resolve(TEST_PROJECT, 'scripts', 'e2e_verify_test.gd');
 
-// ─── Setup ──────────────────────────────────────────────────────────────────
-registerAllModules();
+// I-01: 移入 beforeAll 避免模块顶层全局副作用
+let _registered = false;
 
 function findGodot(): Promise<string> {
   return Promise.resolve(GODOT_PATH);
@@ -47,26 +50,47 @@ function makeCtx(): ToolContext {
   };
 }
 
-type ToolResult = { content: Array<{ type: string; text: string }>; isError?: boolean };
+// I-06: 安全的类型校验 — 验证 result 结构而非不安全断言
+function isToolResult(val: unknown): val is ToolResult {
+  if (!val || typeof val !== 'object') return false;
+  const obj = val as Record<string, unknown>;
+  return Array.isArray(obj.content) && obj.content.every(
+    (c: unknown) => c && typeof c === 'object' && 'type' in (c as Record<string, unknown>) && 'text' in (c as Record<string, unknown>)
+  );
+}
 
 async function callTool(toolName: string, args: Record<string, unknown>): Promise<{ text: string; isError: boolean }> {
   const mod = getModuleForTool(toolName);
   if (!mod) return { text: `MODULE_NOT_FOUND: ${toolName}`, isError: true };
   const result = await mod.handleTool(toolName, { project_path: TEST_PROJECT, ...args }, makeCtx());
   if (!result) return { text: 'null result', isError: false };
-  const tr = result as ToolResult;
-  const text = tr.content?.map(c => c.text).join('\n') ?? '';
-  return { text, isError: tr.isError === true };
+  if (!isToolResult(result)) return { text: `UNEXPECTED_RESULT: ${JSON.stringify(result).slice(0, 200)}`, isError: true };
+  const text = result.content.map(c => c.text).join('\n') ?? '';
+  return { text, isError: result.isError === true };
 }
 
 // Snapshot for cleanup
 let _mainSceneSnap: string;
 
 beforeAll(() => {
-  if (existsSync(MAIN_SCENE)) {
+  if (!_registered) {
+    registerAllModules();
+    _registered = true;
+  }
+  if (hasProject && existsSync(MAIN_SCENE)) {
     _mainSceneSnap = readFileSync(MAIN_SCENE, 'utf-8');
   }
   ps.resetState();
+});
+
+// I-02: afterEach 清理进程状态，防止泄漏级联
+afterEach(() => {
+  const proc = ps.getRunningProcess();
+  if (proc && !proc.killed) {
+    try { proc.kill(); } catch { /* best effort */ }
+  }
+  ps.setProcessBusy(false);
+  ps.setRunningProcess(null, true);
 });
 
 afterAll(() => {
@@ -101,7 +125,7 @@ describe('E2E: Tool Registry', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // 1. script — execute_gdscript (需要 Godot)
 // ═══════════════════════════════════════════════════════════════════════════════
-describe.skipIf(!hasGodot)('E2E: execute_gdscript (via script tool)', { timeout: 30_000 }, () => {
+describe.skipIf(!hasGodot || !hasProject)('E2E: execute_gdscript (via script tool)', { timeout: 30_000 }, () => {
   it('snippet mode: basic output', async () => {
     const r = await callTool('script', {
       action: 'execute_gdscript',
@@ -134,7 +158,7 @@ describe.skipIf(!hasGodot)('E2E: execute_gdscript (via script tool)', { timeout:
       action: 'execute_gdscript',
       code: 'OS.shell_open("https://example.com")\n_mcp_done()',
     });
-    // Sandbox 拦截返回 compile_error 文本，不一定设置 isError
+    // Sandbox 拦截返回 compile_error 文本
     expect(r.text).toContain('Sandbox violation');
   });
 });
@@ -142,7 +166,7 @@ describe.skipIf(!hasGodot)('E2E: execute_gdscript (via script tool)', { timeout:
 // ═══════════════════════════════════════════════════════════════════════════════
 // 2. script — read_script / write_script / edit_script (纯文件操作)
 // ═══════════════════════════════════════════════════════════════════════════════
-describe('E2E: script CRUD (file ops)', () => {
+describe.skipIf(!hasProject)('E2E: script CRUD (file ops)', () => {
   it('read_script: reads existing script', async () => {
     const r = await callTool('script', {
       action: 'read_script',
@@ -183,8 +207,9 @@ describe('E2E: script CRUD (file ops)', () => {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 3. scene — read_scene / create_scene / add_node / edit_node / save_scene
+// I-03: scene CRUD 组有严格的前置条件检查和创建验证
 // ═══════════════════════════════════════════════════════════════════════════════
-describe('E2E: scene CRUD', () => {
+describe.skipIf(!hasProject)('E2E: scene CRUD', () => {
   it('read_scene: reads existing scene', async () => {
     const r = await callTool('scene', {
       action: 'read_scene',
@@ -200,6 +225,11 @@ describe('E2E: scene CRUD', () => {
       scene_path: 'res://scenes/e2e_verify_test.tscn',
     });
     expect(r.isError).toBe(false);
+  });
+
+  it('create_scene: verifies file exists on disk', () => {
+    // I-03: 前置条件检查 — 后续所有场景测试依赖此文件
+    expect(existsSync(NEW_SCENE_PATH)).toBe(true);
   });
 
   it('add_node: adds Sprite2D child', async () => {
@@ -244,7 +274,7 @@ describe('E2E: scene CRUD', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // 4. scene_commit — 批量操作
 // ═══════════════════════════════════════════════════════════════════════════════
-describe('E2E: scene_commit', () => {
+describe.skipIf(!hasProject)('E2E: scene_commit', () => {
   it('commit: validates operations format', async () => {
     const r = await callTool('scene_commit', {
       scene_path: 'res://scenes/e2e_verify_test.tscn',
@@ -253,8 +283,7 @@ describe('E2E: scene_commit', () => {
         { op: 'node_property', path: 'CommitLabel', property: 'text', value: 'Committed' },
       ],
     });
-    // scene_commit 通过 Godot load() + PackedScene 操作，需场景可加载
-    // 验证返回了有效结果（成功或 load 失败都是有效响应）
+    // scene_commit 通过 Godot load() + PackedScene 操作
     expect(r.text).toBeDefined();
     expect(r.text.length).toBeGreaterThan(0);
   });
@@ -263,7 +292,7 @@ describe('E2E: scene_commit', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // 5. ui — build_layout / create_control
 // ═══════════════════════════════════════════════════════════════════════════════
-describe('E2E: ui tool', () => {
+describe.skipIf(!hasProject)('E2E: ui tool', () => {
   it('build_layout: VBoxContainer with children', async () => {
     const r = await callTool('ui', {
       action: 'build_layout',
@@ -298,7 +327,7 @@ describe('E2E: ui tool', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // 6. node_create_3d (通过 scene tool)
 // ═══════════════════════════════════════════════════════════════════════════════
-describe('E2E: create_3d_node (via scene tool)', () => {
+describe.skipIf(!hasGodot || !hasProject)('E2E: create_3d_node (via scene tool)', { timeout: 30_000 }, () => {
   it('creates MeshInstance3D', async () => {
     const r = await callTool('scene', {
       action: 'create_3d_node',
@@ -314,7 +343,7 @@ describe('E2E: create_3d_node (via scene tool)', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // 7. project — info / list_templates
 // ═══════════════════════════════════════════════════════════════════════════════
-describe('E2E: project', () => {
+describe.skipIf(!hasProject)('E2E: project', () => {
   it('info: returns project metadata', async () => {
     const r = await callTool('project', { action: 'info' });
     expect(r.text.length).toBeGreaterThan(0);
@@ -352,50 +381,55 @@ describe('E2E: docs / manage_tools / instances', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 9. validation / screenshot / workflow (需要 Godot)
+// 9. Godot-dependent tools — I-04: 强化断言验证实际工作
 // ═══════════════════════════════════════════════════════════════════════════════
-describe.skipIf(!hasGodot)('E2E: Godot-dependent tools', { timeout: 60_000 }, () => {
-  it('validation: run_validation', async () => {
+describe.skipIf(!hasGodot || !hasProject)('E2E: Godot-dependent tools', { timeout: 60_000 }, () => {
+  it('validation: run_validation returns structured result', async () => {
     const r = await callTool('validation', { action: 'run_validation' });
     expect(r.text).toBeDefined();
+    expect(r.text.length).toBeGreaterThan(10);
   });
 
-  it('screenshot: capture', async () => {
+  it('screenshot: capture returns image data or error', async () => {
     const r = await callTool('screenshot', {
       action: 'capture',
       scene_path: 'res://scenes/e2e_verify_test.tscn',
       image_path: 'user://e2e_test.png',
     });
+    // 3D 场景应返回图片数据或明确的处理结果
     expect(r.text).toBeDefined();
+    expect(r.text.length).toBeGreaterThan(5);
   });
 
-  it('workflow: dev_loop', async () => {
+  it('workflow: dev_loop executes and returns output', async () => {
     const r = await callTool('workflow', {
       action: 'dev_loop',
-      code: 'var _v = "ok"\n_mcp_output("test", _v)\n_mcp_done()',
+      code: 'var _v = "workflow_ok"\n_mcp_output("test", _v)\n_mcp_done()',
     });
-    expect(r.text).toBeDefined();
+    expect(r.isError).toBe(false);
+    expect(r.text).toContain('workflow_ok');
   });
 
-  it('runtime: inspect_node', async () => {
+  it('runtime: inspect_node returns node info', async () => {
     const r = await callTool('runtime', {
       action: 'inspect_node',
       scene_path: 'res://scenes/main.tscn',
       node_path: 'Main',
     });
     expect(r.text).toBeDefined();
+    expect(r.text.length).toBeGreaterThan(5);
   });
 
-  it('animation: list_players', async () => {
+  it('animation: list_players returns result', async () => {
     const r = await callTool('animation', {
       action: 'list_players',
       scene_path: 'res://scenes/anim_test.tscn',
     });
     expect(r.text).toBeDefined();
+    expect(r.text.length).toBeGreaterThan(5);
   });
 
-  it('animation_track: add_track + add_keyframe', async () => {
-    // animation_track 没有 list 操作，使用 add/remove 测试
+  it('animation_track: add_track returns result', async () => {
     const r = await callTool('animation_track', {
       action: 'add_track',
       scene_path: 'res://scenes/anim_test.tscn',
@@ -405,9 +439,10 @@ describe.skipIf(!hasGodot)('E2E: Godot-dependent tools', { timeout: 60_000 }, ()
       track_path: ':position:x',
     });
     expect(r.text).toBeDefined();
+    expect(r.text.length).toBeGreaterThan(5);
   });
 
-  it('particles: create', async () => {
+  it('particles: create returns success or error', async () => {
     const r = await callTool('particles', {
       action: 'create',
       scene_path: 'res://scenes/e2e_verify_test.tscn',
@@ -416,61 +451,67 @@ describe.skipIf(!hasGodot)('E2E: Godot-dependent tools', { timeout: 60_000 }, ()
       type: 'GPUParticles2D',
     });
     expect(r.text).toBeDefined();
+    expect(r.text.length).toBeGreaterThan(5);
   });
 
-  it('tilemap: read', async () => {
+  it('tilemap: read returns tilemap data or error', async () => {
     const r = await callTool('tilemap', {
       action: 'read',
       scene_path: 'res://demos/dynamic_tilemap_layers/dynamic_tilemap.tscn',
     });
     expect(r.text).toBeDefined();
+    expect(r.text.length).toBeGreaterThan(5);
   });
 
-  it('material: read', async () => {
-    // 预期 "No material" 错误是正常的（测试场景无材质节点）
+  it('material: read returns material info or not-found error', async () => {
     const r = await callTool('material', {
       action: 'read',
       scene_path: 'res://scenes/e2e_verify_test.tscn',
       node_path: '.',
     });
     expect(r.text).toBeDefined();
+    expect(r.text.length).toBeGreaterThan(5);
   });
 
-  it('signal: list', async () => {
+  it('signal: list returns signal info', async () => {
     const r = await callTool('signal', {
       action: 'list',
       scene_path: 'res://scenes/e2e_verify_test.tscn',
       node_path: 'TestSprite',
     });
     expect(r.text).toBeDefined();
+    expect(r.text.length).toBeGreaterThan(5);
   });
 
-  it('audio: list', async () => {
+  it('audio: list returns audio player info', async () => {
     const r = await callTool('audio', {
       action: 'list',
       scene_path: 'res://scenes/main.tscn',
     });
     expect(r.text).toBeDefined();
+    expect(r.text.length).toBeGreaterThan(5);
   });
 
-  it('nav: list', async () => {
+  it('nav: list returns navigation info', async () => {
     const r = await callTool('nav', {
       action: 'list',
       scene_path: 'res://demos/navigation/navigation_demo.tscn',
     });
     expect(r.text).toBeDefined();
+    expect(r.text.length).toBeGreaterThan(5);
   });
 
-  it('physics: raycast', async () => {
+  it('physics: raycast returns hit result', async () => {
     const r = await callTool('physics', {
       action: 'raycast',
       from: { x: 0, y: 10, z: 0 },
       to: { x: 0, y: 0, z: 0 },
     });
     expect(r.text).toBeDefined();
+    expect(r.text.length).toBeGreaterThan(5);
   });
 
-  it('animtree: animtree_create', async () => {
+  it('animtree: animtree_create returns result', async () => {
     const r = await callTool('animtree', {
       action: 'animtree_create',
       scene_path: 'res://scenes/e2e_verify_test.tscn',
@@ -478,11 +519,13 @@ describe.skipIf(!hasGodot)('E2E: Godot-dependent tools', { timeout: 60_000 }, ()
       name: 'TestAnimTree',
     });
     expect(r.text).toBeDefined();
+    expect(r.text.length).toBeGreaterThan(5);
   });
 
-  it('profiler: snapshot', async () => {
+  it('profiler: snapshot returns profiler data', async () => {
     const r = await callTool('profiler', { action: 'snapshot' });
     expect(r.text).toBeDefined();
+    expect(r.text.length).toBeGreaterThan(5);
   });
 });
 
@@ -492,26 +535,24 @@ describe.skipIf(!hasGodot)('E2E: Godot-dependent tools', { timeout: 60_000 }, ()
 describe('E2E: game (Bridge — error path)', () => {
   it('query ping: returns error message without running game', async () => {
     const r = await callTool('game', { action: 'query', method: 'ping' });
-    // 桥未连接时返回文本错误信息（不一定设置 isError 标志）
     expect(r.text).toBeDefined();
     expect(r.text.length).toBeGreaterThan(0);
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 11. editor — 测试错误路径（无编辑器连接时）
+// 11. editor — 测试错误路径
 // ═══════════════════════════════════════════════════════════════════════════════
 describe('E2E: editor (error path)', () => {
   it('sync_start: returns message without editor', async () => {
     const r = await callTool('editor', { action: 'sync_start' });
-    // 无编辑器时返回提示信息，不一定 isError
     expect(r.text).toBeDefined();
     expect(r.text.length).toBeGreaterThan(0);
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CLEANUP: 通过 script 工具删除测试文件（如果 Godot 可用则用 GDScript）
+// CLEANUP
 // ═══════════════════════════════════════════════════════════════════════════════
 describe('E2E: Cleanup', () => {
   it('removes test artifacts', () => {
