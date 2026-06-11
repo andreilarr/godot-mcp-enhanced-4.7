@@ -87,8 +87,7 @@ function enqueueAsync(fn: () => Promise<void>): Promise<void> {
   _queueTail = new Promise<void>((r) => { resolve = r; });
   return prev
     .then(() => fn())
-    .catch(err => { getLogger().error('process-state', `enqueueAsync error: ${err instanceof Error ? err.message : err}`); throw err; })
-    .finally(resolve);
+    .then(resolve, resolve);
 }
 
 // ─── Long-running process lock ──────────────────────────────────────────────

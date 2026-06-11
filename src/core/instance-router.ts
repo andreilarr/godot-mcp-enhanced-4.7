@@ -22,6 +22,8 @@ export class InstanceRouter {
   private selectedId: string | null = null;
   private inflightCount = 0;
   private inflightZeroResolve: (() => void) | null = null;
+  /** I-11: Draining flag — blocks new route() calls while selectInstance waits for in-flight to drain. */
+  private draining = false;
 
   constructor(deps: RouterDependencies) {
     this.deps = deps;
@@ -65,24 +67,30 @@ export class InstanceRouter {
     const inst = this.instanceMap.get(id);
     if (!inst) throw new Error(`Instance not found: ${id}`);
 
-    // Wait for all in-flight requests to complete (with timeout)
-    if (this.inflightCount > 0) {
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(
-          () => reject(new Error(`selectInstance timed out: ${this.inflightCount} in-flight requests still pending after 10s`)),
-          10_000,
-        );
-        this.inflightZeroResolve = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-      });
-    }
+    // I-11: Set draining to block new route() calls during switch
+    this.draining = true;
+    try {
+      // Wait for all in-flight requests to complete (with timeout)
+      if (this.inflightCount > 0) {
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error(`selectInstance timed out: ${this.inflightCount} in-flight requests still pending after 10s`)),
+            10_000,
+          );
+          this.inflightZeroResolve = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+        });
+      }
 
-    const prev = this.selectedId;
-    this.selectedId = id;
-    if (prev !== id) {
-      this.deps.onInstanceChanged?.(inst);
+      const prev = this.selectedId;
+      this.selectedId = id;
+      if (prev !== id) {
+        this.deps.onInstanceChanged?.(inst);
+      }
+    } finally {
+      this.draining = false;
     }
   }
 
@@ -97,6 +105,9 @@ export class InstanceRouter {
 
   /** Route a tool request to the selected instance. Returns error string if no selection. */
   async route(toolName: string, args: Record<string, unknown>): Promise<ToolResult | string> {
+    if (this.draining) {
+      return 'Instance switch in progress. Please retry after the switch completes.';
+    }
     if (!this.selectedId) {
       return 'No instance selected. Use godot_select_instance first.';
     }

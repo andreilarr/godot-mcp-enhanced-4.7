@@ -181,9 +181,9 @@ export async function handleTool(
         if (args.properties) fallbackParams.properties = args.properties;
         const spawnResult = await spawnGodot(godot, ['--headless', '--path', p, '--script', ctx.opsScript, 'add_node', JSON.stringify(fallbackParams)]);
         releaseShortRunningSlot();
-        if (spawnResult.timedOut) return { content: [{ type: 'text', text: 'add_node timed out.' }] };
+        if (spawnResult.timedOut) return { content: [{ type: 'text', text: 'add_node timed out.' }], isError: true };
         if (spawnResult.exitCode === -1 && spawnResult.stdout.startsWith('SPAWN_FAILED:')) return opsErrorResult('SPAWN_FAILED', `Failed to spawn Godot: ${spawnResult.stdout.replace('SPAWN_FAILED: ', '')}`);
-        if (spawnResult.exitCode !== 0) return { content: [{ type: 'text', text: `add_node failed (exit code ${spawnResult.exitCode}):\n${spawnResult.stdout}${spawnResult.stderr ? '\n' + spawnResult.stderr : ''}` }] };
+        if (spawnResult.exitCode !== 0) return { content: [{ type: 'text', text: `add_node failed (exit code ${spawnResult.exitCode}):\n${spawnResult.stdout}${spawnResult.stderr ? '\n' + spawnResult.stderr : ''}` }], isError: true };
         return { content: [{ type: 'text', text: spawnResult.stdout.trim() || 'add_node completed successfully.' }] };
       }
 
@@ -223,9 +223,9 @@ export async function handleTool(
 
       const result = await spawnGodot(godot, ['--headless', '--path', p, '--script', ctx.opsScript, action, JSON.stringify(params)]);
       releaseShortRunningSlot();
-      if (result.timedOut) return { content: [{ type: 'text', text: `${action} timed out.` }] };
+      if (result.timedOut) return { content: [{ type: 'text', text: `${action} timed out.` }], isError: true };
       if (result.exitCode === -1 && result.stdout.startsWith('SPAWN_FAILED:')) return opsErrorResult('SPAWN_FAILED', `Failed to spawn Godot: ${result.stdout.replace('SPAWN_FAILED: ', '')}`);
-      if (result.exitCode !== 0) return { content: [{ type: 'text', text: `${action} failed (exit code ${result.exitCode}):\n${result.stdout}${result.stderr ? '\n' + result.stderr : ''}` }] };
+      if (result.exitCode !== 0) return { content: [{ type: 'text', text: `${action} failed (exit code ${result.exitCode}):\n${result.stdout}${result.stderr ? '\n' + result.stderr : ''}` }], isError: true };
       return { content: [{ type: 'text', text: result.stdout.trim() || `${action} completed successfully.` }] };
     }
 

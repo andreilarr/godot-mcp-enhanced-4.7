@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import type { InstanceRef } from './agent-context.js';
+import { getLogger } from './logger.js';
 
 const STATE_FILENAME = 'mcp-state.json';
 const DEBOUNCE_MS = 2000;
@@ -72,8 +73,9 @@ export class FileStateStore {
       if (this.generation === genBeforeWrite) {
         this.cachedState = null;
       }
-    } catch {
-      // 写入失败 — 保留 cachedState，下次 markDirty 或 flush 时重试
+    } catch (err) {
+      // A-18: Log flush failure instead of silently swallowing
+      getLogger().error('state-store', `flush failed: ${err instanceof Error ? err.message : err}`);
     }
   }
 

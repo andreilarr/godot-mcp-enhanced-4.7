@@ -51,11 +51,11 @@ const BLOCKED_PROPERTIES := [
 	"input_event", "ready", "tree_entered", "tree_exited", "tree_exiting",
 ]
 
-# WARNING: "get" + "get_property_list" can enumerate most public properties.
-# This is intentional for debugging but be aware of the information disclosure vector.
+# I-06: get_property_list removed from remote-allowed methods to prevent property enumeration.
+# It is still used internally by _get_all_properties() but not exposed to remote callers.
 const ALLOWED_METHODS := [
 	"get", "get_class", "get_path", "get_children", "get_child", "get_child_count",
-	"get_parent", "get_property_list", "has_method", "is_class", "get_instance_id",
+	"get_parent", "has_method", "is_class", "get_instance_id",
 	"get_meta", "has_meta", "has_signal", "get_signal_list", "get_signal_connection_list",
 	"get_incoming_connections", "get_index", "get_groups", "is_in_group",
 	"is_inside_tree", "is_part_of_edited_scene", "get_owner",

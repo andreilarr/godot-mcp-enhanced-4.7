@@ -66,6 +66,7 @@ export function parseGdscriptResult(
       try {
         data[entry.key] = JSON.parse(entry.value);
       } catch {
+        warnings.push(`Output key "${entry.key}" is not valid JSON, stored as raw string`);
         data[entry.key] = entry.value;
       }
     }

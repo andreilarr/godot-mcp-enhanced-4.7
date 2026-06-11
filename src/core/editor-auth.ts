@@ -1,5 +1,6 @@
 // src/core/editor-auth.ts
 import { readFileSync, chmodSync, statSync, existsSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { execFileSync } from 'child_process';
 import { userInfo } from 'os';
@@ -82,6 +83,24 @@ export function readEditorSecret(projectPath: string): string | null {
   }
 }
 
+/** Async version of readEditorSecret — avoids blocking the event loop in polling loops. */
+async function readEditorSecretAsync(projectPath: string): Promise<string | null> {
+  const secretPath = join(projectPath, '.godot', SECRET_FILE_NAME);
+  try {
+    if (!checkFilePermissions(secretPath)) {
+      getLogger().error('security', `Refusing to use editor secret with insecure permissions: ${secretPath}`);
+      return null;
+    }
+    const content = (await readFile(secretPath, 'utf-8')).trim();
+    return content;
+  } catch (err: unknown) {
+    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      getLogger().error('auth', `Failed to read editor secret: ${(err as NodeJS.ErrnoException).code} — ${getErrorMessage(err)}`);
+    }
+    return null;
+  }
+}
+
 /** Poll for the editor secret file to appear (plugin may still be starting). */
 export async function waitForEditorSecret(
   projectPath: string,
@@ -96,9 +115,9 @@ export async function waitForEditorSecret(
       await new Promise(r => setTimeout(r, interval));
       continue;
     }
-    const secret = readEditorSecret(projectPath);
+    const secret = await readEditorSecretAsync(projectPath);
     if (secret) return secret;
     await new Promise(r => setTimeout(r, interval));
   }
-  return readEditorSecret(projectPath);
+  return readEditorSecretAsync(projectPath);
 }

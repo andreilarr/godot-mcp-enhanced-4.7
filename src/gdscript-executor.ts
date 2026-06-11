@@ -52,6 +52,8 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   // Legitimate Callable.call(variable) is NOT flagged — internal tools use this (e.g. physics-ops collision_overlay).
   { pattern: /\.call\s*\(\s*["']/, label: 'Indirect call via .call("string") (sandbox bypass)' },
   { pattern: /\.callv\s*\(\s*["']/, label: 'Indirect call via .callv("string") (sandbox bypass)' },
+  // A-09: Expression.execute can evaluate arbitrary expressions
+  { pattern: /Expression\b.*\.execute\b/, label: 'Expression.execute (arbitrary code execution)' },
 ];
 
 /**
@@ -254,10 +256,26 @@ async function cleanupOldSessions(): Promise<void> {
         dirAge = now - stat.mtimeMs;
       }
       if (stat.isDirectory() && dirAge > maxAge) {
-        await rm(dirPath, { recursive: true, force: true });
+        // A-07: Retry rm on EPERM/EBUSY (Windows file locking) with backoff
+        await retryRm(dirPath);
       }
     }
   } catch (err) { getLogger().debug('gdscript', `cleanup stale dirs: ${err}`); }
+}
+
+/** A-07: Retry rm with backoff for EPERM/EBUSY errors on Windows. */
+async function retryRm(dirPath: string, maxRetries = 3): Promise<void> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await rm(dirPath, { recursive: true, force: true });
+      return;
+    } catch (err: unknown) {
+      const isRetryable = err instanceof Error && 'code' in err &&
+        ((err as NodeJS.ErrnoException).code === 'EPERM' || (err as NodeJS.ErrnoException).code === 'EBUSY');
+      if (!isRetryable || attempt === maxRetries) throw err;
+      await new Promise(r => setTimeout(r, 200 * (attempt + 1)));
+    }
+  }
 }
 
 async function writeTempScript(code: string, sessionDir: string): Promise<string> {

@@ -177,13 +177,14 @@ export async function handleTool(
 
   // Execute the dynamic route via injected HTTP sender
   const toolArgs = (args.arguments as Record<string, unknown>) ?? {};
-  if (!_dynamicSender) {
+  const sender = _dynamicSender;
+  if (!sender) {
     return textResult(JSON.stringify(opsError('NO_DYNAMIC_SENDER',
       'Dynamic routing sender not configured. Multi-instance mode may not be enabled.')));
   }
 
   try {
-    return await _dynamicSender(route, toolArgs);
+    return await sender(route, toolArgs);
   } catch (err) {
     return textResult(JSON.stringify(opsError('DYNAMIC_ROUTE_ERROR', getErrorMessage(err))));
   }
@@ -193,13 +194,14 @@ export async function handleTool(
 
 /** Delegate a call to the target tool via the registered delegate. */
 async function delegateCall(targetTool: string, args: Record<string, unknown>): Promise<ToolResult> {
-  if (!_delegate) {
+  const delegate = _delegate;
+  if (!delegate) {
     return textResult(JSON.stringify(opsError('NO_DELEGATE', 'Proxy delegate not configured')));
   }
 
   const toolArgs = (args.arguments as Record<string, unknown>) ?? {};
   try {
-    return await _delegate(targetTool, toolArgs);
+    return await delegate(targetTool, toolArgs);
   } catch (err) {
     return textResult(JSON.stringify(opsError('PROXY_ERROR', getErrorMessage(err))));
   }

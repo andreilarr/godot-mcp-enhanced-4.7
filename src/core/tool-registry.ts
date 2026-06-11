@@ -2,6 +2,7 @@
 
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolResult, ToolContext } from '../types.js';
+import { getLogger } from './logger.js';
 
 // ─── Tool metadata ──────────────────────────────────────────────────────────
 
@@ -154,7 +155,7 @@ export const TOOL_GROUPS: Record<string, ToolGroupDef> = {
   // game_design → validation (validate_gdd/chain_verify)
   // templates → project (list/apply)
   multi_instance: { description: '多实例', tools: ['godot_list_instances', 'godot_select_instance'], requires: [] },
-  dynamic: { description: '动态工具（Godot 端注册但 MCP 侧未定义）', tools: ['godot_advanced_tool'], requires: [] },
+  dynamic: { description: '动态工具（Godot 端注册但 MCP 侧未定义）', tools: ['godot_advanced_tool', 'godot_list_dynamic_routes'], requires: [] },
 };
 
 /** 6 preset profiles. Each maps to an array of group names. */
@@ -289,7 +290,7 @@ export function tryLegacyMapping(toolName: string): { tool: string; action: stri
   if (!WARN_LEGACY()) return null;
   const mapped = LEGACY_TOOL_MAP[toolName];
   if (mapped) {
-    console.warn(`[LEGACY] "${toolName}" → ${mapped.tool}(action="${mapped.action}")`);
+    getLogger().warn('legacy', `"${toolName}" → ${mapped.tool}(action="${mapped.action}")`);
     return mapped;
   }
   return null;

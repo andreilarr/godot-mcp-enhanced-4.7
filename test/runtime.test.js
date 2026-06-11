@@ -41,9 +41,13 @@ vi.mock('fs', () => ({
   existsSync: vi.fn(() => true),
 }));
 
-vi.mock('path', () => ({
-  join: vi.fn((...args) => args.join('/')),
-}));
+vi.mock('path', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    join: vi.fn((...args) => args.join('/')),
+  };
+});
 
 import {
   getToolDefinitions,
@@ -98,7 +102,7 @@ describe('runtime getToolDefinitions', () => {
     expect(defs[0].name).toBe('runtime');
   });
 
-  it('tool has action enum with 6 operations', () => {
+  it('tool has action enum with all operations', () => {
     const defs = getToolDefinitions();
     const actionEnum = defs[0].inputSchema.properties.action.enum;
     expect(actionEnum).toEqual([
@@ -108,6 +112,11 @@ describe('runtime getToolDefinitions', () => {
       'get_debug_output',
       'run_tests',
       'get_godot_version',
+      'record_start',
+      'record_stop',
+      'record_save',
+      'record_load',
+      'record_play',
     ]);
   });
 

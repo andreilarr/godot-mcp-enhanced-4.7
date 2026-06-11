@@ -97,7 +97,7 @@ describe('resolveProjectPath', () => {
     resolveProjectPath(); // Populate cache
 
     vi.useFakeTimers();
-    vi.advanceTimersByTime(31_000);
+    vi.advanceTimersByTime(301_000); // A-05: TTL changed from 30s to 5min
 
     mockExists.mockClear();
     mockExists.mockReturnValue(true);

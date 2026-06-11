@@ -301,7 +301,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           if (settled) return;
           settled = true;
           releaseShortRunningSlot();
-          resolve({ content: [{ type: 'text', text: `Error: ${err.message}` }] });
+          resolve({ content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true });
         });
       });
     }
@@ -337,7 +337,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           if (settled) return;
           settled = true;
           releaseShortRunningSlot();
-          resolve({ content: [{ type: 'text', text: `Error: ${err.message}` }] });
+          resolve({ content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true });
         });
       });
     }

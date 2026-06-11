@@ -52,10 +52,10 @@ export function validateProjectRoot(p: string): string {
 
 // ─── Project path resolution (shared with ToolDispatcher) ────────────────────
 
-/** 30s TTL cache — project path rarely changes mid-session */
+/** 5min TTL cache — project path rarely changes mid-session */
 let _resolvedProjectPath: string | undefined;
 let _resolvedProjectPathTime = 0;
-const PROJECT_PATH_CACHE_TTL_MS = 30_000;
+const PROJECT_PATH_CACHE_TTL_MS = 300_000;
 
 /**
  * Resolve project path with priority chain:
@@ -210,14 +210,10 @@ function ensureSep(p: string): string {
  * Priority (highest wins):
  * 1. GODOT_MCP_UNRESTRICTED=true → allow everything (dev mode)
  * 2. ALLOWED_PROJECT_PATHS=/path1;/path2 → allow only listed roots + children
- * 3. No config (local) → allow all (allow-by-default for discoverability)
- * 4. No config (CI) → restrict to process.cwd()
+ * 3. No config → restrict to process.cwd() (deny-by-default)
  *
- * Why allow-by-default? This MCP server is designed for local development
- * where the user runs it against their own projects. Restricting by default
- * would break first-run experience and provide minimal security benefit
- * on a single-user workstation. Users in shared environments should set
- * ALLOWED_PROJECT_PATHS explicitly.
+ * C-07: Changed from allow-by-default to deny-by-default.
+ * Users must explicitly opt in via ALLOWED_PROJECT_PATHS or GODOT_MCP_UNRESTRICTED.
  */
 export function isPathInAllowedRoots(requestedPath: string): boolean {
   if (process.env.GODOT_MCP_UNRESTRICTED === 'true') {
@@ -225,30 +221,25 @@ export function isPathInAllowedRoots(requestedPath: string): boolean {
       getLogger().info('security', 'GODOT_MCP_UNRESTRICTED=true — all path restrictions bypassed');
       _pathAllowLogged.add('unrestricted');
     }
+    // A-10: Debug-level audit log for every path access in unrestricted mode
+    getLogger().debug('security', `UNRESTRICTED path access: ${requestedPath}`);
     return true;
   }
   const allowed = getAllowedProjectPaths();
   if (allowed.length === 0) {
-    const isCI = process.env.CI === 'true' || !process.stdout.isTTY;
-    if (isCI) {
-      // C-07: CI/shared environments — deny-by-default, fall back to cwd only
-      if (!_pathAllowLogged.has('ci-cwd-fallback')) {
-        getLogger().warn('security',
-          'ALLOWED_PROJECT_PATHS not configured in CI — restricting to process.cwd(). ' +
-          'Set ALLOWED_PROJECT_PATHS=/path1;/path2 for explicit control.');
-        _pathAllowLogged.add('ci-cwd-fallback');
-      }
-      const cwd = resolvePath('.');
-      const resolved = resolvePath(requestedPath);
-      return resolved === cwd || resolved.startsWith(ensureSep(cwd));
+    // C-07: deny-by-default — restrict to cwd when no explicit allowlist configured.
+    // Users must set ALLOWED_PROJECT_PATHS=/path1;/path2 or GODOT_MCP_UNRESTRICTED=true
+    // to access paths outside cwd.
+    if (!_pathAllowLogged.has('cwd-fallback')) {
+      getLogger().warn('security',
+        'ALLOWED_PROJECT_PATHS not configured — restricting to process.cwd(). ' +
+        'Set ALLOWED_PROJECT_PATHS=/path1;/path2 for explicit control, ' +
+        'or GODOT_MCP_UNRESTRICTED=true to disable restrictions.');
+      _pathAllowLogged.add('cwd-fallback');
     }
-    if (!_pathAllowLogged.has('unconfigured')) {
-      getLogger().info('security',
-        'ALLOWED_PROJECT_PATHS not configured — allowing all project paths. ' +
-        'Set ALLOWED_PROJECT_PATHS=/path1;/path2 to restrict access.');
-      _pathAllowLogged.add('unconfigured');
-    }
-    return true;
+    const cwd = resolvePath('.');
+    const resolved = resolvePath(requestedPath);
+    return resolved === cwd || resolved.startsWith(ensureSep(cwd));
   }
   const resolved = resolvePath(requestedPath);
   return allowed.some(p => resolved === p || resolved.startsWith(ensureSep(p)));

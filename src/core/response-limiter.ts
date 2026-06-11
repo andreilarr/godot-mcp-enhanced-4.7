@@ -28,7 +28,8 @@ export function decodeCursor(cursor: string): CursorData | null {
     const b64 = cursor.slice(3);
     const json = Buffer.from(b64, 'base64').toString('utf-8');
     const parsed = JSON.parse(json);
-    if (typeof parsed === 'object' && parsed !== null && typeof parsed.offset === 'number') {
+    if (typeof parsed === 'object' && parsed !== null && typeof parsed.offset === 'number'
+        && Number.isFinite(parsed.offset) && parsed.offset >= 0) {
       return { offset: parsed.offset };
     }
     return null;

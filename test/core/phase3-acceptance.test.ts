@@ -289,7 +289,8 @@ describe('Profile → dynamic group → tool expansion end-to-end', () => {
     // 验证 PROFILES 声明和 expandGroups 运行时结果一致
     const dynamicTools = expandGroups(['dynamic']);
     expect(dynamicTools.has('godot_advanced_tool')).toBe(true);
-    expect(dynamicTools.size).toBe(1); // dynamic 组只有一个工具
+    expect(dynamicTools.has('godot_list_dynamic_routes')).toBe(true);
+    expect(dynamicTools.size).toBe(2); // I-10: dynamic 组现在有 2 个工具
   });
 
   it('TOOL_GROUPS.dynamic.tools matches what expandGroups returns', () => {

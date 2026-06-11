@@ -384,17 +384,20 @@ export class ToolDispatcher {
   }
 
   /** I-05: Convert camelCase arg keys to snake_case, recursively for nested plain objects. */
+  private static readonly MAX_NORMALIZE_DEPTH = 5;
   private normalizeArgs(rawArgs: Record<string, unknown> | undefined, depth = 0): Record<string, unknown> {
-    if (!rawArgs || depth > 5) {
+    if (!rawArgs || depth > ToolDispatcher.MAX_NORMALIZE_DEPTH) {
       // I-04: Warn when recursion limit is hit — nested params won't get snake_case conversion
-      if (rawArgs && depth > 5) log('normalizeArgs: depth limit (5) reached, keys beyond this depth won\'t be converted');
+      if (rawArgs && depth > ToolDispatcher.MAX_NORMALIZE_DEPTH) log(`normalizeArgs: depth limit (${ToolDispatcher.MAX_NORMALIZE_DEPTH}) reached, keys beyond this depth won't be converted`);
       return rawArgs ?? {};
     }
     const args: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(rawArgs)) {
       const snake = key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
       // Recursively normalize nested plain objects (e.g. layout/flex params in UI tools)
-      if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+      // A-16: Skip class instances (Error, etc.) — only recurse into plain objects
+      if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)
+          && Object.getPrototypeOf(value) === Object.prototype) {
         args[snake] = this.normalizeArgs(value as Record<string, unknown>, depth + 1);
       } else {
         args[snake] = value;

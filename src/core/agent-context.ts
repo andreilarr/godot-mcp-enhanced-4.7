@@ -63,10 +63,15 @@ export class AgentContextManager {
 
   cleanup(): void {
     const now = Date.now();
+    // A-19: Collect keys first to avoid mutation during iteration
+    const toDelete: string[] = [];
     for (const [id, state] of this.agents) {
       if (state.isEphemeral && (now - state.lastSeen) > EPHEMERAL_AGENT_TTL) {
-        this.agents.delete(id);
+        toDelete.push(id);
       }
+    }
+    for (const id of toDelete) {
+      this.agents.delete(id);
     }
   }
 
