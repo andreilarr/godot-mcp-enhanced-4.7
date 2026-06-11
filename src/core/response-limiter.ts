@@ -100,13 +100,24 @@ export function trimToArrayLimit(data: unknown, limitBytes: number): unknown {
   if (estimatedFit < 0) estimatedFit = 0;
 
   // Refine with limited binary search (max 5 iterations)
+  // Optimization: cache stringify results to avoid redundant JSON.stringify per iteration.
+  // Instead of building a new object + stringify each time, we compute the byte length
+  // incrementally by measuring only the array portion (non-array part is constant).
+  const nonArrayJson = JSON.stringify(nonArrayFields);
+  const nonArrayByteLen = Buffer.byteLength(nonArrayJson, 'utf-8');
+  // The full JSON is: nonArrayJson without closing "}" + "," + largestKey + ":" + arrayJson + "}"
+  const prefix = nonArrayJson.slice(0, -1) + ',' + JSON.stringify(largestKey) + ':';
+  const prefixByteLen = Buffer.byteLength(prefix, 'utf-8');
+  const suffixByteLen = 1; // closing "}"
+
   let lo: number;
   let hi: number;
   let best: number;
 
   // First verify the estimate itself
-  const probeEstimate = { ...nonArrayFields, [largestKey]: originalArray.slice(0, estimatedFit) };
-  if (Buffer.byteLength(JSON.stringify(probeEstimate), 'utf-8') <= limitBytes) {
+  const estimateArrayJson = JSON.stringify(originalArray.slice(0, estimatedFit));
+  const estimateTotalBytes = prefixByteLen + Buffer.byteLength(estimateArrayJson, 'utf-8') + suffixByteLen;
+  if (estimateTotalBytes <= limitBytes) {
     lo = estimatedFit;
     hi = originalArray.length;
     best = estimatedFit;
@@ -118,8 +129,9 @@ export function trimToArrayLimit(data: unknown, limitBytes: number): unknown {
 
   for (let i = 0; i < 5 && lo <= hi; i++) {
     const mid = Math.floor((lo + hi) / 2);
-    const probe = { ...nonArrayFields, [largestKey]: originalArray.slice(0, mid) };
-    if (Buffer.byteLength(JSON.stringify(probe), 'utf-8') <= limitBytes) {
+    const midArrayJson = JSON.stringify(originalArray.slice(0, mid));
+    const midTotalBytes = prefixByteLen + Buffer.byteLength(midArrayJson, 'utf-8') + suffixByteLen;
+    if (midTotalBytes <= limitBytes) {
       best = mid;
       lo = mid + 1;
     } else {

@@ -3,7 +3,7 @@ import { resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 
-import { validatePath, resolveWithinRoot, ensureDir, normalizeUserProjectPath, parseConfigValue, isPathInAllowedRoots, _resetPathAllowWarned } from '../src/helpers.js';
+import { validatePath, resolveWithinRoot, ensureDir, normalizeUserProjectPath, parseConfigValue, isPathInAllowedRoots, allowOutsideProjectPaths, _resetPathAllowWarned } from '../src/helpers.js';
 import { getLogger, resetLogger } from '../src/core/logger.js';
 
 // I-01: Reset logger singleton between tests to prevent state leakage
@@ -186,6 +186,41 @@ describe('parseConfigValue (I-06)', () => {
   });
 });
 
+// ─── allowOutsideProjectPaths ──────────────────────────────────────────────
+
+describe('allowOutsideProjectPaths', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.ALLOWED_PROJECT_PATHS;
+    delete process.env.GODOT_MCP_UNRESTRICTED;
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
+  });
+
+  it('should return true when GODOT_MCP_UNRESTRICTED=true', () => {
+    process.env.GODOT_MCP_UNRESTRICTED = 'true';
+    expect(allowOutsideProjectPaths()).toBe(true);
+  });
+
+  it('should return true when ALLOWED_PROJECT_PATHS is configured', () => {
+    process.env.ALLOWED_PROJECT_PATHS = '/tmp';
+    expect(allowOutsideProjectPaths()).toBe(true);
+  });
+
+  it('should return false when nothing is configured', () => {
+    expect(allowOutsideProjectPaths()).toBe(false);
+  });
+
+  it('should return false when ALLOWED_PROJECT_PATHS is empty string', () => {
+    process.env.ALLOWED_PROJECT_PATHS = '';
+    expect(allowOutsideProjectPaths()).toBe(false);
+  });
+});
+
 // ─── isPathInAllowedRoots ──────────────────────────────────────────────────
 
 describe('isPathInAllowedRoots', () => {
@@ -203,29 +238,19 @@ describe('isPathInAllowedRoots', () => {
     process.env = originalEnv;
   });
 
-  it('should allow all paths when no whitelist set (allow-by-default in TTY)', () => {
-    // After v0.18.0: unconfigured + CI/non-TTY = cwd-only; TTY = allow all
-    // Simulate TTY environment (local dev) for the allow-by-default behavior
-    const origCI = process.env.CI;
-    process.env.CI = undefined;
-    // Note: !process.stdout.isTTY is true in test runners (non-TTY),
-    // so without CI=true we still hit the cwd-only branch.
-    // Set GODOT_MCP_UNRESTRICTED to test the allow-all path explicitly:
+  it('should allow all paths when GODOT_MCP_UNRESTRICTED=true', () => {
+    // C-07: deny-by-default — unrestricted flag is the only way to allow all paths
     process.env.GODOT_MCP_UNRESTRICTED = 'true';
     expect(isPathInAllowedRoots('/definitely/outside/path')).toBe(true);
     expect(isPathInAllowedRoots('/any/other/path')).toBe(true);
     process.env.GODOT_MCP_UNRESTRICTED = undefined;
-    process.env.CI = origCI;
   });
 
-  it('should restrict to cwd in CI when no whitelist set', () => {
-    // C-07: CI environments fallback to cwd-only when unconfigured
-    const origCI = process.env.CI;
-    process.env.CI = 'true';
+  it('should restrict to cwd when no whitelist set (deny-by-default)', () => {
+    // C-07: deny-by-default — all unconfigured environments restrict to cwd
     _resetPathAllowWarned();
     expect(isPathInAllowedRoots(process.cwd())).toBe(true);
     expect(isPathInAllowedRoots('/definitely/outside/path')).toBe(false);
-    process.env.CI = origCI;
   });
 
   it('should allow GODOT_MCP_UNRESTRICTED to bypass', () => {

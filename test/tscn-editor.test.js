@@ -49,12 +49,12 @@ describe('tscn-editor findInstanceNode', () => {
   it('should find instance node by name at root level', () => {
     // node_path "root/Player" → nodeName="Player", tscnParent="."
     const info = findInstanceNode(TARGET_TSCN, 'Player', '.');
-    expect(info).toBeTruthy();
+    expect(info).not.toBeNull();
     expect(info.instanceId).toBe(1);
     expect(info.sourcePath).toBe('res://scenes/player.tscn');
     expect(info.propertyOverrides.length).toBe(2);
-    expect(info.propertyOverrides[0].includes('position')).toBeTruthy();
-    expect(info.propertyOverrides[1].includes('visible')).toBeTruthy();
+    expect(info.propertyOverrides[0].includes('position')).toBe(true);
+    expect(info.propertyOverrides[1].includes('visible')).toBe(true);
   });
 
   it('should return null for non-instance node', () => {
@@ -106,13 +106,13 @@ describe('tscn-editor detachInstance', () => {
     const result = detachInstance(TARGET_TSCN, SOURCE_TSCN, 'Player', '.');
 
     // Should contain the expanded root node (CharacterBody2D) instead of instance=ExtResource
-    expect(result.includes('[node name="Player" type="CharacterBody2D"')).toBeTruthy();
-    expect(!result.includes('instance=ExtResource')).toBeTruthy();
+    expect(result.includes('[node name="Player" type="CharacterBody2D"')).toBe(true);
+    expect(result.includes('instance=ExtResource')).toBe(false);
 
     // Should contain child nodes with adjusted parent
-    expect(result.includes('parent="Player"')).toBeTruthy();
-    expect(result.includes('Sprite2D')).toBeTruthy();
-    expect(result.includes('CollisionShape2D')).toBeTruthy();
+    expect(result.includes('parent="Player"')).toBe(true);
+    expect(result.includes('Sprite2D')).toBe(true);
+    expect(result.includes('CollisionShape2D')).toBe(true);
     expect(result).toMatchSnapshot('detach-instance-basic');
   });
 
@@ -120,12 +120,12 @@ describe('tscn-editor detachInstance', () => {
     const result = detachInstance(TARGET_TSCN, SOURCE_TSCN, 'Player', '.');
 
     // Property overrides should be present
-    expect(result.includes('position = Vector2(100, 200)')).toBeTruthy();
-    expect(result.includes('visible = false')).toBeTruthy();
+    expect(result.includes('position = Vector2(100, 200)')).toBe(true);
+    expect(result.includes('visible = false')).toBe(true);
 
     // Source properties should also be present
-    expect(result.includes('speed = 200.0')).toBeTruthy();
-    expect(result.includes('script = ExtResource')).toBeTruthy();
+    expect(result.includes('speed = 200.0')).toBe(true);
+    expect(result.includes('script = ExtResource')).toBe(true);
   });
 
   it('should remap ext_resource IDs to avoid conflicts', () => {
@@ -138,22 +138,22 @@ describe('tscn-editor detachInstance', () => {
 [node name="Player" parent="." instance=ExtResource("5")]
 `;
     const info = findInstanceNode(targetWithHighIds, 'Player', '.');
-    expect(info).toBeTruthy();
+    expect(info).not.toBeNull();
 
     const result = detachInstance(targetWithHighIds, SOURCE_WITH_EXT_CONFLICT, 'Player', '.');
 
     // Source had id="1" and id="2" — should be remapped to 6, 7 (target max was 5)
-    expect(result.includes('id="6"')).toBeTruthy();
-    expect(result.includes('id="7"')).toBeTruthy();
+    expect(result.includes('id="6"')).toBe(true);
+    expect(result.includes('id="7"')).toBe(true);
     // ExtResource("6") and ExtResource("7") should appear in node property lines
-    expect(result.includes('ExtResource("6")')).toBeTruthy();
+    expect(result.includes('ExtResource("6")')).toBe(true);
   });
 
   it('should remove unused ext_resource for the instance', () => {
     const result = detachInstance(TARGET_TSCN, SOURCE_TSCN, 'Player', '.');
 
     // The PackedScene ext_resource (id="1") should be removed since no other node uses it
-    expect(!result.includes('path="res://scenes/player.tscn"')).toBeTruthy();
+    expect(result.includes('path="res://scenes/player.tscn"')).toBe(false);
   });
 
   it('should keep ext_resource if still referenced by other nodes', () => {
@@ -171,17 +171,17 @@ position = Vector2(100, 200)
     const result = detachInstance(targetMultiRef, SOURCE_TSCN, 'Player', '.');
 
     // The PackedScene ext_resource should be kept because Player2 still references it
-    expect(result.includes('path="res://scenes/player.tscn"')).toBeTruthy();
+    expect(result.includes('path="res://scenes/player.tscn"')).toBe(true);
   });
 
   it('should update load_steps in header', () => {
     const result = detachInstance(TARGET_TSCN, SOURCE_TSCN, 'Player', '.');
     const headerMatch = result.match(/load_steps=(\d+)/);
-    expect(headerMatch).toBeTruthy();
+    expect(headerMatch).not.toBeNull();
     const steps = parseInt(headerMatch[1]);
     // After detach: 1 ext_resource (script from source) + 1 ext_resource (main.gd) + 1 = 3
     // Removed PackedScene ext_resource. So: main.gd + player.gd + 1 = 3
-    expect(steps >= 2).toBeTruthy();
+    expect(steps >= 2).toBe(true);
   });
 
   it('should throw for non-instance node', () => {
@@ -197,9 +197,9 @@ speed = 100.0
 [node name="Sprite2D" type="Sprite2D" parent="."]
 `;
     const result = detachInstance(TARGET_TSCN, sourceNoExt, 'Player', '.');
-    expect(result.includes('speed = 100.0')).toBeTruthy();
-    expect(result.includes('Sprite2D')).toBeTruthy();
-    expect(result.includes('parent="Player"')).toBeTruthy();
+    expect(result.includes('speed = 100.0')).toBe(true);
+    expect(result.includes('Sprite2D')).toBe(true);
+    expect(result.includes('parent="Player"')).toBe(true);
   });
 
   it('should handle nested parent paths', () => {
@@ -215,10 +215,10 @@ speed = 100.0
 `;
     const result = detachInstance(targetNested, SOURCE_TSCN, 'Enemy', 'Level');
     // Root of source should have parent="Level" and name="Enemy"
-    expect(result.includes('name="Enemy"')).toBeTruthy();
-    expect(result.includes('parent="Level"')).toBeTruthy();
+    expect(result.includes('name="Enemy"')).toBe(true);
+    expect(result.includes('parent="Level"')).toBe(true);
     // Child nodes should have parent="Enemy"
-    expect(result.includes('parent="Enemy"')).toBeTruthy();
+    expect(result.includes('parent="Enemy"')).toBe(true);
   });
 });
 
@@ -245,11 +245,11 @@ health = 100.0
     const result = detachInstance(target, source, 'Player', '.');
 
     // The override value should be present
-    expect(result.includes('speed = 300.0')).toBeTruthy();
+    expect(result.includes('speed = 300.0')).toBe(true);
     // The source value should NOT be present (deduplicated)
-    expect(!result.includes('speed = 200.0')).toBeTruthy();
+    expect(result.includes('speed = 200.0')).toBe(false);
     // Non-overridden source property should still be present
-    expect(result.includes('health = 100.0')).toBeTruthy();
+    expect(result.includes('health = 100.0')).toBe(true);
   });
 
   it('should keep source properties that are not overridden', () => {
@@ -271,10 +271,10 @@ health = 100.0
     const result = detachInstance(target, source, 'Player', '.');
 
     // Both source properties should remain since neither is overridden
-    expect(result.includes('speed = 200.0')).toBeTruthy();
-    expect(result.includes('health = 100.0')).toBeTruthy();
+    expect(result.includes('speed = 200.0')).toBe(true);
+    expect(result.includes('health = 100.0')).toBe(true);
     // Override should also be present
-    expect(result.includes('position = Vector2(100, 200)')).toBeTruthy();
+    expect(result.includes('position = Vector2(100, 200)')).toBe(true);
   });
 });
 
@@ -306,8 +306,8 @@ shape = SubResource("1")
     const result = detachInstance(target, source, 'Player', '.');
 
     // sub_resource should be preserved
-    expect(result.includes('[sub_resource type="RectangleShape2D"')).toBeTruthy();
-    expect(result.includes('size = Vector2(50, 50)')).toBeTruthy();
+    expect(result.includes('[sub_resource type="RectangleShape2D"')).toBe(true);
+    expect(result.includes('size = Vector2(50, 50)')).toBe(true);
   });
 
   it('should remap sub_resource IDs to avoid conflicts with target', () => {
@@ -335,11 +335,11 @@ shape = SubResource("1")
     const result = detachInstance(target, source, 'Player', '.');
 
     // Target has sub_resource id="1", source id="1" should be remapped to id="2"
-    expect(result.includes('[sub_resource type="RectangleShape2D" id="2"]')).toBeTruthy();
+    expect(result.includes('[sub_resource type="RectangleShape2D" id="2"]')).toBe(true);
     // Node reference should be updated to match
-    expect(result.includes('SubResource("2")')).toBeTruthy();
+    expect(result.includes('SubResource("2")')).toBe(true);
     // Target sub_resource should be untouched
-    expect(result.includes('[sub_resource type="CircleShape2D" id="1"]')).toBeTruthy();
+    expect(result.includes('[sub_resource type="CircleShape2D" id="1"]')).toBe(true);
     expect(result).toMatchSnapshot('detach-with-sub-resources');
   });
 
@@ -377,10 +377,10 @@ shape = SubResource("2")
     const result = detachInstance(target, source, 'Player', '.');
 
     // Target max sub_resource id is 2, source ids 1,2 should become 3,4
-    expect(result.includes('[sub_resource type="RectangleShape2D" id="3"]')).toBeTruthy();
-    expect(result.includes('[sub_resource type="ConvexPolygonShape2D" id="4"]')).toBeTruthy();
-    expect(result.includes('SubResource("3")')).toBeTruthy();
-    expect(result.includes('SubResource("4")')).toBeTruthy();
+    expect(result.includes('[sub_resource type="RectangleShape2D" id="3"]')).toBe(true);
+    expect(result.includes('[sub_resource type="ConvexPolygonShape2D" id="4"]')).toBe(true);
+    expect(result.includes('SubResource("3")')).toBe(true);
+    expect(result.includes('SubResource("4")')).toBe(true);
   });
 });
 
@@ -408,9 +408,9 @@ script = ExtResource("1")
     const result = detachInstance(target, source, 'Player', '.');
 
     // Connection should be present with remapped paths
-    expect(result.includes('signal="pressed"')).toBeTruthy();
-    expect(result.includes('from="Player/Button"')).toBeTruthy();
-    expect(result.includes('to="Player"')).toBeTruthy();
+    expect(result.includes('signal="pressed"')).toBe(true);
+    expect(result.includes('from="Player/Button"')).toBe(true);
+    expect(result.includes('to="Player"')).toBe(true);
     expect(result).toMatchSnapshot('detach-with-connections');
   });
 
@@ -438,7 +438,7 @@ script = ExtResource("1")
 `;
     const result = detachInstance(target, source, 'UI', '.');
 
-    expect(result.includes('from="UI/Panel/CloseBtn"')).toBeTruthy();
-    expect(result.includes('to="UI"')).toBeTruthy();
+    expect(result.includes('from="UI/Panel/CloseBtn"')).toBe(true);
+    expect(result.includes('to="UI"')).toBe(true);
   });
 });

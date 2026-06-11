@@ -48,7 +48,7 @@ describe('wrapSnippet', () => {
     // print call should be indented under _initialize
     const lines = result.split('\n');
     const printLine = lines.find(l => l.includes('print(my_helper())'));
-    expect(printLine).toBeTruthy();
+    expect(printLine).toBeDefined();
     expect(printLine.startsWith('\t')).toBe(true);
   });
 

@@ -1,16 +1,18 @@
 /**
  * helpers.ts — Aggregated re-export barrel (I-ARCH-03)
  *
- * Original implementations moved to:
+ * @deprecated since v0.19.0 — Import directly from the split modules instead:
  *   - src/core/path-utils.ts    (path security, traversal protection)
  *   - src/core/config-parser.ts  (config parsing, MCP output parsing)
  *   - src/core/file-scanner.ts   (recursive file scanning)
  *
  * This file re-exports everything for backward compatibility.
  * 37 import sites continue to work without changes.
+ * TODO: v0.20.0 remove barrel — migrate all import sites to direct module imports.
  */
 
 // ─── Re-export from split modules ─────────────────────────────────────────────
+// TODO: v0.20.0 remove barrel — migrate import sites to './core/path-utils.js'
 export {
   iterativeDecode,
   resolvePath,
@@ -25,14 +27,17 @@ export {
 } from './core/path-utils.js';
 // Note: WINDOWS_DEVICE_RE intentionally NOT re-exported — internal to path-utils
 
+// TODO: v0.20.0 remove barrel — migrate import sites to './core/config-parser.js'
 export {
   parseConfigValue,
   parseGodotConfig,
   parseMcpScriptOutput,
 } from './core/config-parser.js';
 
+// TODO: v0.20.0 remove barrel — migrate import sites to './core/config-parser.js'
 export type { GodotConfig } from './core/config-parser.js';
 
+// TODO: v0.20.0 remove barrel — migrate import sites to './core/file-scanner.js'
 export {
   scanFiles,
   DEFAULT_SKIP_DIRS,
