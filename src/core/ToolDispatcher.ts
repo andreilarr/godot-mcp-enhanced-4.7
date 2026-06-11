@@ -19,6 +19,7 @@ import {
   MINIMAL_TOOLS,
   registerInlineTool,
   resolveProfile,
+  skipProjectPath,
   tryLegacyMapping,
 } from './tool-registry.js';
 import { isPathInAllowedRoots, parseGodotConfig } from '../helpers.js';
@@ -198,7 +199,7 @@ export class ToolDispatcher {
 
     try {
       // ── 0.5. Default project_path injection ──
-      if (!args.project_path) {
+      if (!args.project_path && !skipProjectPath(name)) {
         const resolved = resolveProjectPath();
         if (!resolved) {
           return opsErrorResult(

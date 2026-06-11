@@ -268,6 +268,31 @@ export function isOfflineCapable(toolName: string): boolean {
   return OFFLINE_TOOLS.has(toolName);
 }
 
+// ─── Tools that don't require project_path ────────────────────────────────
+
+/** Tools that operate globally and should not require project_path.
+ *
+ * 与 ALWAYS_ALLOWED 的交集：manage_tools, confirm_and_execute, godot_advanced_tool
+ * — 这三个工具既是"始终允许"也是"无需项目路径"，因它们操作全局注册表/内存状态。
+ *
+ * 其余 4 个（docs, godot_list_instances, godot_list_dynamic_routes, godot_select_instance）
+ * 不在 ALWAYS_ALLOWED 中（可能被 profile 过滤掉），但同样不操作文件系统。
+ */
+const NO_PROJECT_PATH_TOOLS = new Set([
+  'docs',                // Godot class documentation lookup — 纯内存操作
+  'manage_tools',        // Tool group management — 操作 tool-registry 内存状态
+  'confirm_and_execute', // Confirmation token executor — 只需 token，内部用 pending.args
+  'godot_advanced_tool', // Dynamic route proxy — 目标工具自身会获取路径
+  'godot_list_instances', // Multi-instance listing — 读注册表数据
+  'godot_list_dynamic_routes', // Dynamic route discovery — 读内存注册表
+  'godot_select_instance', // Multi-instance selection — 可用 instance_id 代替 project_path
+]);
+
+/** Check if a tool should skip project_path validation. */
+export function skipProjectPath(toolName: string): boolean {
+  return NO_PROJECT_PATH_TOOLS.has(toolName);
+}
+
 // ─── Legacy tool mapping (v0.18.0 migration) ────────────────────────────────
 
 /** 类型 A — 独立工具吸收的迁移映射。仅 GODOT_MCP_WARN_LEGACY 模式下生效。 */

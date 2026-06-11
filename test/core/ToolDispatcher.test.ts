@@ -42,6 +42,7 @@ vi.mock('../../src/core/tool-registry.js', () => ({
   isToolAllowed: mockIsToolAllowed,
   setActiveGroups: mockSetActiveGroups,
   resolveProfile: vi.fn().mockReturnValue(new Set()),
+  skipProjectPath: vi.fn().mockReturnValue(false),
   tryLegacyMapping: vi.fn().mockReturnValue(null),
 }));
 
@@ -878,5 +879,57 @@ describe('ToolDispatcher: default project_path injection', () => {
     );
     // resolveProjectPath should NOT be called when explicit path provided
     expect(mockResolve).not.toHaveBeenCalled();
+  });
+
+  it('skips project_path injection for exempt tools (skipProjectPath=true)', async () => {
+    // Make skipProjectPath return true for 'docs'
+    const { skipProjectPath } = await import('../../src/core/tool-registry.js');
+    (skipProjectPath as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+    const mockResolve = _mockResolveProjectPath as ReturnType<typeof vi.fn>;
+    mockResolve.mockReturnValue('/should-not-be-injected');
+
+    const mockModule = { handleTool: vi.fn().mockResolvedValue(mockToolResult) };
+    mockGetModuleForTool.mockReturnValue(mockModule);
+
+    const dispatcher = new ToolDispatcher(createOptions());
+    await dispatcher.handleCall({
+      params: { name: 'docs', arguments: { action: 'search_classes', query: 'Node3D' } },
+    });
+
+    // resolveProjectPath should NOT be called for exempt tools
+    expect(mockResolve).not.toHaveBeenCalled();
+    // args should NOT have project_path injected
+    expect(mockModule.handleTool).toHaveBeenCalledWith(
+      'docs',
+      expect.objectContaining({ action: 'search_classes', query: 'Node3D' }),
+      expect.anything(),
+    );
+    expect(mockModule.handleTool).toHaveBeenCalledWith(
+      'docs',
+      expect.not.objectContaining({ project_path: expect.anything() }),
+      expect.anything(),
+    );
+
+    // Reset mock
+    (skipProjectPath as ReturnType<typeof vi.fn>).mockReturnValue(false);
+  });
+
+  it('still validates project_path type for exempt tools when explicitly provided', async () => {
+    const { skipProjectPath } = await import('../../src/core/tool-registry.js');
+    (skipProjectPath as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+    const dispatcher = new ToolDispatcher(createOptions());
+    const result = await dispatcher.handleCall({
+      params: { name: 'docs', arguments: { action: 'search_classes', query: 'Node3D', project_path: 123 } },
+    });
+
+    // validateCommonArgs should still catch invalid project_path type
+    expect(result.isError).toBe(true);
+    const text = JSON.stringify(result.content);
+    expect(text).toContain('project_path');
+
+    // Reset mock
+    (skipProjectPath as ReturnType<typeof vi.fn>).mockReturnValue(false);
   });
 });
