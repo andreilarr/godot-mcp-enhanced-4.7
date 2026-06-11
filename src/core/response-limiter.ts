@@ -104,9 +104,10 @@ export function trimToArrayLimit(data: unknown, limitBytes: number): unknown {
   // Instead of building a new object + stringify each time, we compute the byte length
   // incrementally by measuring only the array portion (non-array part is constant).
   const isEmpty = Object.keys(nonArrayFields).length === 0;
+  const keyJson = JSON.stringify(largestKey);
   const prefix = isEmpty
-    ? `{"${largestKey}":`
-    : JSON.stringify(nonArrayFields).slice(0, -1) + `,"${largestKey}":`;
+    ? `{${keyJson}:`
+    : JSON.stringify(nonArrayFields).slice(0, -1) + `,${keyJson}:`;
   const prefixByteLen = Buffer.byteLength(prefix, 'utf-8');
   const suffixByteLen = 1; // closing "}"
 
