@@ -83,16 +83,15 @@ export function readEditorSecret(projectPath: string): string | null {
   }
 }
 
-/** Async version of readEditorSecret — avoids blocking the event loop in polling loops. */
-async function readEditorSecretAsync(projectPath: string): Promise<string | null> {
+/**
+ * Lightweight async read — no permission check (caller must check first).
+ * Avoids blocking the event loop with execFileSync (icacls) on every poll.
+ */
+async function readSecretContent(projectPath: string): Promise<string | null> {
   const secretPath = join(projectPath, '.godot', SECRET_FILE_NAME);
   try {
-    if (!checkFilePermissions(secretPath)) {
-      getLogger().error('security', `Refusing to use editor secret with insecure permissions: ${secretPath}`);
-      return null;
-    }
     const content = (await readFile(secretPath, 'utf-8')).trim();
-    return content;
+    return content || null;
   } catch (err: unknown) {
     if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
       getLogger().error('auth', `Failed to read editor secret: ${(err as NodeJS.ErrnoException).code} — ${getErrorMessage(err)}`);
@@ -109,15 +108,30 @@ export async function waitForEditorSecret(
   const interval = 200;
   const deadline = Date.now() + timeoutMs;
   const secretFilePath = join(projectPath, '.godot', SECRET_FILE_NAME);
+  let permChecked = false;
+
   while (Date.now() < deadline) {
     // I-09: Fast path — check existsSync first to avoid expensive execFileSync (icacls) on every poll
     if (!existsSync(secretFilePath)) {
       await new Promise(r => setTimeout(r, interval));
       continue;
     }
-    const secret = await readEditorSecretAsync(projectPath);
+
+    // Check permissions ONCE when file first appears (sync icacls — unavoidable on Windows)
+    if (!permChecked) {
+      if (!checkFilePermissions(secretFilePath)) {
+        getLogger().error('security', `Refusing to use editor secret with insecure permissions: ${secretFilePath}`);
+        return null;
+      }
+      permChecked = true;
+    }
+
+    // Subsequent polls use lightweight async read — no sync icacls
+    const secret = await readSecretContent(projectPath);
     if (secret) return secret;
     await new Promise(r => setTimeout(r, interval));
   }
-  return readEditorSecretAsync(projectPath);
+
+  // Final attempt — still lightweight
+  return readSecretContent(projectPath);
 }

@@ -94,12 +94,20 @@ export class InstanceRouter {
     }
   }
 
-  /** Select instance by project path. Returns selected id or null. */
+  /** Select instance by project path. Returns selected id or null.
+   *  Only safe during initialization (no concurrent route() calls).
+   *  Throws if draining is active (instance switch in progress). */
   selectInstanceByProject(projectPath: string): string | null {
+    if (this.draining) {
+      throw new Error('Instance switch in progress. Cannot select by project path right now.');
+    }
     const inst = this.deps.instances.find(i => i.projectPath === projectPath);
     if (!inst) return null;
+    const prev = this.selectedId;
     this.selectedId = inst.id;
-    this.deps.onInstanceChanged?.(inst);
+    if (prev !== inst.id) {
+      this.deps.onInstanceChanged?.(inst);
+    }
     return inst.id;
   }
 
