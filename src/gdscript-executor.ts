@@ -250,6 +250,8 @@ export interface ExecuteGdscriptResult {
   outputs: OutputEntry[];
   raw_output: string;
   duration_ms: number;
+  /** Auto-detected autoload references (non-empty when load_autoloads was auto-enabled) */
+  autoload_detected?: string[];
 }
 
 export interface ExecuteGdscriptOptions {
@@ -698,6 +700,18 @@ export async function executeGdscript(
   const { godotPath, projectPath, timeout = 30 } = options;
   let code = options.code;
   let loadAutoloads = options.loadAutoloads ?? false;
+  let autoloadDetected: string[] | undefined;
+
+  // Autoload auto-detection: scan code for autoload references when not explicitly set
+  if (options.loadAutoloads === undefined) {
+    const autoloadNames = parseAutoloadNames(projectPath);
+    const matched = detectAutoloadUsage(code, autoloadNames);
+    if (matched.length > 0) {
+      loadAutoloads = true;
+      autoloadDetected = matched;
+      getLogger().info('gdscript', `Auto-detected autoload usage: ${matched.join(', ')}. Enabled load_autoloads.`);
+    }
+  }
   const startTime = Date.now();
 
   // Warn if same project is being used by a running game process
@@ -720,7 +734,7 @@ export async function executeGdscript(
     return {
       success: false, compile_success: false,
       compile_error: `Sandbox violation: code contains dangerous patterns. Set GODOT_MCP_DISABLE_SAFETY=true to override.\n${sandboxWarnings.join('\n')}`,
-      errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0,
+      errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0, autoload_detected: autoloadDetected,
     };
   }
   if (sandboxWarnings.length > 0 && safetyDisabled) {
@@ -932,6 +946,7 @@ export async function executeGdscript(
           outputs: (parsed.outputs || []) as OutputEntry[],
           raw_output: logLines.join('\n'),
           duration_ms: duration,
+          autoload_detected: autoloadDetected,
         });
       } else {
         // No marker found — likely a compile error or crash
@@ -952,6 +967,7 @@ export async function executeGdscript(
               outputs: [],
               raw_output: logLines.join('\n'),
               duration_ms: duration,
+              autoload_detected: autoloadDetected,
             });
             return;
           }
@@ -966,6 +982,7 @@ export async function executeGdscript(
           outputs: [],
           raw_output: logLines.join('\n'),
           duration_ms: duration,
+          autoload_detected: autoloadDetected,
         });
       }
     });
