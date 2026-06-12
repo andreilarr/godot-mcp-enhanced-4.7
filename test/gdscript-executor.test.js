@@ -80,6 +80,28 @@ describe('detectAutoloadUsage', () => {
   });
 });
 
+describe('autoload auto-detection 集成', () => {
+  it('空项目（无 autoload）不会误触发', () => {
+    writeFileSync(join(TMP, 'project.godot'), '[application]\nconfig/name="Empty"', 'utf-8');
+    const names = parseAutoloadNames(TMP);
+    expect(names).toEqual([]);
+    const detected = detectAutoloadUsage('var x = 1', names);
+    expect(detected).toEqual([]);
+  });
+
+  it('autoload 名含下划线正确匹配', () => {
+    const code = 'var x = My_Module.fetch()';
+    const result = detectAutoloadUsage(code, ['My_Module']);
+    expect(result).toContain('My_Module');
+  });
+
+  it('多个 autoload 部分引用只返回匹配的', () => {
+    const code = 'GameManager.reset()';
+    const result = detectAutoloadUsage(code, ['GameManager', 'DataTables', 'GameEvents']);
+    expect(result).toEqual(['GameManager']);
+  });
+});
+
 // === 原有测试继续 ===
 
 const MARKER_RESULT = '___MCP_RESULT___';
