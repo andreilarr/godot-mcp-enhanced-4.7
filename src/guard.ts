@@ -51,7 +51,11 @@ function ensureCleanupTimer(): void {
 // GodotServer.handleToolCall() is the single entry point and always resolves to merged names.
 const GUARDED: Record<string, Set<string> | null> = {
   scene: new Set(['remove_node', 'save_scene', 'detach_instance', 'merge_scene']),
-  script: new Set(['write_script', 'edit_script', 'execute_gdscript', 'project_replace', 'generate_test', 'create_test_scene']), // read_script 免确认
+  // DESIGN DECISION: Using explicit Set (whitelist) instead of null (block-all).
+  // New script actions will default to NOT requiring confirmation. When adding
+  // destructive actions, explicitly add them here. Read-only actions (read_script)
+  // are intentionally exempt.
+  script: new Set(['write_script', 'edit_script', 'execute_gdscript', 'project_replace', 'generate_test', 'create_test_scene']),
   animation: new Set(['delete']),
   tilemap: new Set(['tilemap_clear']),
   game: new Set(['game_bridge_install', 'game_bridge_uninstall']),

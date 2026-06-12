@@ -722,7 +722,7 @@ export async function executeGdscript(
 
   // Hard kill switch: set ALLOW_EXECUTE_GDSCRIPT=false to disable GDScript execution
   if (process.env.ALLOW_EXECUTE_GDSCRIPT === 'false') {
-    return { success: false, compile_success: false, compile_error: 'GDScript execution is disabled (ALLOW_EXECUTE_GDSCRIPT=false)', errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0 };
+    return { success: false, compile_success: false, compile_error: 'GDScript execution is disabled (ALLOW_EXECUTE_GDSCRIPT=false)', errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0, autoload_detected: autoloadDetected };
   }
 
   // C-SEC-02: Sandbox scan — BLOCKS execution on dangerous patterns by default
@@ -755,11 +755,11 @@ export async function executeGdscript(
 
   // Validate godotPath exists and looks like a Godot binary
   if (!existsSync(godotPath)) {
-    return { success: false, compile_success: false, compile_error: `Godot binary not found: ${godotPath}`, errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0 };
+    return { success: false, compile_success: false, compile_error: `Godot binary not found: ${godotPath}`, errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0, autoload_detected: autoloadDetected };
   }
   const binName = basename(godotPath).toLowerCase();
   if (!binName.includes('godot')) {
-    return { success: false, compile_success: false, compile_error: `Binary does not appear to be Godot: ${basename(godotPath)}`, errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0 };
+    return { success: false, compile_success: false, compile_error: `Binary does not appear to be Godot: ${basename(godotPath)}`, errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0, autoload_detected: autoloadDetected };
   }
 
   // P3: Auto-import warmup — ensures .godot/imported/ is fresh before headless execution
@@ -775,7 +775,7 @@ export async function executeGdscript(
 
   // Acquire short-running slot AFTER all validation — ensures no early-return leaks the slot
   if (!acquireShortRunningSlot()) {
-    return { success: false, compile_success: false, compile_error: 'Too many concurrent headless operations (max 3). Please wait and retry.', errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0 };
+    return { success: false, compile_success: false, compile_error: 'Too many concurrent headless operations (max 3). Please wait and retry.', errors: [], run_success: false, run_error: '', outputs: [], raw_output: '', duration_ms: 0, autoload_detected: autoloadDetected };
   }
 
   // C-01: Generate random per-execution markers to prevent user code forgery

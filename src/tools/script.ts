@@ -258,7 +258,7 @@ export function getToolDefinitions(): Tool[] {
           },
           code: { type: 'string', description: 'execute_gdscript: 要执行的 GDScript 代码' },
           timeout: { type: 'number', description: 'execute_gdscript: 超时秒数（默认 30）', default: 30 },
-          load_autoloads: { type: 'boolean', description: 'execute_gdscript: 省略时自动检测 autoload 引用；显式 true/false 覆盖自动检测', default: false },
+          load_autoloads: { type: 'boolean', description: 'execute_gdscript: 省略时自动检测 autoload 引用；显式 true/false 覆盖自动检测' },
           search: { type: 'string', description: 'project_replace: 搜索文本' },
           replace: { type: 'string', description: 'project_replace: 替换文本' },
           extensions: {
