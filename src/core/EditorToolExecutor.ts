@@ -66,8 +66,12 @@ export class EditorToolExecutor {
         };
       }
       const message = err instanceof Error ? err.message : 'Unknown error';
+      // Distinguish connection-lost errors from tool execution failures
+      const isConnectionError = message.includes('Connection lost') || message.includes('Not connected') || message.includes('Request timeout');
+      const errorPayload: Record<string, unknown> = { error: message };
+      if (isConnectionError) errorPayload.editor_disconnected = true;
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ error: message }) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(errorPayload) }],
         isError: true,
       };
     }

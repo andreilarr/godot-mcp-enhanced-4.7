@@ -30,6 +30,15 @@ describe('requiresConfirmation', () => {
   it('returns false for script read_script', () => {
     expect(requiresConfirmation('script', { action: 'read_script' })).toBe(false);
   });
+  it('exempts edit_script with search_and_replace mode', () => {
+    expect(requiresConfirmation('script', { action: 'edit_script', search_and_replace: { search: 'old', replace: 'new' } })).toBe(false);
+  });
+  it('still requires confirmation for edit_script with line range mode', () => {
+    expect(requiresConfirmation('script', { action: 'edit_script', start_line: 10, end_line: 15 })).toBe(true);
+  });
+  it('still requires confirmation for edit_script with empty search_and_replace', () => {
+    expect(requiresConfirmation('script', { action: 'edit_script', search_and_replace: {} })).toBe(true);
+  });
   it('returns false for scene actions not in guard set', () => {
     expect(requiresConfirmation('scene', { action: 'add_node' })).toBe(false);
     expect(requiresConfirmation('scene', { action: 'read_scene' })).toBe(false);

@@ -2,6 +2,7 @@
  * Path security — sanitizePath for GDScript paths (res://, user://)
  *
  * Validates path strings before they reach GDScript execution:
+ * - URL-decodes before checking (prevents %2e%2e bypass)
  * - Normalizes separators (backslash → forward slash)
  * - Collapses double slashes
  * - Blocks path traversal (..)
@@ -11,6 +12,8 @@
  * For filesystem path security, see path-utils.ts (resolveWithinRoot).
  */
 
+import { normalize } from 'path';
+
 const DEFAULT_ALLOWED_ROOTS = ['res://', 'user://'];
 
 // Note: colon (:) excluded — "res://", "user://", "D:/" all use it.
@@ -18,6 +21,18 @@ const DEFAULT_ALLOWED_ROOTS = ['res://', 'user://'];
 // eslint-disable-next-line no-control-regex
 const ILLEGAL_CHARS = /[<>|"?*\x00-\x1f]/;
 const TRAVERSAL_PATTERN = /\.\./;
+
+/** Decode URL-encoded sequences to detect encoded traversal (e.g. %2e%2e → ..) */
+function deepDecodeUri(s: string): string {
+  let prev = '';
+  let current = s;
+  // Max 3 rounds to prevent infinite loop on malicious input
+  for (let i = 0; i < 3 && prev !== current; i++) {
+    prev = current;
+    try { current = decodeURIComponent(current); } catch { break; }
+  }
+  return current;
+}
 
 /** Get combined allowed roots: defaults + env var + opts */
 function getAllowedRoots(opts?: { allowedRoots?: string[] }): string[] {
@@ -49,6 +64,15 @@ export function sanitizePath(path: string, opts?: { allowedRoots?: string[] }): 
     throw new Error('Path must be a non-empty string');
   }
 
+  // 0. S-2: URL 解码检测 — 先对原始输入做深度解码，检查是否有编码的遍历
+  const decoded = deepDecodeUri(path);
+  if (TRAVERSAL_PATTERN.test(decoded.replace(/\\/g, '/'))) {
+    throw new Error('Path traversal detected');
+  }
+  if (ILLEGAL_CHARS.test(decoded)) {
+    throw new Error('Illegal characters in path');
+  }
+
   // 1. 标准化：反斜杠 → 正斜杠
   let normalized = path.replace(/\\/g, '/');
   // 合并多余斜杠（保留 :// 协议前缀）
@@ -68,7 +92,16 @@ export function sanitizePath(path: string, opts?: { allowedRoots?: string[] }): 
   const allowedRoots = getAllowedRoots(opts);
   const isAllowed = allowedRoots.some(root => {
     const normalizedRoot = root.replace(/\\/g, '/');
-    return normalized.startsWith(normalizedRoot);
+    // S-2: 使用 normalize 进一步消除路径中的冗余段
+    if (normalized.startsWith(normalizedRoot)) return true;
+    // 对文件系统路径做 normalize 后的前缀匹配
+    try {
+      const resolvedPath = normalize(normalized);
+      const resolvedRoot = normalize(normalizedRoot);
+      return resolvedPath.startsWith(resolvedRoot);
+    } catch {
+      return false;
+    }
   });
 
   if (!isAllowed) {

@@ -345,8 +345,10 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             });
           }
         }
-      } catch {
-        issues.push({ severity: 'warning', location: '(script validation)', message: 'GDScript syntax validation unavailable' });
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        getLogger().debug('delivery', `Script validation error: ${detail}`);
+        issues.push({ severity: 'warning', location: '(script validation)', message: `GDScript syntax validation unavailable: ${detail}` });
       }
     }
 

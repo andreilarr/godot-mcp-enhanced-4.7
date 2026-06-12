@@ -67,7 +67,15 @@ export function requiresConfirmation(toolName: string, args?: Record<string, unk
   if (guarded === undefined) return false;
   if (guarded === null) return true;
   const action = (args?.action ?? args?.method) as string | undefined;
-  return action != null && guarded.has(action);
+  if (action == null || !guarded.has(action)) return false;
+
+  // Fine-grained exemptions: search_and_replace is non-destructive (content-matched, CRLF-safe)
+  const sr = args?.search_and_replace;
+  if (toolName === 'script' && action === 'edit_script' && sr && typeof sr === 'object' && 'search' in sr) {
+    return false;
+  }
+
+  return true;
 }
 
 export function createPendingToken(toolName: string, args: Record<string, unknown>): string {

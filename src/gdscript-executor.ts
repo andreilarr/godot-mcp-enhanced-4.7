@@ -65,6 +65,14 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\.callv\s*\(\s*["']/, label: 'Indirect call via .callv("string") (sandbox bypass)' },
   // A-09: Expression.execute can evaluate arbitrary expressions
   { pattern: /Expression\b.*\.execute\b/, label: 'Expression.execute (arbitrary code execution)' },
+  // S-1-review: % format string bypass ("OS%s" % ".execute")
+  { pattern: /%[sdi]/, label: '% format string (potential bypass)' },
+  // S-1-review: var2str + str2var chain (arbitrary object reconstruction)
+  { pattern: /\bvar2str\b/, label: 'var2str (serialization bypass)' },
+  // S-1-review: get_script() reflection escape
+  { pattern: /\.get_script\b/, label: 'get_script reflection (sandbox bypass)' },
+  // S-1-review: ResourceLoader.load with non-resource path
+  { pattern: /ResourceLoader\.load\s*\([^)]*["'](?!res:\/\/)/, label: 'ResourceLoader.load with non-resource path' },
 ];
 
 /**
@@ -75,11 +83,13 @@ const DANGEROUS_API_TOKENS: readonly string[] = [
   'OS.execute', 'OS.shell_open', 'OS.kill',
   'DirAccess.remove', 'DirAccess.remove_absolute',
   'JavaScriptBridge.eval',
-  'str2var', 'bytes2var',
+  'str2var', 'bytes2var', 'var2str',
   // C-SEC-01: Reflection bypass tokens for string concatenation detection
   'ClassDB', '.call(', '.callv(',
   // C-03: Singleton access via string concatenation
   'Engine.get_singleton',
+  // S-1-review: Additional reflection/bypass tokens
+  '.get_script', 'ResourceLoader.load',
 ];
 
 /** 转义正则元字符。用于 autoload 名称匹配。 */
@@ -348,8 +358,22 @@ async function cleanupOldSessions(): Promise<void> {
   }
 }
 
-/** A-07: Retry rm with backoff for EPERM/EBUSY errors on Windows. */
+/** A-07: Retry rm with backoff for EPERM/EBUSY errors on Windows.
+ *  P-1: On Windows, first attempt rename to a staging dir, then delete from there.
+ *  This avoids EPERM from Godot still holding file handles on the original path. */
 async function retryRm(dirPath: string, maxRetries = 3): Promise<void> {
+  // P-1: Windows rename-to-staging strategy
+  if (process.platform === 'win32') {
+    try {
+      const stagingName = join(BASE_TMP_DIR, `_staging_${Date.now()}_${randomUUID().slice(0, 8)}`);
+      const { rename: renameAsync } = await import('fs/promises');
+      await renameAsync(dirPath, stagingName);
+      // Renamed successfully — now delete from staging (less likely to hit EPERM)
+      dirPath = stagingName;
+    } catch {
+      // Rename failed — fall through to normal retry logic on original path
+    }
+  }
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       await rm(dirPath, { recursive: true, force: true });
@@ -898,7 +922,21 @@ export async function executeGdscript(
       stdoutBytes += d.byteLength;
       if (stdoutBytes > MAX_OUTPUT_BYTES) {
         outputExceeded = true;
-        stdoutChunks.push(Buffer.from('\n[OUTPUT TRUNCATED: exceeded 10MB limit]'));
+        // P-2: 截断已有 buffer 到限制内，释放超限内存
+        let kept = 0;
+        const trimmed: Buffer[] = [];
+        for (const chunk of stdoutChunks) {
+          if (kept + chunk.byteLength <= MAX_OUTPUT_BYTES) {
+            trimmed.push(chunk);
+            kept += chunk.byteLength;
+          } else {
+            const remainder = MAX_OUTPUT_BYTES - kept;
+            if (remainder > 0) trimmed.push(chunk.subarray(0, remainder));
+            break;
+          }
+        }
+        stdoutChunks.length = 0;
+        stdoutChunks.push(...trimmed, Buffer.from('\n[OUTPUT TRUNCATED: exceeded 10MB limit]'));
         forceKillTree(proc);
       }
     });
@@ -908,7 +946,21 @@ export async function executeGdscript(
       stderrBytes += d.byteLength;
       if (stderrBytes > MAX_OUTPUT_BYTES) {
         outputExceeded = true;
-        stderrChunks.push(Buffer.from('\n[OUTPUT TRUNCATED: exceeded 10MB limit]'));
+        // P-2: 截断已有 buffer 到限制内
+        let kept = 0;
+        const trimmed: Buffer[] = [];
+        for (const chunk of stderrChunks) {
+          if (kept + chunk.byteLength <= MAX_OUTPUT_BYTES) {
+            trimmed.push(chunk);
+            kept += chunk.byteLength;
+          } else {
+            const remainder = MAX_OUTPUT_BYTES - kept;
+            if (remainder > 0) trimmed.push(chunk.subarray(0, remainder));
+            break;
+          }
+        }
+        stderrChunks.length = 0;
+        stderrChunks.push(...trimmed, Buffer.from('\n[OUTPUT TRUNCATED: exceeded 10MB limit]'));
         forceKillTree(proc);
       }
     });

@@ -80,14 +80,17 @@ let _shortRunningCount = 0;
 let _queueTail: Promise<void> = Promise.resolve();
 
 /** Serialize an async state-mutating operation. Ensures only one async mutation
- *  is in-flight at a time. Useful for killProcess and other async operations. */
-function enqueueAsync(fn: () => Promise<void>): Promise<void> {
+ *  is in-flight at a time. Supports returning a value from the serialized function. */
+function enqueueAsync<T>(fn: () => (Promise<T> | T)): Promise<T> {
+  let resolve!: (value: void) => void;
   const prev = _queueTail;
-  let resolve!: () => void;
   _queueTail = new Promise<void>((r) => { resolve = r; });
   return prev
     .then(() => fn())
-    .then(resolve, resolve);
+    .then(
+      (result) => { resolve(); return result; },
+      (err) => { resolve(); throw err; },
+    );
 }
 
 // ─── Long-running process lock ──────────────────────────────────────────────
@@ -96,32 +99,39 @@ export function isProcessBusy(): boolean {
   return _processBusy;
 }
 
-/** Atomically acquire the long-running process slot. Returns true if acquired, false if busy. */
-export function acquireProcessSlot(owner: string = ''): boolean {
-  if (_processBusy) {
-    // I-06: 即时检查进程存活 — 仅在进程对象已注册时才检查
-    if (_runningProcess && (_runningProcess.killed || _runningProcess.exitCode !== null)) {
-      getLogger().warn('process-state', `Process slot held by "${_busyOwner}", process dead — auto-releasing`);
-      _processBusy = false;
-      _busyOwner = '';
-      _busySince = 0;
-    } else if (_busySince > 0 && Date.now() - _busySince > 300_000) {
-      const processDead = !_runningProcess || _runningProcess.killed || _runningProcess.exitCode !== null;
-      if (processDead) {
-        getLogger().warn('process-state', `Process slot held by "${_busyOwner}" for >5min, process dead — auto-releasing`);
+/**
+ * Acquire the long-running process slot through the async serialization queue.
+ * Serialized via enqueueAsync to prevent race conditions when MCP clients
+ * issue parallel tool calls (e.g. run_project + execute_gdscript simultaneously).
+ * Returns true if acquired, false if slot is busy.
+ */
+export async function acquireProcessSlot(owner: string = ''): Promise<boolean> {
+  return enqueueAsync(() => {
+    if (_processBusy) {
+      // I-06: 即时检查进程存活 — 仅在进程对象已注册时才检查
+      if (_runningProcess && (_runningProcess.killed || _runningProcess.exitCode !== null)) {
+        getLogger().warn('process-state', `Process slot held by "${_busyOwner}", process dead — auto-releasing`);
         _processBusy = false;
         _busyOwner = '';
         _busySince = 0;
-      } else {
-        getLogger().warn('process-state', `Process slot held by "${_busyOwner}" for >5min, process still alive — not releasing`);
+      } else if (_busySince > 0 && Date.now() - _busySince > 300_000) {
+        const processDead = !_runningProcess || _runningProcess.killed || _runningProcess.exitCode !== null;
+        if (processDead) {
+          getLogger().warn('process-state', `Process slot held by "${_busyOwner}" for >5min, process dead — auto-releasing`);
+          _processBusy = false;
+          _busyOwner = '';
+          _busySince = 0;
+        } else {
+          getLogger().warn('process-state', `Process slot held by "${_busyOwner}" for >5min, process still alive — not releasing`);
+        }
       }
+      if (_processBusy) return false;
     }
-    if (_processBusy) return false;
-  }
-  _processBusy = true;
-  _busyOwner = owner;
-  _busySince = Date.now();
-  return true;
+    _processBusy = true;
+    _busyOwner = owner;
+    _busySince = Date.now();
+    return true;
+  });
 }
 
 export function setProcessBusy(busy: boolean): void {

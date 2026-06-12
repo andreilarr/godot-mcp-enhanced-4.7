@@ -89,13 +89,20 @@ describe('instance-api-auth', () => {
         vi.useRealTimers();
       }
     });
+
+    it('rejects replayed tokens (nonce anti-replay)', () => {
+      const token = generateApiToken('inst-1');
+      expect(verifyApiToken('inst-1', token)).toBe(true);
+      // 同一 token 第二次使用应被拒绝
+      expect(verifyApiToken('inst-1', token)).toBe(false);
+    });
   });
 
   describe('buildAuthHeaders', () => {
     it('includes Authorization Bearer header', () => {
       const headers = buildAuthHeaders('inst-1');
       expect(headers['Content-Type']).toBe('application/json');
-      expect(headers['Authorization']).toMatch(/^Bearer \d+\.[a-f0-9]+$/);
+      expect(headers['Authorization']).toMatch(/^Bearer \d+\.[a-f0-9]+\.[a-f0-9]+$/);
     });
   });
 });

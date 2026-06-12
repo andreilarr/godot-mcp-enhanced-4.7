@@ -81,8 +81,8 @@ describe('resetState', () => {
     expect(getShortRunningCount()).toBe(0);
   });
 
-  it('clears busy owner', () => {
-    acquireProcessSlot('run_project');
+  it('clears busy owner', async () => {
+    await acquireProcessSlot('run_project');
     expect(getBusyInfo().owner).toBe('run_project');
     resetState();
     expect(getBusyInfo().owner).toBe('');
@@ -143,8 +143,8 @@ describe('getRunningProcess / setRunningProcess', () => {
     expect(getProcessStartTime()).toBe(0);
   });
 
-  it('clears busy owner when set to null', () => {
-    acquireProcessSlot('run_project');
+  it('clears busy owner when set to null', async () => {
+    await acquireProcessSlot('run_project');
     expect(isProcessBusy()).toBe(true);
     setRunningProcess(null);
     expect(isProcessBusy()).toBe(false);
@@ -291,8 +291,8 @@ describe('busy guard (C-03)', () => {
     expect(isProcessBusy()).toBe(false);
   });
 
-  it('setProcessBusy(false) clears owner', () => {
-    acquireProcessSlot('test_tool');
+  it('setProcessBusy(false) clears owner', async () => {
+    await acquireProcessSlot('test_tool');
     expect(getBusyInfo().owner).toBe('test_tool');
     setProcessBusy(false);
     expect(getBusyInfo().owner).toBe('');
@@ -326,35 +326,35 @@ describe('busy guard (C-03)', () => {
 // ─── acquireProcessSlot ──────────────────────────────────────────────────────
 
 describe('acquireProcessSlot', () => {
-  it('returns true and sets busy when slot is free', () => {
+  it('returns true and sets busy when slot is free', async () => {
     expect(isProcessBusy()).toBe(false);
-    expect(acquireProcessSlot('run_project')).toBe(true);
+    expect(await acquireProcessSlot('run_project')).toBe(true);
     expect(isProcessBusy()).toBe(true);
   });
 
-  it('returns false when already busy', () => {
+  it('returns false when already busy', async () => {
     setProcessBusy(true);
-    expect(acquireProcessSlot()).toBe(false);
+    expect(await acquireProcessSlot()).toBe(false);
   });
 
-  it('is atomic: double acquire fails', () => {
-    expect(acquireProcessSlot()).toBe(true);
-    expect(acquireProcessSlot()).toBe(false);
+  it('is atomic: double acquire fails', async () => {
+    expect(await acquireProcessSlot()).toBe(true);
+    expect(await acquireProcessSlot()).toBe(false);
   });
 
-  it('allows re-acquire after release', () => {
-    expect(acquireProcessSlot()).toBe(true);
+  it('allows re-acquire after release', async () => {
+    expect(await acquireProcessSlot()).toBe(true);
     setProcessBusy(false);
-    expect(acquireProcessSlot()).toBe(true);
+    expect(await acquireProcessSlot()).toBe(true);
   });
 
-  it('records owner name', () => {
-    acquireProcessSlot('run_project');
+  it('records owner name', async () => {
+    await acquireProcessSlot('run_project');
     expect(getBusyInfo().owner).toBe('run_project');
   });
 
-  it('records owner as empty string by default', () => {
-    acquireProcessSlot();
+  it('records owner as empty string by default', async () => {
+    await acquireProcessSlot();
     expect(getBusyInfo().owner).toBe('');
   });
 });
@@ -369,10 +369,10 @@ describe('getBusyInfo', () => {
     expect(info.projectDir).toBe('');
   });
 
-  it('returns owner and context when busy', () => {
+  it('returns owner and context when busy', async () => {
     setProcessStartTime(1000);
     setProjectDir('/my/project');
-    acquireProcessSlot('run_project');
+    await acquireProcessSlot('run_project');
     const info = getBusyInfo();
     expect(info.owner).toBe('run_project');
     expect(info.startTime).toBe(1000);
@@ -387,29 +387,29 @@ describe('buildBusyErrorMessage', () => {
     expect(buildBusyErrorMessage()).toBe('');
   });
 
-  it('includes owner when provided', () => {
-    acquireProcessSlot('run_project');
+  it('includes owner when provided', async () => {
+    await acquireProcessSlot('run_project');
     const msg = buildBusyErrorMessage();
     expect(msg).toContain('run_project');
     expect(msg).toContain('stop_project');
   });
 
-  it('includes elapsed time when startTime is set', () => {
+  it('includes elapsed time when startTime is set', async () => {
     setProcessStartTime(Date.now() - 45000);
-    acquireProcessSlot('run_project');
+    await acquireProcessSlot('run_project');
     const msg = buildBusyErrorMessage();
     expect(msg).toMatch(/running for \d+s/);
   });
 
-  it('includes project dir when set', () => {
+  it('includes project dir when set', async () => {
     setProjectDir('/my/game');
-    acquireProcessSlot('run_project');
+    await acquireProcessSlot('run_project');
     const msg = buildBusyErrorMessage();
     expect(msg).toContain('/my/game');
   });
 
-  it('works without owner', () => {
-    acquireProcessSlot();
+  it('works without owner', async () => {
+    await acquireProcessSlot();
     const msg = buildBusyErrorMessage();
     expect(msg).toContain('another Godot process is running');
     expect(msg).toContain('stop_project');
@@ -454,8 +454,8 @@ describe('acquireShortRunningSlot / releaseShortRunningSlot', () => {
     expect(acquireShortRunningSlot()).toBe(true);
   });
 
-  it('is independent of long-running lock', () => {
-    acquireProcessSlot('run_project');
+  it('is independent of long-running lock', async () => {
+    await acquireProcessSlot('run_project');
     // Short-running slot should still be available even when long-running is busy
     expect(acquireShortRunningSlot()).toBe(true);
     expect(getShortRunningCount()).toBe(1);

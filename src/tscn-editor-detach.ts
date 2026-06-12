@@ -7,8 +7,6 @@ import {
   normalizeLines,
   findSectionEnd,
   escapeTscnAttr,
-  escapeRegExp,
-  getBracketAttr,
 } from './tscn-editor-shared.js';
 
 // ── Detach instance (inline subtree) ─────────────────────────────────────────

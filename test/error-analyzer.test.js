@@ -272,3 +272,45 @@ describe('Godot 4.6+ compatibility hints', () => {
     expect(hint).toBeDefined();
   });
 });
+
+describe('autoload headless filtering', () => {
+  it('reclassifies autoload identifier as headless_limitation', () => {
+    const result = analyzeOutput([
+      'SCRIPT ERROR: Identifier "GameEvents" not found.',
+    ], { autoloadNames: ['GameEvents', 'PlayerData', 'AudioManager'] });
+    expect(result.errors.length).toBe(1);
+    expect(result.errors[0].type).toBe('headless_limitation');
+    expect(result.errors[0].suggestion.includes('GameEvents')).toBeTruthy();
+    expect(result.errors[0].suggestion.includes('autoload')).toBeTruthy();
+    expect(!result.hasErrors).toBeTruthy();
+  });
+
+  it('does not reclassify non-autoload identifier', () => {
+    const result = analyzeOutput([
+      'SCRIPT ERROR: Identifier "SomeLocalVar" not found.',
+    ], { autoloadNames: ['GameEvents', 'PlayerData'] });
+    expect(result.errors.length).toBe(1);
+    expect(result.errors[0].type).toBe('script_error');
+    expect(result.hasErrors).toBeTruthy();
+  });
+
+  it('works without autoloadNames (backward compatible)', () => {
+    const result = analyzeOutput([
+      'SCRIPT ERROR: Identifier "GameEvents" not found.',
+    ]);
+    expect(result.errors.length).toBe(1);
+    expect(result.errors[0].type).toBe('script_error');
+    expect(result.hasErrors).toBeTruthy();
+  });
+
+  it('separates autoload errors from real errors in summary', () => {
+    const result = analyzeOutput([
+      'SCRIPT ERROR: Identifier "GameEvents" not found.',
+      'SCRIPT ERROR: Identifier "RealBug" not found.',
+    ], { autoloadNames: ['GameEvents'] });
+    expect(result.errors.length).toBe(2);
+    expect(result.hasErrors).toBeTruthy();
+    expect(result.summary.includes('headless limitation')).toBeTruthy();
+    expect(result.summary.includes('1 error')).toBeTruthy();
+  });
+});

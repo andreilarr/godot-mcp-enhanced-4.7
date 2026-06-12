@@ -415,7 +415,6 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         let normalizedReplace = sr.replace.replace(/\r\n/g, '\n');
 
         // Tab/Space 归一化：如果直接匹配失败，尝试按文件缩进风格重试
-        let indentNormalized = false;
         if (!normalizedContent.includes(normalizedSearch)) {
           const fileIndent = detectIndentStyle(normalizedContent.split('\n'));
           const searchIndent = detectIndentStyle(normalizedSearch.split('\n'));
@@ -424,7 +423,6 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
             if (normalizedContent.includes(candidateSearch)) {
               normalizedSearch = candidateSearch;
               normalizedReplace = normalizeIndentForMatch(normalizedReplace, fileIndent);
-              indentNormalized = true;
             }
           }
         }

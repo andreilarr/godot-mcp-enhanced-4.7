@@ -25,10 +25,17 @@ export interface AnalysisResult {
   summary: string;
 }
 
+/** Options for analyzeOutput — callers can supply project context for better classification. */
+export interface AnalyzeOptions {
+  /** Autoload singleton names from project.godot [autoload] section.
+   *  Errors referencing these names are reclassified as headless_limitation. */
+  autoloadNames?: string[];
+}
+
 // ===== Error pattern matchers =====
 
 interface ErrorPattern {
-  test: (msg: string) => boolean;
+  test: (msg: string, opts?: AnalyzeOptions) => boolean;
   type: ParsedError['type'];
   suggestion: (msg: string) => string;
 }
@@ -58,6 +65,24 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     suggestion: (msg) => {
       const detail = msg.replace(/SCRIPT ERROR:\s*Parse Error:\s*/i, '').trim();
       return `Syntax error: ${detail}. Check for missing colons, incorrect indentation, or typos in the script.`;
+    },
+  },
+  {
+    // Autoload singleton not available in headless mode — must be BEFORE generic Identifier rule.
+    // Note: matches any "Identifier XXX" error where XXX is an autoload name, not limited to
+    // "not found" — this is intentional: headless can't instantiate autoloads, so any reference
+    // to them (method calls, property access, etc.) will fail and should be filtered.
+    test: (msg, opts) => {
+      if (!opts?.autoloadNames?.length) return false;
+      const identMatch = msg.match(/Identifier\s+"(\w+)"/);
+      if (!identMatch) return false;
+      return opts.autoloadNames.includes(identMatch[1]!);
+    },
+    type: 'headless_limitation',
+    suggestion: (msg) => {
+      const identMatch = msg.match(/Identifier\s+"(\w+)"/);
+      const name = identMatch ? identMatch[1] : 'autoload';
+      return `"${name}" is an autoload singleton that is not available in headless mode. This error only occurs during headless validation (run_and_verify) and works correctly at runtime. Safe to ignore.`;
     },
   },
   {
@@ -192,7 +217,7 @@ function parseLocation(lines: string[], startIdx: number): ParsedLocation {
 
 // ===== Main analyzer =====
 
-export function analyzeOutput(output: string[]): AnalysisResult {
+export function analyzeOutput(output: string[], options?: AnalyzeOptions): AnalysisResult {
   const errors: ParsedError[] = [];
   const warnings: ParsedWarning[] = [];
   const prints: string[] = [];
@@ -237,7 +262,7 @@ export function analyzeOutput(output: string[]): AnalysisResult {
 
       for (const pattern of ERROR_PATTERNS) {
         if (pattern.type === 'parse_error') continue; // already handled above
-        if (pattern.test(message)) {
+        if (pattern.test(message, options)) {
           errorType = pattern.type;
           suggestion = pattern.suggestion(message);
           break;
@@ -267,7 +292,7 @@ export function analyzeOutput(output: string[]): AnalysisResult {
       let suggestion = 'An engine error occurred. Check the Godot documentation for this error message.';
 
       for (const pattern of ERROR_PATTERNS) {
-        if (pattern.test(message)) {
+        if (pattern.test(message, options)) {
           errorType = pattern.type;
           suggestion = pattern.suggestion(message);
           break;

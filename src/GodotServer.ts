@@ -55,7 +55,8 @@ const DEBUG = process.env.DEBUG === 'true';
 const EDITOR_SECRET_TIMEOUT_MS = 5000;
 
 function log(...args: unknown[]): void {
-  if (DEBUG) getLogger().debug('godot-mcp', args.map(a => String(a)).join(' '));
+  if (!DEBUG) return;
+  getLogger().debug('godot-mcp', args.map(a => String(a)).join(' '));
 }
 
 // ─── GodotServer class ───────────────────────────────────────────────────────

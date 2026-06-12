@@ -3,7 +3,8 @@
 // Exposes Godot project context via MCP Resources protocol so AI clients
 // can discover and read project information without explicit tool calls.
 
-import { existsSync, readFileSync, statSync } from 'fs';
+import { existsSync } from 'fs';
+import { readFile, stat } from 'fs/promises';
 import { resolve, join, extname, sep, basename } from 'path';
 import { parseTscnSummary } from './tscn-parser.js';
 import { parseConfigValue, safeRealPath, scanFiles, iterativeDecode, isPathInAllowedRoots, resolveWithinRoot } from './helpers.js';
@@ -305,13 +306,13 @@ Add this to your project's CLAUDE.md:
   },
 };
 
-function readProjectInfo(projectPath: string): McpResourceContent {
+async function readProjectInfo(projectPath: string): Promise<McpResourceContent> {
   const projectFile = join(projectPath, 'project.godot');
   if (!existsSync(projectFile)) {
     return { uri: 'godot://project/info', mimeType: 'text/plain', text: 'ERROR: project.godot not found' };
   }
 
-  const content = readFileSync(projectFile, 'utf-8');
+  const content = await readFile(projectFile, 'utf-8');
   const lines = content.replace(/\r\n/g, '\n').split('\n');
   const info: Record<string, unknown> = {};
 
@@ -337,7 +338,7 @@ function readProjectInfo(projectPath: string): McpResourceContent {
   };
 }
 
-function readProjectConfig(projectPath: string): McpResourceContent {
+async function readProjectConfig(projectPath: string): Promise<McpResourceContent> {
   const projectFile = join(projectPath, 'project.godot');
   if (!existsSync(projectFile)) {
     return { uri: 'godot://project/config', mimeType: 'text/plain', text: 'ERROR: project.godot not found' };
@@ -345,11 +346,11 @@ function readProjectConfig(projectPath: string): McpResourceContent {
   return {
     uri: 'godot://project/config',
     mimeType: 'text/plain',
-    text: readFileSync(projectFile, 'utf-8'),
+    text: await readFile(projectFile, 'utf-8'),
   };
 }
 
-function readSceneResource(projectPath: string, scenePath: string): McpResourceContent {
+async function readSceneResource(projectPath: string, scenePath: string): Promise<McpResourceContent> {
   // I-SEC-07: Use resolveWithinRoot instead of join for path traversal protection
   let fullPath: string;
   try { fullPath = resolveWithinRoot(projectPath, scenePath); } catch {
@@ -358,12 +359,12 @@ function readSceneResource(projectPath: string, scenePath: string): McpResourceC
   if (!existsSync(fullPath)) {
     return { uri: `godot://scene/${scenePath}`, mimeType: 'text/plain', text: `ERROR: Scene file not found: ${scenePath}` };
   }
-  const content = readFileSync(fullPath, 'utf-8');
+  const content = await readFile(fullPath, 'utf-8');
   const summary = parseTscnSummary(content);
   return { uri: `godot://scene/${scenePath}`, mimeType: 'text/plain', text: summary };
 }
 
-function readScriptResource(projectPath: string, scriptPath: string): McpResourceContent {
+async function readScriptResource(projectPath: string, scriptPath: string): Promise<McpResourceContent> {
   // I-SEC-07: Use resolveWithinRoot instead of join for path traversal protection
   let fullPath: string;
   try { fullPath = resolveWithinRoot(projectPath, scriptPath); } catch {
@@ -372,14 +373,14 @@ function readScriptResource(projectPath: string, scriptPath: string): McpResourc
   if (!existsSync(fullPath)) {
     return { uri: `godot://script/${scriptPath}`, mimeType: 'text/plain', text: `ERROR: Script file not found: ${scriptPath}` };
   }
-  const scriptSize = statSync(fullPath).size;
+  const scriptSize = (await stat(fullPath)).size;
   if (scriptSize > MAX_FILE_SIZE) {
     return { uri: `godot://script/${scriptPath}`, mimeType: 'text/plain', text: `ERROR: File too large (${(scriptSize / 1024 / 1024).toFixed(1)}MB, limit 1MB)` };
   }
-  return { uri: `godot://script/${scriptPath}`, mimeType: 'text/x-gdscript', text: readFileSync(fullPath, 'utf-8') };
+  return { uri: `godot://script/${scriptPath}`, mimeType: 'text/x-gdscript', text: await readFile(fullPath, 'utf-8') };
 }
 
-function readFileResource(projectPath: string, filePath: string): McpResourceContent {
+async function readFileResource(projectPath: string, filePath: string): Promise<McpResourceContent> {
   // I-SEC-07: Use resolveWithinRoot instead of join for path traversal protection
   let fullPath: string;
   try { fullPath = resolveWithinRoot(projectPath, filePath); } catch {
@@ -388,11 +389,11 @@ function readFileResource(projectPath: string, filePath: string): McpResourceCon
   if (!existsSync(fullPath)) {
     return { uri: `godot://file/${filePath}`, mimeType: 'text/plain', text: `ERROR: File not found: ${filePath}` };
   }
-  const fileSize = statSync(fullPath).size;
+  const fileSize = (await stat(fullPath)).size;
   if (fileSize > MAX_FILE_SIZE) {
     return { uri: `godot://file/${filePath}`, mimeType: 'text/plain', text: `ERROR: File too large (${(fileSize / 1024 / 1024).toFixed(1)}MB, limit 1MB)` };
   }
-  return { uri: `godot://file/${filePath}`, mimeType: guessMimeType(filePath), text: readFileSync(fullPath, 'utf-8') };
+  return { uri: `godot://file/${filePath}`, mimeType: guessMimeType(filePath), text: await readFile(fullPath, 'utf-8') };
 }
 
 // ─── Resource listing ─────────────────────────────────────────────────────────
@@ -539,7 +540,7 @@ export async function readResource(uri: string, projectPath: string | undefined)
         return { uri, mimeType: 'application/json', text: JSON.stringify({ groups: result }, null, 2) };
       }
       case 'project-context':
-        return { uri, mimeType: 'text/markdown', text: buildProjectContext(projectPath) };
+        return { uri, mimeType: 'text/markdown', text: await buildProjectContext(projectPath) };
       case 'console-errors':
         return { uri, mimeType: 'application/json', text: JSON.stringify({ status: 'not_yet_implemented', errors: [], message: 'Requires active Bridge connection — returns live errors when connected' }) };
       case 'scene-tree':
@@ -556,21 +557,21 @@ export async function readResource(uri: string, projectPath: string | undefined)
 
   switch (category) {
     case 'project':
-      if (resourcePath === 'info') return readProjectInfo(projectPath);
-      if (resourcePath === 'config') return readProjectConfig(projectPath);
+      if (resourcePath === 'info') return await readProjectInfo(projectPath);
+      if (resourcePath === 'config') return await readProjectConfig(projectPath);
       return { uri, mimeType: 'text/plain', text: `Unknown project resource: ${resourcePath}` };
 
     case 'scene':
       if (!isSafePath(projectPath, resourcePath)) return { uri, mimeType: 'text/plain', text: `Access denied: ${resourcePath}` };
-      return readSceneResource(projectPath, resourcePath);
+      return await readSceneResource(projectPath, resourcePath);
 
     case 'script':
       if (!isSafePath(projectPath, resourcePath)) return { uri, mimeType: 'text/plain', text: `Access denied: ${resourcePath}` };
-      return readScriptResource(projectPath, resourcePath);
+      return await readScriptResource(projectPath, resourcePath);
 
     case 'file':
       if (!isSafePath(projectPath, resourcePath)) return { uri, mimeType: 'text/plain', text: `Access denied: ${resourcePath}` };
-      return readFileResource(projectPath, resourcePath);
+      return await readFileResource(projectPath, resourcePath);
 
     case 'guide': {
       const guide = GUIDES[resourcePath];
@@ -607,11 +608,11 @@ function safeTruncate(content: string, maxLen: number): string {
   }
   return truncated + String.fromCharCode(10, 10) + "[... truncated ...]";
 }
-function buildProjectContext(projectPath: string | undefined): string {
+async function buildProjectContext(projectPath: string | undefined): Promise<string> {
   const lines: string[] = ['# Project Context\n'];
 
   if (projectPath && existsSync(join(projectPath, 'project.godot'))) {
-    const config = readFileSync(join(projectPath, 'project.godot'), 'utf-8');
+    const config = await readFile(join(projectPath, 'project.godot'), 'utf-8');
     const nameMatch = config.match(/config\/name\s*=\s*"([^"]+)"/);
     lines.push(`## Project: ${nameMatch?.[1] ?? 'Unnamed'}\n`);
   }
@@ -619,13 +620,13 @@ function buildProjectContext(projectPath: string | undefined): string {
   if (projectPath) {
     const claudeMdPath = join(projectPath, 'CLAUDE.md');
     if (existsSync(claudeMdPath)) {
-      const content = safeTruncate(readFileSync(claudeMdPath, 'utf-8'), 2000);
+      const content = safeTruncate(await readFile(claudeMdPath, 'utf-8'), 2000);
       lines.push('## Coding Guidelines\n', content, '\n');
     }
 
     const readmePath = join(projectPath, 'README.md');
     if (existsSync(readmePath)) {
-      const content = safeTruncate(readFileSync(readmePath, 'utf-8'), 2000);
+      const content = safeTruncate(await readFile(readmePath, 'utf-8'), 2000);
       lines.push('## Architecture\n', content, '\n');
     }
 

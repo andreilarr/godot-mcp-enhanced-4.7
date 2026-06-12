@@ -52,8 +52,9 @@ godot-mcp-enhanced 提供 130+ 工具，通过三层架构操作 Godot：
 
 ### edit_script — 脚本编辑
 
-- **优先使用 search_and_replace**：基于内容匹配，对行号偏移鲁棒，CRLF 安全。
-- **行范围模式**（start_line/end_line）：仅在 search_and_replace 无法使用时（如批量重复修改）。
+- **优先使用 search_and_replace**：基于内容匹配，对行号偏移鲁棒，CRLF 安全。**⚠️ 不要使用 Claude 内置 Edit 工具编辑 .gd 文件**——内置 Edit 无法正确处理 GDScript 的 tab 缩进，匹配率极低。始终使用 MCP 的 `edit_script` + `search_and_replace` 参数。
+- **search_and_replace 免确认**：使用 `search_and_replace` 模式的 `edit_script` 无需 confirmation token，直接执行，减少 API 调用。
+- **行范围模式**（start_line/end_line）：仅在 search_and_replace 无法使用时（如批量重复修改）。仍需 confirmation token。
 - **indent_mode**：`smart`（推荐）自动对齐缩进；`raw` 仅在确认缩进正确时使用。
 - **verify_content**：提供期望内容作为守卫，防止过时的行号编辑。
 
@@ -64,7 +65,7 @@ godot-mcp-enhanced 提供 130+ 工具，通过三层架构操作 Godot：
 
 ### run_and_verify vs 手动组合
 
-- **run_and_verify**：一键 headless 运行 + 错误分析 + 可选场景树快照。适合快速检查。
+- **run_and_verify**：一键 headless 运行 + 错误分析 + 可选场景树快照。适合快速检查。**自动读取 project.godot 的 autoload 配置**，将 autoload 单例相关的"Identifier not found"错误标记为 headless_limitation 而非真实错误，减少误报。
 - **手动组合**：run_project + get_debug_output + stop_project。适合需要精细控制运行时长的场景。
 
 ## 运行时 vs 持久化

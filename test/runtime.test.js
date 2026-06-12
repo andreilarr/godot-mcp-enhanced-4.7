@@ -23,7 +23,7 @@ vi.mock('../src/core/process-state.js', () => ({
   killProcess: vi.fn(async () => {}),
   forceKillTree: vi.fn(),
   setProcessBusy: vi.fn(),
-  acquireProcessSlot: vi.fn(() => true),
+  acquireProcessSlot: vi.fn(async () => true),
   acquireShortRunningSlot: vi.fn(() => true),
   releaseShortRunningSlot: vi.fn(),
   buildBusyErrorMessage: vi.fn(() => 'Busy'),

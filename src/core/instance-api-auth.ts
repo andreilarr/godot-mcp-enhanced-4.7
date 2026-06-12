@@ -22,6 +22,11 @@ const API_SECRET_FILENAME = '.api-secret';
 const HMAC_ALGORITHM = 'sha256';
 const TOKEN_TTL_MS = 60_000; // 签名有效期 60 秒
 
+// S-3: Nonce 防重放 — 记录最近使用的 nonce（TTL 内去重）
+const _usedNonces = new Map<string, number>();
+const NONCE_CLEANUP_INTERVAL = 120_000; // 每 2 分钟清理过期 nonce
+let _lastNonceCleanup = Date.now();
+
 let _cachedSecret: string | null = null;
 
 /** 获取机器级注册目录 */
@@ -80,28 +85,31 @@ export function getOrCreateApiSecret(): string {
 }
 
 /**
- * 生成认证令牌 — HMAC(instance.id:timestamp, secret)
- * 格式: `{timestamp}.{hmacHex}`
+ * 生成认证令牌 — HMAC(instance.id:timestamp:nonce, secret)
+ * 格式: `{timestamp}.{nonce}.{hmacHex}`
  */
 export function generateApiToken(instanceId: string): string {
   const secret = getOrCreateApiSecret();
   const timestamp = Date.now().toString();
+  const nonce = randomBytes(8).toString('hex');
   const hmac = createHmac(HMAC_ALGORITHM, secret)
-    .update(`${instanceId}:${timestamp}`)
+    .update(`${instanceId}:${timestamp}:${nonce}`)
     .digest('hex');
-  return `${timestamp}.${hmac}`;
+  return `${timestamp}.${nonce}.${hmac}`;
 }
 
 /**
  * 验证认证令牌。返回 true 表示有效。
- * 服务端（Godot 插件或另一个 MCP 实例）可使用此函数验证请求。
+ * 支持旧格式（无 nonce）和新格式（含 nonce + 防重放）。
  */
 export function verifyApiToken(instanceId: string, token: string): boolean {
-  const dotIndex = token.indexOf('.');
-  if (dotIndex === -1) return false;
+  // S-3: 解析新格式 timestamp.nonce.hmac 或旧格式 timestamp.hmac
+  const parts = token.split('.');
+  if (parts.length < 2 || parts.length > 3) return false;
 
-  const timestampStr = token.substring(0, dotIndex);
-  const providedHmac = token.substring(dotIndex + 1);
+  const timestampStr = parts[0]!;
+  const providedHmac = parts[parts.length - 1]!;
+  const nonce = parts.length === 3 ? parts[1] : null;
 
   const timestamp = parseInt(timestampStr, 10);
   if (!Number.isFinite(timestamp)) return false;
@@ -109,10 +117,28 @@ export function verifyApiToken(instanceId: string, token: string): boolean {
   // 检查时效性
   if (Date.now() - timestamp > TOKEN_TTL_MS) return false;
 
+  // S-3: Nonce 防重放检查
+  if (nonce) {
+    const nonceKey = `${instanceId}:${nonce}`;
+    if (_usedNonces.has(nonceKey)) return false; // 已使用的 nonce → 重放攻击
+    _usedNonces.set(nonceKey, Date.now());
+    // 定期清理过期 nonce
+    const now = Date.now();
+    if (now - _lastNonceCleanup > NONCE_CLEANUP_INTERVAL) {
+      for (const [key, ts] of _usedNonces) {
+        if (now - ts > TOKEN_TTL_MS * 2) _usedNonces.delete(key);
+      }
+      _lastNonceCleanup = now;
+    }
+  }
+
   try {
     const secret = getOrCreateApiSecret();
+    const payload = nonce
+      ? `${instanceId}:${timestampStr}:${nonce}`
+      : `${instanceId}:${timestampStr}`;
     const expectedHmac = createHmac(HMAC_ALGORITHM, secret)
-      .update(`${instanceId}:${timestampStr}`)
+      .update(payload)
       .digest('hex');
     // 常量时间比较，防时序攻击
     if (expectedHmac.length !== providedHmac.length) return false;
@@ -134,7 +160,8 @@ export function buildAuthHeaders(instanceId: string): Record<string, string> {
   };
 }
 
-/** 清除缓存的 secret（测试用） */
+/** 清除缓存的 secret 和 nonce 记录（测试用） */
 export function clearCachedSecret(): void {
   _cachedSecret = null;
+  _usedNonces.clear();
 }
