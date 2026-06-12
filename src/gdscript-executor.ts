@@ -14,7 +14,7 @@
  */
 
 import { spawn } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { writeFile, mkdir, rm, readdir, lstat, mkdtemp } from 'fs/promises';
 import { join, basename, resolve } from 'path';
 import { tmpdir, userInfo } from 'os';
@@ -29,6 +29,17 @@ import { needsImport, runImport } from './tools/import-check.js';
 
 
 // ─── Sandbox scanner (C-SEC-02) ──────────────────────────────────────────────
+//
+// ⚠️  KNOWN LIMITATIONS — This scanner is a safety net against accidental misuse,
+//     NOT a security boundary. The following bypass patterns are NOT detected:
+//
+//     1. Variable indirection:  var cmd = "OS"; cmd += ".execute"
+//     2. Expression.eval with computed strings: var e = Expression.new(); e.execute(["OS.execute"])
+//     3. call()/callv() with non-literal first arg: obj.call(variable)
+//     4. ClassDB.class_call() / ClassDB.class_set_property() via reflection
+//
+//     For multi-user / untrusted input scenarios, use container/VM isolation
+//     and set GODOT_MCP_ALLOW_UNSAFE=false.
 
 const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /OS\.(execute|shell_open|kill|set_restart_on_exit|crash)\b/, label: 'OS system command' },
@@ -70,6 +81,70 @@ const DANGEROUS_API_TOKENS: readonly string[] = [
   // C-03: Singleton access via string concatenation
   'Engine.get_singleton',
 ];
+
+/** 转义正则元字符。用于 autoload 名称匹配。 */
+export function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ─── Autoload auto-detection ─────────────────────────────────────────────────
+
+let _autoloadCache: { projectPath: string; names: string[]; ts: number } | null = null;
+const AUTOLOAD_CACHE_TTL = 30_000;
+
+/** @internal 测试用：重置缓存 */
+export function _resetAutoloadCache(): void {
+  _autoloadCache = null;
+}
+
+/**
+ * 从 project.godot 解析 autoload 单例名列表。
+ * 全面 try-catch：任何错误返回空数组。
+ */
+export function parseAutoloadNames(projectPath: string): string[] {
+  const now = Date.now();
+  if (_autoloadCache && _autoloadCache.projectPath === projectPath && now - _autoloadCache.ts < AUTOLOAD_CACHE_TTL) {
+    return _autoloadCache.names;
+  }
+  try {
+    const configPath = join(projectPath, 'project.godot');
+    if (!existsSync(configPath)) return [];
+    const content = readFileSync(configPath, 'utf-8');
+    const names: string[] = [];
+    let inAutoload = false;
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('[')) {
+        inAutoload = trimmed === '[autoload]';
+        continue;
+      }
+      if (inAutoload) {
+        const kvMatch = trimmed.match(/^(\S+)\s*=/);
+        if (kvMatch) names.push(kvMatch[1]!);
+      }
+    }
+    _autoloadCache = { projectPath, names, ts: now };
+    return names;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 检测代码中是否引用了 autoload 单例。
+ * 简单词边界匹配，不排除注释/字符串（误触发代价低）。
+ */
+export function detectAutoloadUsage(code: string, autoloadNames: string[]): string[] {
+  if (!code || autoloadNames.length === 0) return [];
+  const matched: string[] = [];
+  for (const name of autoloadNames) {
+    const pattern = new RegExp(`\\b${escapeRegExp(name)}\\b`);
+    if (pattern.test(code)) {
+      matched.push(name);
+    }
+  }
+  return matched;
+}
 
 /** Check if code uses string concatenation to build dangerous API names.
  *  Catches patterns like: "OS" + ".execute", 'Dir' + 'Access.remove', etc.
@@ -260,7 +335,15 @@ async function cleanupOldSessions(): Promise<void> {
         await retryRm(dirPath);
       }
     }
-  } catch (err) { getLogger().debug('gdscript', `cleanup stale dirs: ${err}`); }
+  } catch (err) {
+    // Only log at warn if some dirs actually failed to clean; debug for routine issues
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('EPERM') || msg.includes('EBUSY')) {
+      getLogger().debug('gdscript', `cleanup stale dirs (retryable): ${msg}`);
+    } else {
+      getLogger().debug('gdscript', `cleanup stale dirs: ${err}`);
+    }
+  }
 }
 
 /** A-07: Retry rm with backoff for EPERM/EBUSY errors on Windows. */
@@ -268,11 +351,13 @@ async function retryRm(dirPath: string, maxRetries = 3): Promise<void> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       await rm(dirPath, { recursive: true, force: true });
+      if (attempt > 0) getLogger().debug('gdscript', `retryRm succeeded on attempt ${attempt + 1}: ${dirPath}`);
       return;
     } catch (err: unknown) {
       const isRetryable = err instanceof Error && 'code' in err &&
         ((err as NodeJS.ErrnoException).code === 'EPERM' || (err as NodeJS.ErrnoException).code === 'EBUSY');
       if (!isRetryable || attempt === maxRetries) throw err;
+      getLogger().debug('gdscript', `retryRm attempt ${attempt + 1} failed for ${dirPath}: ${err}`);
       await new Promise(r => setTimeout(r, 200 * (attempt + 1)));
     }
   }

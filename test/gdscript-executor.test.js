@@ -1,7 +1,86 @@
-import { expect } from 'vitest';
-import { parseMcpMarkers, scanGdscriptSandbox } from '../src/gdscript-executor.js';
+import { describe, it, expect, beforeEach } from 'vitest';
+import {
+  escapeRegExp,
+  detectAutoloadUsage,
+  parseAutoloadNames,
+  _resetAutoloadCache,
+  parseMcpMarkers,
+  scanGdscriptSandbox,
+} from '../src/gdscript-executor.js';
+import { writeFileSync, mkdirSync, rmSync, existsSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 
-// C-2 fix: import actual function instead of inline copy
+const TMP = join(tmpdir(), 'autoload-test-' + process.pid);
+
+beforeEach(() => {
+  _resetAutoloadCache();
+  if (existsSync(TMP)) rmSync(TMP, { recursive: true, force: true });
+  mkdirSync(TMP, { recursive: true });
+});
+
+describe('escapeRegExp', () => {
+  it('转义正则元字符', () => {
+    expect(escapeRegExp('My-Singleton')).toBe('My-Singleton');
+    expect(escapeRegExp('UI.Manager')).toBe('UI\\.Manager');
+    expect(escapeRegExp('NormalName')).toBe('NormalName');
+  });
+});
+
+describe('parseAutoloadNames', () => {
+  it('解析 autoload 名称列表', () => {
+    writeFileSync(join(TMP, 'project.godot'), [
+      '[autoload]',
+      'GameManager="*res://game_manager.gd"',
+      'DataTables="*res://data_tables.gd"',
+    ].join('\n'), 'utf-8');
+    expect(parseAutoloadNames(TMP)).toEqual(['GameManager', 'DataTables']);
+  });
+
+  it('无 autoload 段返回空数组', () => {
+    writeFileSync(join(TMP, 'project.godot'), '[application]\nconfig/name="Test"', 'utf-8');
+    expect(parseAutoloadNames(TMP)).toEqual([]);
+  });
+
+  it('文件不存在返回空数组', () => {
+    expect(parseAutoloadNames(join(tmpdir(), 'noexist-' + Date.now()))).toEqual([]);
+  });
+
+  it('缓存命中', () => {
+    writeFileSync(join(TMP, 'project.godot'), '[autoload]\nX="*res://x.gd"', 'utf-8');
+    const first = parseAutoloadNames(TMP);
+    rmSync(join(TMP, 'project.godot'));
+    expect(parseAutoloadNames(TMP)).toEqual(first);
+  });
+});
+
+describe('detectAutoloadUsage', () => {
+  it('检测 autoload 引用', () => {
+    const code = 'GameManager.get_hp()\nDataTables.fetch()';
+    const r = detectAutoloadUsage(code, ['GameManager', 'DataTables', 'Unused']);
+    expect(r).toContain('GameManager');
+    expect(r).toContain('DataTables');
+    expect(r).not.toContain('Unused');
+  });
+
+  it('无匹配返回空数组', () => {
+    expect(detectAutoloadUsage('var x = 1', ['GameManager'])).toEqual([]);
+  });
+
+  it('空代码返回空数组', () => {
+    expect(detectAutoloadUsage('', ['GameManager'])).toEqual([]);
+  });
+
+  it('正则元字符名正确匹配', () => {
+    expect(detectAutoloadUsage('My-Singleton.run()', ['My-Singleton'])).toContain('My-Singleton');
+  });
+
+  it('词边界：不匹配部分名', () => {
+    expect(detectAutoloadUsage('MyGameManager.get()', ['GameManager'])).toEqual([]);
+  });
+});
+
+// === 原有测试继续 ===
 
 const MARKER_RESULT = '___MCP_RESULT___';
 const MARKER_ERROR = '___MCP_ERROR___';
