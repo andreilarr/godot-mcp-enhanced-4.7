@@ -181,6 +181,36 @@ function detectIndentStyle(lines: string[]): IndentStyle {
   return { type: 'space', size: indentSize };
 }
 
+/**
+ * 将文本的行首缩进归一化为目标风格。
+ * search 文本可能来自 AI（空格缩进），但目标文件用 tab 缩进（或反过来）。
+ * 逐行检测行首空白并转换：tab→目标大小空格，或空格→tab。
+ */
+function normalizeIndentForMatch(text: string, targetStyle: IndentStyle): string {
+  const lines = text.split('\n');
+  const result: string[] = [];
+  for (const line of lines) {
+    const leadingMatch = line.match(/^(\s+)/);
+    if (!leadingMatch || line.trim().length === 0) {
+      result.push(line);
+      continue;
+    }
+    const leading = leadingMatch[1]!;
+    // 计算缩进级别：tab 算 1 级，空格按 4 空格推断级别
+    let levels = 0;
+    if (leading.includes('\t')) {
+      levels = leading.split('\t').length - 1;
+    } else {
+      levels = Math.round(leading.length / 4) || 1;
+    }
+    const targetIndent = targetStyle.type === 'tab'
+      ? '\t'.repeat(levels)
+      : ' '.repeat(levels * targetStyle.size);
+    result.push(targetIndent + line.trimStart());
+  }
+  return result.join('\n');
+}
+
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
 export function getToolDefinitions(): Tool[] {
@@ -379,8 +409,23 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           return opsErrorResult('INVALID_PARAMS', 'search_and_replace.search must be a non-empty string.');
         }
         const normalizedContent = rawFile.replace(/\r\n/g, '\n');
-        const normalizedSearch = sr.search.replace(/\r\n/g, '\n');
-        const normalizedReplace = sr.replace.replace(/\r\n/g, '\n');
+        let normalizedSearch = sr.search.replace(/\r\n/g, '\n');
+        let normalizedReplace = sr.replace.replace(/\r\n/g, '\n');
+
+        // Tab/Space 归一化：如果直接匹配失败，尝试按文件缩进风格重试
+        let indentNormalized = false;
+        if (!normalizedContent.includes(normalizedSearch)) {
+          const fileIndent = detectIndentStyle(normalizedContent.split('\n'));
+          const searchIndent = detectIndentStyle(normalizedSearch.split('\n'));
+          if (fileIndent.type !== searchIndent.type) {
+            const candidateSearch = normalizeIndentForMatch(normalizedSearch, fileIndent);
+            if (normalizedContent.includes(candidateSearch)) {
+              normalizedSearch = candidateSearch;
+              normalizedReplace = normalizeIndentForMatch(normalizedReplace, fileIndent);
+              indentNormalized = true;
+            }
+          }
+        }
 
         const occurrence = sr.occurrence ?? 1;
         let searchIndex = -1;
@@ -725,7 +770,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         return opsErrorResult('INVALID_PARAMS', 'code must be a non-empty string.');
       }
       const timeout = validateTimeout(args.timeout);
-      const loadAutoloads = (args.load_autoloads as boolean) || false;
+      // undefined → 让 executeGdscript 自动检测 autoload；显式 true/false 直接传递
+      const loadAutoloads = args.load_autoloads === undefined ? undefined : (args.load_autoloads as boolean);
       const godot = await ctx.findGodot();
 
       const result = await executeGdscript({
@@ -736,7 +782,12 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         loadAutoloads,
       });
 
-      return textResult(JSON.stringify(result, null, 2));
+      let output = JSON.stringify(result, null, 2);
+      if (result.autoload_detected && result.autoload_detected.length > 0) {
+        const names = result.autoload_detected.join(', ');
+        output = `ℹ️ Auto-detected autoload usage (${names}). Enabled load_autoloads=true automatically.\n\n${output}`;
+      }
+      return textResult(output);
     }
 
     case 'project_replace': {
