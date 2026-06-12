@@ -105,11 +105,12 @@ export function generateApiToken(instanceId: string): string {
 export function verifyApiToken(instanceId: string, token: string): boolean {
   // S-3: 解析新格式 timestamp.nonce.hmac 或旧格式 timestamp.hmac
   const parts = token.split('.');
-  if (parts.length < 2 || parts.length > 3) return false;
+  // C-02: 拒绝旧格式 token（无 nonce），强制使用新格式 timestamp.nonce.hmac
+  if (parts.length !== 3) return false;
 
   const timestampStr = parts[0]!;
-  const providedHmac = parts[parts.length - 1]!;
-  const nonce = parts.length === 3 ? parts[1] : null;
+  const nonce = parts[1]!;
+  const providedHmac = parts[2]!;
 
   const timestamp = parseInt(timestampStr, 10);
   if (!Number.isFinite(timestamp)) return false;
@@ -118,27 +119,22 @@ export function verifyApiToken(instanceId: string, token: string): boolean {
   if (Date.now() - timestamp > TOKEN_TTL_MS) return false;
 
   // S-3: Nonce 防重放检查
-  if (nonce) {
-    const nonceKey = `${instanceId}:${nonce}`;
-    if (_usedNonces.has(nonceKey)) return false; // 已使用的 nonce → 重放攻击
-    _usedNonces.set(nonceKey, Date.now());
-    // 定期清理过期 nonce
-    const now = Date.now();
-    if (now - _lastNonceCleanup > NONCE_CLEANUP_INTERVAL) {
-      for (const [key, ts] of _usedNonces) {
-        if (now - ts > TOKEN_TTL_MS * 2) _usedNonces.delete(key);
-      }
-      _lastNonceCleanup = now;
+  const nonceKey = `${instanceId}:${nonce}`;
+  if (_usedNonces.has(nonceKey)) return false; // 已使用的 nonce → 重放攻击
+  _usedNonces.set(nonceKey, Date.now());
+  // 定期清理过期 nonce + I-01 上限保护
+  const now = Date.now();
+  if (now - _lastNonceCleanup > NONCE_CLEANUP_INTERVAL || _usedNonces.size > 10_000) {
+    for (const [key, ts] of _usedNonces) {
+      if (now - ts > TOKEN_TTL_MS * 2) _usedNonces.delete(key);
     }
+    _lastNonceCleanup = now;
   }
 
   try {
     const secret = getOrCreateApiSecret();
-    const payload = nonce
-      ? `${instanceId}:${timestampStr}:${nonce}`
-      : `${instanceId}:${timestampStr}`;
     const expectedHmac = createHmac(HMAC_ALGORITHM, secret)
-      .update(payload)
+      .update(`${instanceId}:${timestampStr}:${nonce}`)
       .digest('hex');
     // 常量时间比较，防时序攻击
     if (expectedHmac.length !== providedHmac.length) return false;

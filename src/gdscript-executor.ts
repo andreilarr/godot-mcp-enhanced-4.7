@@ -65,8 +65,6 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\.callv\s*\(\s*["']/, label: 'Indirect call via .callv("string") (sandbox bypass)' },
   // A-09: Expression.execute can evaluate arbitrary expressions
   { pattern: /Expression\b.*\.execute\b/, label: 'Expression.execute (arbitrary code execution)' },
-  // S-1-review: % format string bypass ("OS%s" % ".execute")
-  { pattern: /%[sdi]/, label: '% format string (potential bypass)' },
   // S-1-review: var2str + str2var chain (arbitrary object reconstruction)
   { pattern: /\bvar2str\b/, label: 'var2str (serialization bypass)' },
   // S-1-review: get_script() reflection escape
@@ -190,6 +188,23 @@ function detectStringConcatBypass(code: string): string[] {
   // Detect preload with non-literal or computed path
   if (/\bpreload\s*\(\s*(?!["']res:\/\/)/.test(code)) {
     warnings.push('[SANDBOX-P2] preload() with computed/dynamic path');
+  }
+
+  // C-01-fix: Detect % format string used to construct API names.
+  // Only flag when a string containing a dangerous token suffix is used with % formatting,
+  // not innocent uses like "Score: %d" % value.
+  for (const token of DANGEROUS_API_TOKENS) {
+    const dotIdx = token.indexOf('.');
+    const suffix = dotIdx >= 0 ? token.slice(dotIdx) : null;
+    // Match: "OS%s" or "DirAccess%s" — dangerous token prefix followed by % format
+    const prefixPart = dotIdx >= 0 ? token.slice(0, dotIdx) : token;
+    if (new RegExp(`["']${escapeRegExp(prefixPart)}%[sdi]["']`).test(code)) {
+      warnings.push(`[SANDBOX-P2] % format string used to construct dangerous API: "${token}"`);
+    }
+    // Match: ".execute" %s or similar suffix construction
+    if (suffix && new RegExp(`["']${escapeRegExp(suffix)}["'].*%[sdi]`).test(code)) {
+      warnings.push(`[SANDBOX-P2] % format string used to construct API suffix: "${suffix}"`);
+    }
   }
 
   return warnings;
@@ -323,14 +338,15 @@ async function createSessionDir(): Promise<string> {
   return mkdtemp(join(BASE_TMP_DIR, `${TMP_PREFIX}${Date.now()}-`));
 }
 
-/** Background cleanup: remove session dirs older than 1 hour */
+/** Background cleanup: remove session dirs and staging dirs older than 1 hour */
 async function cleanupOldSessions(): Promise<void> {
   if (!baseDirPromise) return;
   const maxAge = 60 * 60 * 1000;
   const now = Date.now();
   try {
     for (const entry of await readdir(BASE_TMP_DIR)) {
-      if (!entry.startsWith(TMP_PREFIX)) continue;
+      // I-02: Also clean up staging dirs (renamed by retryRm on Windows)
+      if (!entry.startsWith(TMP_PREFIX) && !entry.startsWith('_staging_')) continue;
       const dirPath = join(BASE_TMP_DIR, entry);
       const stat = await lstat(dirPath);
       if (stat.isSymbolicLink()) continue;

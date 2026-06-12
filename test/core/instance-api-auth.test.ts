@@ -76,6 +76,8 @@ describe('instance-api-auth', () => {
       expect(verifyApiToken('inst-1', '')).toBe(false);
       expect(verifyApiToken('inst-1', 'no-dot')).toBe(false);
       expect(verifyApiToken('inst-1', 'abc.123')).toBe(false);
+      // C-02: 旧格式（无 nonce）应被拒绝
+      expect(verifyApiToken('inst-1', '1234567890.abcdef1234567890')).toBe(false);
     });
 
     it('rejects expired tokens', () => {
