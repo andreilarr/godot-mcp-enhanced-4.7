@@ -41,7 +41,7 @@ const GLOBAL_KEY = '__global__';
 const _pathCache = new Map<string, string>();
 
 /** Validate a candidate binary by running --version and checking for Godot signature. */
-async function validateGodotBinary(candidatePath: string): Promise<boolean> {
+export async function validateGodotBinary(candidatePath: string): Promise<boolean> {
   try {
     const { stdout } = await execFileAsync(candidatePath, ['--version'], { encoding: 'utf-8', timeout: 5000 });
     return stdout.trim().toLowerCase().includes('godot') || /^\d+\.\d+/.test(stdout.trim());
@@ -81,7 +81,8 @@ async function tryProjectOverride(projectPath: string, tried: string[]): Promise
         if (existsSync(candidate) && await validateGodotBinary(candidate)) return candidate;
         tried.push(`mcp-godot.json: ${candidate} (not found or failed validation)`);
       }
-    } catch {
+    } catch (err) {
+      getLogger().debug('godot-finder', `mcp-godot.json parse error: ${err instanceof Error ? err.message : err}`);
       tried.push(`mcp-godot.json: parse error`);
     }
   }
@@ -101,7 +102,9 @@ async function tryProjectOverride(projectPath: string, tried: string[]): Promise
           tried.push(`project.godot [godot_mcp]: ${candidate} (not found or failed validation)`);
         }
       }
-    } catch { /* skip */ }
+    } catch (err) {
+      getLogger().debug('godot-finder', `project.godot read error: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   // C. Try .godot-version file (godots / asdf-style version managers)
@@ -118,7 +121,9 @@ async function tryProjectOverride(projectPath: string, tried: string[]): Promise
           tried.push(`godots version "${versionSpec}": no matching binary found`);
         }
       }
-    } catch { /* skip */ }
+    } catch (err) {
+      getLogger().debug('godot-finder', `.godot-version read error: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   return null;
@@ -127,6 +132,7 @@ async function tryProjectOverride(projectPath: string, tried: string[]): Promise
 /**
  * Resolve a godots version specifier to a Godot binary path.
  * Searches ~/.godots/versions/ (and platform-specific locations) for matching versions.
+ * Uses prefix matching: "4.6" matches "4.6.3-stable" but NOT "14.6.0".
  */
 function resolveGodotsVersion(versionSpec: string): string | null {
   const home = process.env.USERPROFILE || process.env.HOME;
@@ -139,17 +145,29 @@ function resolveGodotsVersion(versionSpec: string): string | null {
     join(home, 'Library', 'Application Support', 'Godots', 'versions'),
   ];
 
+  // Build a safe prefix regex: "4.6" → /^4\.6/ (escape dots, anchor to start)
+  const prefix = versionSpec.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const versionRe = new RegExp(`^${prefix}`);
+
   for (const godotsDir of godotsDirs) {
     if (!existsSync(godotsDir)) continue;
     try {
+      let bestMatch: string | null = null;
+      let bestEntry = '';
       for (const entry of readdirSync(godotsDir)) {
-        if (entry.includes(versionSpec)) {
-          const versionDir = join(godotsDir, entry);
-          // Look for the Godot binary inside the version directory
-          const found = findGodotBinaryInDir(versionDir);
-          if (found) return found;
+        if (versionRe.test(entry)) {
+          // Prefer longer/more specific matches (e.g. "4.6.3" over "4.6")
+          if (entry.length > bestEntry.length) {
+            const versionDir = join(godotsDir, entry);
+            const found = findGodotBinaryInDir(versionDir);
+            if (found) {
+              bestMatch = found;
+              bestEntry = entry;
+            }
+          }
         }
       }
+      if (bestMatch) return bestMatch;
     } catch { /* skip */ }
   }
 

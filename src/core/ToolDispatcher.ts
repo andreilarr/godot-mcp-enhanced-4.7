@@ -217,7 +217,19 @@ export class ToolDispatcher {
       const godotOverride = typeof args.godot_path === 'string' ? args.godot_path.trim() : undefined;
       const projectPathForGodot = typeof args.project_path === 'string' ? args.project_path : undefined;
       if (godotOverride) {
-        // Tool argument godot_path — highest priority, bypass findGodot entirely
+        // H-02: Validate godot_path is an absolute path (security — prevent relative path tricks)
+        // Absolute paths on Windows start with drive letter (C:\), on POSIX with /
+        const isAbsolute = godotOverride.startsWith('/') || /^[A-Za-z]:[\\/]/.test(godotOverride);
+        if (!isAbsolute) {
+          return opsErrorResult('INVALID_PARAMS',
+            `godot_path must be an absolute path, got: "${godotOverride}"`);
+        }
+        // H-01: Validate the binary is actually Godot before allowing override
+        const { validateGodotBinary } = await import('../core/godot-finder.js');
+        if (!(await validateGodotBinary(godotOverride))) {
+          return opsErrorResult('INVALID_PARAMS',
+            `godot_path failed validation (not a valid Godot binary): ${godotOverride}`);
+        }
         this.ctx.findGodot = () => Promise.resolve(godotOverride);
       } else {
         // Project-aware findGodot — uses .godot/mcp-godot.json, project.godot [godot_mcp], etc.

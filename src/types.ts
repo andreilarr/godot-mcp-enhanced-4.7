@@ -7,7 +7,7 @@ export type ToolResult = CallToolResult;
 
 export interface ToolContext {
   opsScript: string;
-  findGodot: () => Promise<string>;
+  findGodot: (projectPath?: string) => Promise<string>;
   runningProcess: ChildProcess | null;
   setRunningProcess: (proc: ChildProcess | null, skipBusyCheck?: boolean) => void;
   outputBuffer: string[];
