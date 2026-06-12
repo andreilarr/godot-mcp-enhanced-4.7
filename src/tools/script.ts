@@ -274,6 +274,7 @@ export function getToolDefinitions(): Tool[] {
             default: ['.godot', '.import'],
           },
           dry_run: { type: 'boolean', description: 'project_replace: 仅预览不写入（默认 false）', default: false },
+          godot_path: { type: 'string', description: '覆盖 Godot 二进制路径（可选，优先于项目配置和环境变量）' },
         },
         required: ['action'],
       },

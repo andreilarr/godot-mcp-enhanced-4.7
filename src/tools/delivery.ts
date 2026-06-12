@@ -93,6 +93,7 @@ export function getToolDefinitions(): Tool[] {
               },
             },
           },
+          godot_path: { type: 'string', description: '覆盖 Godot 二进制路径（可选，优先于项目配置和环境变量）' },
         },
         required: ['scope'],
       },

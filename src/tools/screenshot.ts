@@ -36,6 +36,7 @@ export function getToolDefinitions(): Tool[] {
           // analyze params
           image_path: { type: 'string', description: 'analyze: Absolute path to the image file (PNG or JPG)' },
           question: { type: 'string', description: 'analyze: Question for the AI to answer about the image. Default: "Describe what you see in this game screenshot."', default: 'Describe what you see in this game screenshot. Focus on: UI elements, character positions, any visual issues or bugs.' },
+          godot_path: { type: 'string', description: '覆盖 Godot 二进制路径（可选，优先于项目配置和环境变量）' },
         },
         required: ['action'],
       },

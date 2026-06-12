@@ -179,6 +179,7 @@ export function getToolDefinitions(): Tool[] {
             description: 'batch_validate: Array of script paths relative to project',
             items: { type: 'string' },
           },
+          godot_path: { type: 'string', description: '覆盖 Godot 二进制路径（可选，优先于项目配置和环境变量）' },
         },
         required: ['action'],
       },

@@ -366,6 +366,7 @@ export function getToolDefinitions(): Tool[] {
           limit: { type: 'number', description: 'find_ui_elements: 最大返回数（默认 200，上限 500）' },
           text: { type: 'string', description: 'click_button: 按钮文字（和 path 二选一）' },
           path: { type: 'string', description: 'click_button: 按钮节点路径（和 text 二选一）' },
+          godot_path: { type: 'string', description: '覆盖 Godot 二进制路径（可选，优先于项目配置和环境变量）' },
         },
         required: ['action'],
       },

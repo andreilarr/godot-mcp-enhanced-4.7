@@ -186,6 +186,40 @@ setup_project_rules(project_path="你的项目路径")
 
 > **注意：** 项目路径有 30 秒缓存。切换项目后等待 30 秒或重启 MCP server 使新路径生效。
 
+### 多版本 Godot 支持
+
+如果你使用 [godots](https://github.com/MakovWait/Godots) 等版本管理器管理多个 Godot 版本，可以为每个项目单独指定 Godot 二进制路径。
+
+**优先级**：工具参数 `godot_path` > 项目配置 > `GODOT_PATH` 环境变量 > PATH > 平台搜索
+
+#### 方式一：项目配置文件（推荐）
+
+在项目目录下创建 `.godot/mcp-godot.json`：
+
+```json
+{
+  "version": 1,
+  "godot_path": "/path/to/Godot_v4.6.3-stable_macos.arm64"
+}
+```
+
+#### 方式二：project.godot 配置段
+
+在 `project.godot` 末尾添加：
+
+```ini
+[godot_mcp]
+godot_path=/path/to/Godot_v4.6.3-stable_macos.arm64
+```
+
+#### 方式三：工具参数
+
+在 MCP 工具调用时传入 `godot_path` 参数（如 `run_project`、`execute_gdscript` 等 10 个核心工具均支持）。
+
+#### 方式四：godots 版本管理器自动检测
+
+在项目根目录创建 `.godot-version` 文件（内容为版本号，如 `4.6.3`），MCP server 会自动在 `~/.godots/versions/` 中查找对应版本。
+
 ### 手动配置（高级用户）
 
 <details>

@@ -100,6 +100,7 @@ export function getToolDefinitions(): Tool[] {
           },
           save: { type: 'boolean', description: 'commit: 是否保存到文件（默认 true）' },
           stop_on_error: { type: 'boolean', description: 'commit: 遇错是否停止（默认 true）' },
+          godot_path: { type: 'string', description: '覆盖 Godot 二进制路径（可选，优先于项目配置和环境变量）' },
         },
         required: ['action'],
       },

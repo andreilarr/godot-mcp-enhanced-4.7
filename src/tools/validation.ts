@@ -9,7 +9,7 @@ import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { opsErrorResult, validateTimeout } from './shared.js';
 import { requireProjectPath, resolveWithinRoot, parseMcpScriptOutput, normalizeUserProjectPath, checkVersionMismatch, scanFiles } from '../helpers.js';
-import { analyzeOutput, type AnalysisResult } from '../error-analyzer.js';
+import { analyzeOutput, type AnalysisResult, type AnalyzeOptions } from '../error-analyzer.js';
 import { lintGDScript } from './gdscript-lint.js';
 import { spawnGodot } from './spawn-helper.js';
 import { getLogger } from '../core/logger.js';
@@ -486,6 +486,7 @@ export function getToolDefinitions(): Tool[] {
             default: ['.png', '.jpg', '.jpeg', '.webp', '.svg', '.mp3', '.ogg', '.wav', '.ttf', '.otf', '.glb', '.gltf'],
           },
           recursive: { type: 'boolean', description: '递归扫描子目录（默认 true）', default: true },
+          godot_path: { type: 'string', description: '覆盖 Godot 二进制路径（可选，优先于项目配置和环境变量）' },
         },
         required: ['action'],
       },
@@ -528,7 +529,22 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       const result = await spawnGodot(godot, cmdArgs, { timeoutMs: timeout * 1000 });
       const allOutput = [...result.stdout.split('\n'), ...result.stderr.split('\n')];
-      const analysis = analyzeOutput(allOutput);
+
+      // Read autoload singleton names from project.godot for better error classification
+      const analyzeOpts: AnalyzeOptions = {};
+      try {
+        const cfgPath = join(projectPath, 'project.godot');
+        if (existsSync(cfgPath)) {
+          const cfgContent = readFileSync(cfgPath, 'utf-8');
+          const config = ctx.parseGodotConfig(cfgContent);
+          const autoloadSection = config['autoload'] as Record<string, unknown> | undefined;
+          if (autoloadSection) {
+            analyzeOpts.autoloadNames = Object.keys(autoloadSection);
+          }
+        }
+      } catch (err) { getLogger().debug('validation', `read autoload config: ${err instanceof Error ? err.message : err}`); }
+
+      const analysis = analyzeOutput(allOutput, analyzeOpts);
 
       if (versionWarning) (analysis as ExtendedAnalysisResult).version_warning = versionWarning;
       if (precheckErrors.length > 0) (analysis as ExtendedAnalysisResult).precheck_errors = precheckErrors;
@@ -561,6 +577,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     }
 
     case 'analyze_error': {
+      // analyze_error: no project context available, skip autoload filtering
       const outputText = args.output as string;
       if (!outputText || !outputText.trim()) {
         return opsErrorResult('INVALID_PARAMS', '"output" parameter is required and must not be empty.');

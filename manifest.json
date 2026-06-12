@@ -42,7 +42,7 @@
     "godot_path": {
       "type": "string",
       "title": "Godot Path",
-      "description": "Path to Godot 4.x executable (auto-detected if omitted)",
+      "description": "Path to Godot 4.x executable (auto-detected if omitted). For multi-version setups, use .godot/mcp-godot.json per project.",
       "required": false
     },
     "project_path": {

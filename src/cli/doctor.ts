@@ -1,5 +1,5 @@
 /** doctor 命令 — 环境诊断 */
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { findGodot } from '../core/godot-finder.js';
 import { ALL_ADAPTERS } from './clients/index.js';
@@ -28,6 +28,7 @@ export async function runDoctor(_args: string[]): Promise<void> {
   if (nodeMajor < 18) hasError = true;
 
   // 2. Godot 发现
+  const projectDir = process.cwd();
   try {
     const godotPath = await findGodot();
     console.log(status(true, `Godot found: ${godotPath}`));
@@ -36,9 +37,19 @@ export async function runDoctor(_args: string[]): Promise<void> {
     hasError = true;
   }
 
+  // 2.5. 项目级 Godot 覆盖
+  const mcpConfigPath = join(projectDir, '.godot', 'mcp-godot.json');
+  if (existsSync(mcpConfigPath)) {
+    try {
+      const config = JSON.parse(readFileSync(mcpConfigPath, 'utf-8')) as { godot_path?: string };
+      if (config.godot_path) {
+        console.log(status(existsSync(config.godot_path), `Project Godot override: ${config.godot_path}`));
+      }
+    } catch { /* ignore parse errors */ }
+  }
+
   // 3. AI 客户端
   console.log('\nAI Clients:');
-  const projectDir = process.cwd();
   for (const adapter of ALL_ADAPTERS) {
     const installed = await adapter.detect();
     if (!installed) {

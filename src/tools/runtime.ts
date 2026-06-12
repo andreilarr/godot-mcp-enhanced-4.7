@@ -87,6 +87,7 @@ export function getToolDefinitions(): Tool[] {
           file_name: { type: 'string', description: '录制：录制文件名（仅接受 recording_*.json 格式）' },
           speed: { type: 'number', description: '录制：回放速度倍率（默认 1.0）' },
           load_autoloads: { type: 'boolean', description: '是否加载 Autoload 上下文（默认 true）' },
+          godot_path: { type: 'string', description: '覆盖 Godot 二进制路径（可选，优先于项目配置和环境变量）' },
         },
         required: ['action'],
       },
@@ -136,7 +137,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       }
 
       // Atomically acquire the process slot after clearing any existing process
-      if (!acquireProcessSlot('run_project')) {
+      if (!await acquireProcessSlot('run_project')) {
         return textResult(buildBusyErrorMessage());
       }
 

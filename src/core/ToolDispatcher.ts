@@ -49,7 +49,7 @@ export interface DispatcherOptions {
   readOnlyGuard: ReadOnlyGuard;
   editorExecutor?: EditorToolExecutor;
   opsScript: string;
-  findGodot: () => Promise<string>;
+  findGodot: (projectPath?: string) => Promise<string>;
   toolCallDelegate: (fn: ToolCallDelegate | null) => void;
   agentContext?: AgentContextManager;
 }
@@ -209,6 +209,19 @@ export class ToolDispatcher {
           );
         }
         args.project_path = resolved;
+      }
+
+      // ── 0.6. Project-aware findGodot injection ──
+      // Wrap ctx.findGodot per-call so tools get the right Godot binary
+      // for their project without changing any call sites.
+      const godotOverride = typeof args.godot_path === 'string' ? args.godot_path.trim() : undefined;
+      const projectPathForGodot = typeof args.project_path === 'string' ? args.project_path : undefined;
+      if (godotOverride) {
+        // Tool argument godot_path — highest priority, bypass findGodot entirely
+        this.ctx.findGodot = () => Promise.resolve(godotOverride);
+      } else {
+        // Project-aware findGodot — uses .godot/mcp-godot.json, project.godot [godot_mcp], etc.
+        this.ctx.findGodot = () => this.options.findGodot(projectPathForGodot);
       }
 
       // ── 0. Common arg type validation ──
