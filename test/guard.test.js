@@ -16,11 +16,19 @@ describe('requiresConfirmation', () => {
   it('returns true for scene.detach_instance', () => {
     expect(requiresConfirmation('scene', { action: 'detach_instance' })).toBe(true);
   });
-  it('returns true for any script action (null guard)', () => {
-    expect(requiresConfirmation('script')).toBe(true);
+  it('returns false for script without action (read_script is exempt)', () => {
+    expect(requiresConfirmation('script')).toBe(false);
+  });
+  it('returns true for script write actions', () => {
     expect(requiresConfirmation('script', { action: 'execute_gdscript' })).toBe(true);
     expect(requiresConfirmation('script', { action: 'write_script' })).toBe(true);
     expect(requiresConfirmation('script', { action: 'edit_script' })).toBe(true);
+    expect(requiresConfirmation('script', { action: 'project_replace' })).toBe(true);
+    expect(requiresConfirmation('script', { action: 'generate_test' })).toBe(true);
+    expect(requiresConfirmation('script', { action: 'create_test_scene' })).toBe(true);
+  });
+  it('returns false for script read_script', () => {
+    expect(requiresConfirmation('script', { action: 'read_script' })).toBe(false);
   });
   it('returns false for scene actions not in guard set', () => {
     expect(requiresConfirmation('scene', { action: 'add_node' })).toBe(false);

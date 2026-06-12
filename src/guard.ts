@@ -51,7 +51,7 @@ function ensureCleanupTimer(): void {
 // GodotServer.handleToolCall() is the single entry point and always resolves to merged names.
 const GUARDED: Record<string, Set<string> | null> = {
   scene: new Set(['remove_node', 'save_scene', 'detach_instance', 'merge_scene']),
-  script: null, // write_script / edit_script / project_replace / execute_gdscript 全部需确认
+  script: new Set(['write_script', 'edit_script', 'execute_gdscript', 'project_replace', 'generate_test', 'create_test_scene']), // read_script 免确认
   animation: new Set(['delete']),
   tilemap: new Set(['tilemap_clear']),
   game: new Set(['game_bridge_install', 'game_bridge_uninstall']),
