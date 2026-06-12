@@ -836,6 +836,7 @@ export async function executeGdscript(
       outputs: [],
       raw_output: '',
       duration_ms: Date.now() - startTime,
+      autoload_detected: autoloadDetected,
     };
   }
 
@@ -865,6 +866,7 @@ export async function executeGdscript(
         outputs: [],
         raw_output: '',
         duration_ms: Date.now() - startTime,
+        autoload_detected: autoloadDetected,
       };
     }
   } else {

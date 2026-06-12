@@ -197,6 +197,7 @@ function normalizeIndentForMatch(text: string, targetStyle: IndentStyle): string
     }
     const leading = leadingMatch[1]!;
     // 计算缩进级别：tab 算 1 级，空格按 4 空格推断级别
+    // 已知简化：混合 tab+space 行首时忽略空格部分，GDScript 中极少见
     let levels = 0;
     if (leading.includes('\t')) {
       levels = leading.split('\t').length - 1;
@@ -257,7 +258,7 @@ export function getToolDefinitions(): Tool[] {
           },
           code: { type: 'string', description: 'execute_gdscript: 要执行的 GDScript 代码' },
           timeout: { type: 'number', description: 'execute_gdscript: 超时秒数（默认 30）', default: 30 },
-          load_autoloads: { type: 'boolean', description: 'execute_gdscript: 加载完整 Autoload 上下文（默认 false）', default: false },
+          load_autoloads: { type: 'boolean', description: 'execute_gdscript: 省略时自动检测 autoload 引用；显式 true/false 覆盖自动检测', default: false },
           search: { type: 'string', description: 'project_replace: 搜索文本' },
           replace: { type: 'string', description: 'project_replace: 替换文本' },
           extensions: {
