@@ -18,8 +18,7 @@ func setup(undo_manager: Node) -> void:
 
 # I-06: null-safe EditorInterface accessor
 func _get_ei() -> EditorInterface:
-	var ei := _get_ei()
-	if ei == null: return {"error": {"code": -32000, "message": "EditorInterface not available"}}
+	var ei = Engine.get_singleton("EditorInterface") as EditorInterface
 	if ei == null:
 		push_error("[MCP] EditorInterface not available")
 	return ei

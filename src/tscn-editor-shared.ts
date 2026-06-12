@@ -27,7 +27,7 @@ export function findSectionEnd(lines: string[], startLine: number): number {
 /** Escape special characters in .tscn quoted attribute values */
 export function escapeTscnAttr(value: string): string {
   if (!value) return '';
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\]/g, '\\]');
 }
 
 /** Detect values that are Godot expressions or primitives and should NOT be quoted in .tscn. */

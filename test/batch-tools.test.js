@@ -247,11 +247,11 @@ describe('runSingleVerify settled guard', () => {
       project_path: tmpDir,
       action: 'run_verify',
       scenes: ['test.tscn'],
-      timeout: 0.01,
+      timeout: 1,
     }, { findGodot: async () => '/fake/godot' });
 
-    // Wait for timeout to fire (10ms + margin)
-    await new Promise(r => setTimeout(r, 80));
+    // Wait for timeout to fire (1s + margin)
+    await new Promise(r => setTimeout(r, 1100));
 
     // Now fire close (simulating race condition — should be ignored by settled guard)
     if (closeHandler) closeHandler(0);
@@ -311,11 +311,11 @@ describe('runSingleVerify settled guard', () => {
       project_path: tmpDir,
       action: 'run_verify',
       scenes: ['test.tscn'],
-      timeout: 0.01,
+      timeout: 1,
     }, { findGodot: async () => '/fake/godot' });
 
-    // Wait for timeout to fire
-    await new Promise(r => setTimeout(r, 80));
+    // Wait for timeout to fire (1s + margin)
+    await new Promise(r => setTimeout(r, 1100));
 
     // Then fire error — should be ignored
     if (errorHandler) errorHandler(new Error('late error'));

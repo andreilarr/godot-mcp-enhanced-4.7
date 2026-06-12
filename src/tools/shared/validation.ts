@@ -1,11 +1,12 @@
 // Parameter validation utilities for tool handlers.
 
-/** Clamps a timeout value (seconds) to [min, max], defaulting on invalid input. */
+/** Clamps a timeout value (seconds) to [min, max], defaulting on invalid input.
+ *  Guarantees the result is >= 1 (rounding a sub-second min up to 1). */
 export function validateTimeout(value: unknown, min = 5, max = 120, defaultVal = 30): number {
   if (value === undefined || value === null) return defaultVal;
   const num = Number(value);
   if (!Number.isFinite(num)) return defaultVal;
-  return Math.min(max, Math.max(min, Math.round(num)));
+  return Math.max(1, Math.min(max, Math.max(min, Math.round(num))));
 }
 
 /** Ensure a value converts to a finite number; throws with descriptive error on failure. */

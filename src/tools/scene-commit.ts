@@ -240,7 +240,7 @@ ${errAction}
 function serializeGdValue(value: unknown): string {
   // I-03, C-01: Escape backslash, quote, newline for GDScript string safety
   if (typeof value === 'string') return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
-  if (typeof value === 'number') return String(value);
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '0';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (value === null || value === undefined) return 'null';
 

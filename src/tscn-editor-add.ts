@@ -247,12 +247,15 @@ function _addNodeInner(
 ): AddNodeResult {
   const { parent, name, type, properties } = params;
 
-  // 1. Validate name and type
+  // 1. Validate name, type, and parent
   if (!/^[A-Za-z0-9_]+$/.test(name)) {
     return { success: false, message: `Invalid node name: ${name}`, fallback: false };
   }
   if (!/^[A-Za-z0-9_]+$/.test(type)) {
     return { success: false, message: `Invalid node type: ${type}`, fallback: false };
+  }
+  if (parent !== '.' && !/^[A-Za-z0-9_./]+$/.test(parent)) {
+    return { success: false, message: `Invalid parent path: ${parent}`, fallback: false };
   }
 
   // 2. Check all properties via canSerializeProperty

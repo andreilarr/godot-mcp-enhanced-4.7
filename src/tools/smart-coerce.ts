@@ -60,8 +60,8 @@ export function smartCoerce(value: unknown): unknown {
   const numMatch = trimmed.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)(?:\s*,\s*(-?\d+\.?\d*))?$/);
   if (numMatch) {
     const nums = numMatch.slice(1).filter(Boolean).map(Number);
-    if (nums.length === 2) return { x: nums[0], y: nums[1] };
-    if (nums.length === 3) return { x: nums[0], y: nums[1], z: nums[2] };
+    if (nums.length === 2 && nums.every(n => Number.isFinite(n))) return { x: nums[0], y: nums[1] };
+    if (nums.length === 3 && nums.every(n => Number.isFinite(n))) return { x: nums[0], y: nums[1], z: nums[2] };
   }
 
   return value;

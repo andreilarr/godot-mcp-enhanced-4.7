@@ -104,7 +104,11 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       for (const f of files) {
         if (!f.path || typeof f.path !== 'string') {
-          failed.push({ path: String(f.path), error: 'Invalid or missing path' });
+          failed.push({ path: f.path ? String(f.path) : '<missing>', error: 'Invalid or missing path' });
+          continue;
+        }
+        if (f.content == null || typeof f.content !== 'string') {
+          failed.push({ path: f.path, error: 'Invalid or missing content (must be a string)' });
           continue;
         }
         const relPath = normalizeUserProjectPath(f.path);
@@ -166,7 +170,7 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     case 'run_verify': {
       const projectPath = requireProjectPath(args);
       const scenes = args.scenes as string[];
-      const timeout = validateTimeout(args.timeout, 0.001, 60, 10);
+      const timeout = validateTimeout(args.timeout, 1, 60, 10);
       const captureTree = args.capture_tree === true;
 
       if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
