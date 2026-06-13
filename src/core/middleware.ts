@@ -149,7 +149,21 @@ export function createElicitationMiddleware(
         const type = prop.type;
         return type === 'string' || type === 'number' || type === 'boolean';
       });
-      if (primitiveMissing.length === 0) return { passed: true };
+      if (primitiveMissing.length === 0) {
+        // F-14: 到此处 missing.length > 0(第140行保证)但全是非 primitive(无 type/联合类型),
+        // 无法 elicit 也不能绕过必需校验——直接报错(当前 common-schemas 字段都有 type,此分支不可达,防御性)
+        return {
+          rejected: true,
+          error: {
+            content: [{ type: 'text' as const, text: JSON.stringify({
+              success: false,
+              error: `Missing required parameter(s): ${missing.join(', ')}`,
+              error_code: 'MISSING_PARAM',
+              missing_params: missing,
+            }) }],
+          },
+        };
+      }
 
       if (elicitFn) {
         const elicited = await elicitFn(primitiveMissing);

@@ -72,7 +72,8 @@ export function sanitizeResPath(raw: unknown, field: string): string {
   let decoded = raw;
   let prev = '';
   let iterations = 0;
-  while (decoded !== prev && iterations < 5) {
+  // F-12: 与 path-utils iterativeDecode 上限(20)统一,防护深度一致(5 次不足以解多层编码如 %2525252e)
+  while (decoded !== prev && iterations < 20) {
     prev = decoded;
     try {
       decoded = decodeURIComponent(decoded);

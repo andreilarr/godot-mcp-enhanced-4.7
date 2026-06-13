@@ -37,7 +37,8 @@ export function forceKillTree(proc: ChildProcess): void {
 /** Async kill: waits for 'close' event, with 5 s fallback. */
 export function killProcess(proc: ChildProcess): Promise<void> {
   return new Promise((resolve) => {
-    if (proc.killed) { resolve(); return; }
+    // F-5: 进程已自然退出(exitCode !== null)也立即 resolve,避免无谓等 5s timer
+    if (proc.killed || proc.exitCode !== null) { resolve(); return; }
     let resolved = false;
     const done = () => { if (!resolved) { resolved = true; resolve(); } };
     const timer = setTimeout(() => {

@@ -78,6 +78,10 @@ export function requireNumber(args: Record<string, unknown>, key: string, fallba
     if (fallback !== undefined) return fallback;
     throw new Error(`${key} is required and must be a number`);
   }
+  // F-15: 拒绝空串/纯空白(Number("")=0 会静默改变数值语义);hex/科学计数仍接受为合法数字
+  if (typeof v === 'string' && v.trim() === '') {
+    throw new Error(`${key} must be a finite number, got: ${JSON.stringify(v)}`);
+  }
   const n = Number(v);
   if (!Number.isFinite(n)) {
     throw new Error(`${key} must be a finite number, got: ${JSON.stringify(v)}`);

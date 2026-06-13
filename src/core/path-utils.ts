@@ -171,7 +171,10 @@ export function resolveWithinRoot(root: string, userPath: string): string {
   }
 
   const normalizedPath = decoded.replace(/\\/g, '/');
-  if (normalizedPath.includes('..')) {
+  // F-4: 段级精确匹配,避免误拒含 ".." 的合法文件名(my..file.txt、..hidden、foo/..bar)
+  // 子串匹配会 over-block;第180行 realpath+relative 兜底仍保留作纵深防御
+  const segments = normalizedPath.split('/');
+  if (segments.some(s => s === '..')) {
     throw new Error(`Path traversal detected: ${userPath}`);
   }
   const resolved = resolve(base, normalizedPath);

@@ -465,6 +465,8 @@ export class EditorConnection {
         this.scheduleReconnect();
       }
     }, delay);
+    // F-7: unref 长生命周期重连定时器,避免阻止 Node 优雅退出(与 gdscript-executor _cleanupTimer.unref() 一致)
+    this.reconnectTimer?.unref();
   }
 
   disconnect(): void {
