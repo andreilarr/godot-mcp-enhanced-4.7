@@ -160,6 +160,21 @@ describe('scanGdscriptSandbox', () => {
     expect(warnings[0]).toContain('OS system command');
   });
 
+  it('should detect OS.create_process by default (F-1: equivalent to OS.execute)', () => {
+    delete process.env.GODOT_MCP_SANDBOX;
+    // create_process 与 execute 等价(启动任意可执行文件),必须被同等拦截
+    const warnings = scanGdscriptSandbox('OS.create_process("cmd.exe", PackedStringArray(["/c", "whoami"]))');
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain('OS system command');
+  });
+
+  it('should detect OS.create_process string-concatenation bypass (F-1)', () => {
+    delete process.env.GODOT_MCP_SANDBOX;
+    // DANGEROUS_API_TOKENS 的 OS.create_process token 拦截拼接绕过
+    const warnings = scanGdscriptSandbox('var api = "OS" + ".create_process"');
+    expect(warnings.length).toBeGreaterThan(0);
+  });
+
   it('should skip scanning when explicitly disabled', () => {
     process.env.GODOT_MCP_SANDBOX = 'disabled';
     const warnings = scanGdscriptSandbox('OS.execute("rm", ["-rf", "/"])');
@@ -210,5 +225,21 @@ describe('scanGdscriptSandbox', () => {
     process.env.GODOT_MCP_SANDBOX = 'warn';
     const warnings = scanGdscriptSandbox('OS.execute("rm", ["-rf", "/"])');
     expect(warnings.length).toBeGreaterThan(0);
+  });
+
+  it('should not false-positive on bare "%s" format strings (I-1 fix)', () => {
+    // Tokens starting with '.' like '.call(' have empty prefixPart and must NOT
+    // trigger a match on bare "%s", "%d", "%i" strings.
+    delete process.env.GODOT_MCP_SANDBOX;
+    const warnings = scanGdscriptSandbox('var label = "%s" % player_name');
+    expect(warnings).toEqual([]);
+  });
+
+  it('should still detect dangerous prefix + %s concatenation', () => {
+    // "OS%s" should still be detected — OS is a non-empty prefix
+    delete process.env.GODOT_MCP_SANDBOX;
+    const warnings = scanGdscriptSandbox('var api = "OS%s" % "execute"');
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings.some(w => w.includes('% format string'))).toBe(true);
   });
 });

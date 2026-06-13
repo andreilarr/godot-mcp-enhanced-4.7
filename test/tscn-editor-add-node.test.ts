@@ -355,3 +355,109 @@ describe('canSerializeProperty (extended)', () => {
     expect(canSerializeProperty({ x: 0, y: 0, w: 100, h: 50, _type: 'Rect2i' })).toBe(true);
   });
 });
+
+// ── F-2/F-3 review fixes (2026-06-13):非有限数守卫 + addNode 属性 key 校验 ──
+describe('F-2: canSerializeProperty rejects non-finite numbers', () => {
+  it('rejects NaN and Infinity as scalar number', () => {
+    expect(canSerializeProperty(NaN)).toBe(false);
+    expect(canSerializeProperty(Infinity)).toBe(false);
+    expect(canSerializeProperty(-Infinity)).toBe(false);
+  });
+
+  it('rejects arrays containing non-finite numbers', () => {
+    expect(canSerializeProperty([1, NaN, 3])).toBe(false);
+    expect(canSerializeProperty([Infinity])).toBe(false);
+  });
+
+  it('rejects Vector/Color-like objects with non-finite fields', () => {
+    expect(canSerializeProperty({ x: NaN, y: 0 })).toBe(false);
+    expect(canSerializeProperty({ x: 1, y: 2, z: Infinity })).toBe(false);
+    expect(canSerializeProperty({ r: 1, g: 0, b: NaN })).toBe(false);
+  });
+
+  it('still accepts finite numbers (regression guard)', () => {
+    expect(canSerializeProperty(0)).toBe(true);
+    expect(canSerializeProperty(-1.5)).toBe(true);
+    expect(canSerializeProperty({ x: 0, y: 0 })).toBe(true);
+  });
+});
+
+describe('F-2: formatPropertyValue never emits NaN/Infinity', () => {
+  it('serializes non-finite scalar number as null', () => {
+    expect(formatPropertyValue(NaN)).toBe('null');
+    expect(formatPropertyValue(Infinity)).toBe('null');
+    expect(formatPropertyValue(-Infinity)).toBe('null');
+  });
+
+  it('replaces non-finite Vector/Color fields with fallback (no NaN/Infinity literal)', () => {
+    // 1e999 经 JSON.parse → Infinity;Vector/Color 字段必须不写出 NaN/Infinity 字面量
+    const v2 = formatPropertyValue({ x: 1e999, y: 0 });
+    expect(v2).not.toContain('Infinity');
+    expect(v2).not.toContain('NaN');
+    expect(v2).toBe('Vector2(0, 0)');
+
+    const col = formatPropertyValue({ r: NaN, g: 0, b: 0 });
+    expect(col).not.toContain('NaN');
+    expect(col).toBe('Color(0, 0, 0, 1)');
+
+    const v3 = formatPropertyValue({ x: 1, y: 2, z: Infinity });
+    expect(v3).not.toContain('Infinity');
+    expect(v3).toBe('Vector3(1, 2, 0)');
+  });
+
+  it('preserves finite number formatting (regression guard)', () => {
+    expect(formatPropertyValue(3.14)).toBe('3.14');
+    expect(formatPropertyValue({ x: 10, y: 20 })).toBe('Vector2(10, 20)');
+    expect(formatPropertyValue({ r: 1, g: 0, b: 0 })).toBe('Color(1, 0, 0, 1)');
+  });
+});
+
+describe('F-3: addNode property key validation & BLOCKED_PROPS', () => {
+  it('rejects property names that are not valid identifiers', () => {
+    const result = addNode(SIMPLE_SCENE, {
+      parent: '.', name: 'Node', type: 'Node2D',
+      properties: { 'bad key!': 1 },
+    });
+    expect(result.success).toBe(false);
+    expect(result.fallback).toBe(false);
+    expect(result.message).toContain('Invalid property name');
+  });
+
+  it('rejects property keys containing newlines (no [node] injection)', () => {
+    const result = addNode(SIMPLE_SCENE, {
+      parent: '.', name: 'Node', type: 'Node2D',
+      properties: { 'evil\n[node name="Injected" type="Node"]': 1 },
+    });
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('Invalid property name');
+  });
+
+  it('drops BLOCKED_PROPS (script/owner/name) instead of writing them', () => {
+    const result = addNode(SIMPLE_SCENE, {
+      parent: '.', name: 'Safe', type: 'Node2D',
+      properties: {
+        script: 'ExtResource("evil")',
+        owner: '/root/Evil',
+        name: 'Hijacked',
+        visible: true,
+      },
+    });
+    expect(result.success).toBe(true);
+    // 合法属性仍写入
+    expect(result.scene).toContain('visible = true');
+    // script/owner/name 不得作为属性写入(与 edit_node 黑名单一致;[node name="Safe"] 头部不匹配 /^name = /m)
+    expect(result.scene).not.toContain('ExtResource("evil")');
+    expect(result.scene).not.toMatch(/^owner = /m);
+    expect(result.scene).not.toMatch(/^name = /m);
+  });
+
+  it('still writes valid snake_case property keys', () => {
+    const result = addNode(SIMPLE_SCENE, {
+      parent: '.', name: 'Good', type: 'Label',
+      properties: { offset_left: 10, visible: true },
+    });
+    expect(result.success).toBe(true);
+    expect(result.scene).toContain('offset_left = 10');
+    expect(result.scene).toContain('visible = true');
+  });
+});

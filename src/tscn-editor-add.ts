@@ -12,6 +12,8 @@ import {
   nodeSectionEnd,
   formatTscnValue,
 } from './tscn-editor-shared.js';
+// F-3: 复用 edit_node/scene-instance 的危险属性黑名单(单一来源,避免防护不一致)
+import { BLOCKED_PROPS } from './tools/scene/helpers.js';
 
 // ── Resource add helpers ─────────────────────────────────────────────────────
 
@@ -59,17 +61,22 @@ export interface AddNodeResult {
  */
 export function canSerializeProperty(value: unknown): boolean {
   if (value === null || value === undefined) return true;
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return true;
+  if (typeof value === 'string' || typeof value === 'boolean') return true;
+  // F-2: 拒绝非有限数(NaN/Infinity)——文本路径无法安全序列化,让其 fallback 到 Godot 进程
+  if (typeof value === 'number') return Number.isFinite(value);
   if (Array.isArray(value)) {
     return value.every(v =>
       v === null || v === undefined ||
-      typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
+      typeof v === 'string' || typeof v === 'boolean' ||
+      (typeof v === 'number' && Number.isFinite(v))
     );
   }
   if (typeof value === 'object') {
     const obj = value as Record<string, unknown>;
     for (const v of Object.values(obj)) {
       if (typeof v === 'object' && v !== null) return false;
+      // F-2: object 字段中的非有限数同样拒绝
+      if (typeof v === 'number' && !Number.isFinite(v)) return false;
     }
     return true;
   }
@@ -90,10 +97,18 @@ export function canSerializeProperty(value: unknown): boolean {
  * - Plain object with x,y → Vector2(x, y)
  * - Other objects → JSON stringified and auto-quoted
  */
+// F-2: 将数值字段格式化为有限值。非有限数(NaN/Infinity)用 fallback 替换,
+// 避免 .tscn 写出 "NaN"/"Infinity" 字面量导致场景文件损坏(canSerializeProperty 已在
+// addNode 路径拦截,此为纵深防御——formatPropertyValue 是 export 的,可能被直接调用)。
+function fmtNum(v: unknown, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+}
+
 export function formatPropertyValue(value: unknown): string {
   if (value === null || value === undefined) return 'null';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
-  if (typeof value === 'number') return String(value);
+  // F-2: 非有限数序列化为 null(保持 .tscn 可解析,Godot 用属性默认值)
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'null';
   if (typeof value === 'string') return formatTscnValue(value);
   if (Array.isArray(value)) {
     const items = value.map(v => formatPropertyValue(v)).join(', ');
@@ -106,14 +121,14 @@ export function formatPropertyValue(value: unknown): string {
     if (obj._type && typeof obj._type === 'string') {
       const t = obj._type;
       if (t === 'Rect2' || t === 'Rect2i') {
-        return `${t}(${obj.x ?? 0}, ${obj.y ?? 0}, ${obj.w ?? 0}, ${obj.h ?? 0})`;
+        return `${t}(${fmtNum(obj.x, 0)}, ${fmtNum(obj.y, 0)}, ${fmtNum(obj.w, 0)}, ${fmtNum(obj.h, 0)})`;
       }
       if (t === 'Vector2' || t === 'Vector2i' || t === 'Vector3' || t === 'Vector3i') {
         const args = t.startsWith('Vector3') ? [obj.x, obj.y, obj.z] : [obj.x, obj.y];
-        return `${t}(${args.map(a => a ?? 0).join(', ')})`;
+        return `${t}(${args.map(a => fmtNum(a, 0)).join(', ')})`;
       }
       if (t === 'Color') {
-        return `Color(${obj.r ?? 1}, ${obj.g ?? 1}, ${obj.b ?? 1}, ${obj.a ?? 1})`;
+        return `Color(${fmtNum(obj.r, 1)}, ${fmtNum(obj.g, 1)}, ${fmtNum(obj.b, 1)}, ${fmtNum(obj.a, 1)})`;
       }
       // I-01: Unknown _type intentionally falls through to auto-inference.
       // Users must use a known type or rely on auto-detection.
@@ -122,22 +137,22 @@ export function formatPropertyValue(value: unknown): string {
     // Color: has r, g, b
     if (keys.includes('r') && keys.includes('g') && keys.includes('b')
       && typeof obj.r === 'number' && typeof obj.g === 'number' && typeof obj.b === 'number') {
-      const a = typeof obj.a === 'number' ? obj.a : 1;
-      return `Color(${obj.r}, ${obj.g}, ${obj.b}, ${a})`;
+      const a = typeof obj.a === 'number' && Number.isFinite(obj.a) ? obj.a : 1;
+      return `Color(${fmtNum(obj.r, 0)}, ${fmtNum(obj.g, 0)}, ${fmtNum(obj.b, 0)}, ${a})`;
     }
     // Rect2: has x, y, w, h
     if (keys.includes('x') && keys.includes('y') && keys.includes('w') && keys.includes('h')) {
-      return `Rect2(${obj.x}, ${obj.y}, ${obj.w}, ${obj.h})`;
+      return `Rect2(${fmtNum(obj.x, 0)}, ${fmtNum(obj.y, 0)}, ${fmtNum(obj.w, 0)}, ${fmtNum(obj.h, 0)})`;
     }
     // Vector3: has x, y, z
     if (keys.includes('x') && keys.includes('y') && keys.includes('z')
       && typeof obj.x === 'number' && typeof obj.y === 'number' && typeof obj.z === 'number') {
-      return `Vector3(${obj.x}, ${obj.y}, ${obj.z})`;
+      return `Vector3(${fmtNum(obj.x, 0)}, ${fmtNum(obj.y, 0)}, ${fmtNum(obj.z, 0)})`;
     }
     // Vector2: has x, y
     if (keys.includes('x') && keys.includes('y')
       && typeof obj.x === 'number' && typeof obj.y === 'number') {
-      return `Vector2(${obj.x}, ${obj.y})`;
+      return `Vector2(${fmtNum(obj.x, 0)}, ${fmtNum(obj.y, 0)})`;
     }
     // C-02: Strip _type from fallback to avoid leaking meta-field into .tscn
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -321,6 +336,12 @@ function _addNodeInner(
   // Property lines
   if (properties) {
     for (const [key, value] of Object.entries(properties)) {
+      // F-3: 与 edit_node(scene/index.ts)/scene-instance 一致——拦截危险属性(script/owner/name 等),
+      // 并校验 key 为合法 .tscn 标识符,防止换行/引号/方括号注入新 [node] 结构损坏场景文件
+      if (BLOCKED_PROPS.has(key)) continue;
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+        return { success: false, message: `Invalid property name: ${key}`, fallback: false };
+      }
       nodeLines.push(`${key} = ${formatPropertyValue(value)}`);
     }
   }

@@ -42,7 +42,8 @@ import { needsImport, runImport } from './tools/import-check.js';
 //     and set GODOT_MCP_ALLOW_UNSAFE=false.
 
 const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
-  { pattern: /OS\.(execute|shell_open|kill|set_restart_on_exit|crash)\b/, label: 'OS system command' },
+  // F-1: create_process 与 execute 功能等价(均可启动任意可执行文件),必须同等拦截
+  { pattern: /OS\.(execute|shell_open|kill|set_restart_on_exit|crash|create_process)\b/, label: 'OS system command' },
   { pattern: /DirAccess\.(remove_absolute|remove)\b/, label: 'Directory removal' },
   // C-03: Allow FileAccess.READ, only flag write modes (WRITE / READ_WRITE / READ_WRITE_APPEND)
   // Use [^;]* to match to statement boundary — avoids truncation on ')' in file paths
@@ -78,7 +79,8 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
  * Detects bypass attempts like "OS" + ".execute" or preload with computed paths.
  */
 const DANGEROUS_API_TOKENS: readonly string[] = [
-  'OS.execute', 'OS.shell_open', 'OS.kill',
+  // F-1: 拦截字符串拼接绕过(OS + ".create_process")
+  'OS.execute', 'OS.shell_open', 'OS.kill', 'OS.create_process',
   'DirAccess.remove', 'DirAccess.remove_absolute',
   'JavaScriptBridge.eval',
   'str2var', 'bytes2var', 'var2str',
@@ -197,8 +199,10 @@ function detectStringConcatBypass(code: string): string[] {
     const dotIdx = token.indexOf('.');
     const suffix = dotIdx >= 0 ? token.slice(dotIdx) : null;
     // Match: "OS%s" or "DirAccess%s" — dangerous token prefix followed by % format
+    // Guard: skip when prefixPart is empty (tokens starting with '.' like '.call(')
+    // to avoid false positives matching bare "%s"/"%d"/"%i".
     const prefixPart = dotIdx >= 0 ? token.slice(0, dotIdx) : token;
-    if (new RegExp(`["']${escapeRegExp(prefixPart)}%[sdi]["']`).test(code)) {
+    if (prefixPart && new RegExp(`["']${escapeRegExp(prefixPart)}%[sdi]["']`).test(code)) {
       warnings.push(`[SANDBOX-P2] % format string used to construct dangerous API: "${token}"`);
     }
     // Match: ".execute" %s or similar suffix construction
