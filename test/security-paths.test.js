@@ -84,6 +84,18 @@ describe('resolveWithinRoot iterative decoding', () => {
     const result = resolveWithinRoot(root, 'my%20file.txt');
     expect(result.includes('my file.txt')).toBeTruthy();
   });
+
+  it('does NOT reject filenames containing ".." (F-4: segment-level match, not substring)', () => {
+    // 旧 includes('..') 子串匹配会误拒含 ".." 的合法文件名;段级匹配只拒整段为 ".." 的遍历
+    for (const p of ['my..file.txt', 'foo/..bar.png', '..hidden.txt']) {
+      try {
+        resolveWithinRoot(root, p);
+      } catch (e) {
+        // 文件可能不存在抛 ENOENT,但绝不能被误判为 path traversal
+        expect(e.message).not.toMatch(/traversal/i);
+      }
+    }
+  });
 });
 
 // ─── gdEscape edge cases ──────────────────────────────────────────────────────
