@@ -62,6 +62,10 @@ export class ToolDispatcher {
   private readonly ctx: ToolContext;
   private _editorFallback = false;
   private _editorFallbackWarned = false;
+  /** Per-call findGodot override. Set in executeToolCall, consumed in dispatchTool.
+   *  MCP serializes requests so no race. Stored separately from ctx to avoid
+   *  permanently mutating the shared context object (I-04 fix). */
+  private _perCallFindGodot: ((projectPath?: string) => Promise<string>) | null = null;
   private healthMonitor: HealthMonitor;
   private readonly middleware: Middleware[];
 
@@ -212,8 +216,8 @@ export class ToolDispatcher {
       }
 
       // ── 0.6. Project-aware findGodot injection ──
-      // Wrap ctx.findGodot per-call so tools get the right Godot binary
-      // for their project without changing any call sites.
+      // Build a per-call findGodot and store on _perCallFindGodot field (not ctx).
+      // dispatchTool picks it up when constructing the per-call ctx copy (I-04 fix).
       const godotOverride = typeof args.godot_path === 'string' ? args.godot_path.trim() : undefined;
       const projectPathForGodot = typeof args.project_path === 'string' ? args.project_path : undefined;
       if (godotOverride) {
@@ -230,10 +234,10 @@ export class ToolDispatcher {
           return opsErrorResult('INVALID_PARAMS',
             `godot_path failed validation (not a valid Godot binary): ${godotOverride}`);
         }
-        this.ctx.findGodot = () => Promise.resolve(godotOverride);
+        this._perCallFindGodot = () => Promise.resolve(godotOverride);
       } else {
         // Project-aware findGodot — uses .godot/mcp-godot.json, project.godot [godot_mcp], etc.
-        this.ctx.findGodot = () => this.options.findGodot(projectPathForGodot);
+        this._perCallFindGodot = () => this.options.findGodot(projectPathForGodot);
       }
 
       // ── 0. Common arg type validation ──
@@ -336,6 +340,8 @@ export class ToolDispatcher {
       const msg = err instanceof Error ? err.message : String(err);
       log('Tool error:', name, msg);
       return opsErrorResult('TOOL_ERROR', msg);
+    } finally {
+      this._perCallFindGodot = null;
     }
   }
 
@@ -489,7 +495,9 @@ export class ToolDispatcher {
 
     let result: ToolResult | null;
     try {
-      result = await targetMod.handleTool(effectiveToolName, effectiveArgs, this.ctx);
+      // I-04 fix: spread per-call findGodot into a shallow ctx copy instead of mutating shared ctx
+      const perCallCtx = { ...this.ctx, findGodot: this._perCallFindGodot ?? this.ctx.findGodot };
+      result = await targetMod.handleTool(effectiveToolName, effectiveArgs, perCallCtx);
     } catch (err) {
       const duration = Date.now() - startTime;
       logger.toolEnd(callId, effectiveToolName, duration, err instanceof Error ? err.message : String(err));

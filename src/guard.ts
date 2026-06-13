@@ -55,6 +55,11 @@ const GUARDED: Record<string, Set<string> | null> = {
   // New script actions will default to NOT requiring confirmation. When adding
   // destructive actions, explicitly add them here. Read-only actions (read_script)
   // are intentionally exempt.
+  //
+  // Known script actions and their guard status:
+  //   GUARDED: write_script, edit_script, execute_gdscript, project_replace,
+  //            generate_test, create_test_scene
+  //   EXEMPT:  read_script (read-only)
   script: new Set(['write_script', 'edit_script', 'execute_gdscript', 'project_replace', 'generate_test', 'create_test_scene']),
   animation: new Set(['delete']),
   tilemap: new Set(['tilemap_clear']),
