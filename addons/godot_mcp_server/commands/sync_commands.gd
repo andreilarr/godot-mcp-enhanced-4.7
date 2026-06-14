@@ -1,5 +1,12 @@
 extends Node
 
+# JSON-RPC error code 分配表(I-2,sync 模块专属):
+#   -32001 SYNC_ALREADY_ACTIVE   -32002 SYNC_NOT_ACTIVE   -32003 Not in scene tree
+#   -32004 NO_EDITOR              -32005 NO_SCENE
+# 注:这些 code 与 mcp_bridge auth(-32001/-32002)及 animation/command_handler 的
+# -32002~-32004 在数字上重叠,但 sync 走 Editor WebSocket 通道,bridge 走 TCP 通道,
+# 由不同 executor 处理,客户端不会混淆。新增 sync 错误时优先复用本表。
+
 var _command_handler: Node
 var _syncing: bool = false
 var _node_paths: Dictionary = {}  # { instance_id (int): { path: String, type: String } }
@@ -18,7 +25,7 @@ func _get_ei() -> EditorInterface:
 
 func start_sync() -> Dictionary:
 	if _syncing:
-		return {"error": {"code": "SYNC_ALREADY_ACTIVE", "message": "Sync already active"}}
+		return {"error": {"code": -32001, "message": "Sync already active"}}
 	var tree = get_tree()
 	if tree == null or tree.root == null:
 		return {"error": {"code": -32003, "message": "Not in scene tree"}}
@@ -32,7 +39,7 @@ func start_sync() -> Dictionary:
 
 func stop_sync() -> Dictionary:
 	if not _syncing:
-		return {"error": {"code": "SYNC_NOT_ACTIVE", "message": "Sync not active"}}
+		return {"error": {"code": -32002, "message": "Sync not active"}}
 	_syncing = false
 	var tree = get_tree()
 	if tree != null:
@@ -46,10 +53,10 @@ func stop_sync() -> Dictionary:
 
 func get_scene_tree() -> Dictionary:
 	var ei := _get_ei()
-	if ei == null: return {"error": {"code": "NO_EDITOR", "message": "EditorInterface not available"}}
+	if ei == null: return {"error": {"code": -32004, "message": "EditorInterface not available"}}
 	var root = ei.get_edited_scene_root()
 	if not root:
-		return {"error": {"code": "NO_SCENE", "message": "No current scene"}}
+		return {"error": {"code": -32005, "message": "No current scene"}}
 	return {"result": {"success": true, "tree": _serialize_tree(root, 0, 5)}}
 
 

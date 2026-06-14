@@ -137,6 +137,43 @@ describe('InstanceRouter', () => {
       expect(router.getSelectedId()).toBe('uuid-2');
     });
 
+    it('throws when target instance removed during switch (CR-4 TOCTOU)', async () => {
+      // CR-4: selectInstance 在 await inflight drain 的窗口期间,updateInstances
+      // 可能移除目标实例。修复后须重新校验并 throw,而非用过期 inst 触发
+      // onInstanceChanged + 写入已失效的 selectedId。
+      const inst1 = makeInstance({ id: 'uuid-1', port: 9081 });
+      const inst2 = makeInstance({ id: 'uuid-2', port: 9082 });
+      let resolveSend: () => void;
+      const onInstanceChanged = vi.fn();
+      const mockSend = vi.fn().mockImplementation(() => new Promise<void>(r => { resolveSend = r; }));
+
+      const router = new InstanceRouter({
+        instances: [inst1, inst2],
+        sendToInstance: mockSend,
+        onInstanceChanged,
+      });
+      await router.selectInstance('uuid-1');
+
+      // Start an in-flight request (hangs)
+      const reqPromise = router.route('game_query', { action: 'ping' });
+      // Start switch to uuid-2 (hangs on inflight drain)
+      const switchPromise = router.selectInstance('uuid-2');
+
+      // During the await window, uuid-2 is removed
+      router.updateInstances([inst1]);
+
+      // Resolve in-flight → switch proceeds to post-await check
+      resolveSend!();
+      await reqPromise;
+
+      await expect(switchPromise).rejects.toThrow(/removed during select|not found/i);
+      // selectedId must be cleared (null) on TOCTOU — M-1: 精确断言而非 not.toBe
+      expect(router.getSelectedId()).toBe(null);
+      // onInstanceChanged must NOT fire with the stale uuid-2
+      // (前置 selectInstance('uuid-1') 合法触发 uuid-1 首次选中通知,不算 TOCTOU)
+      expect(onInstanceChanged).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'uuid-2' }));
+    });
+
   });
 
   describe('resolvePort', () => {

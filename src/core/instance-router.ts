@@ -84,10 +84,17 @@ export class InstanceRouter {
         });
       }
 
+      // CR-4: await inflight drain 窗口期间 updateInstances 可能移除目标实例,
+      // 重新校验避免用过期 inst 触发 onInstanceChanged + 写入失效 selectedId(TOCTOU)。
+      const current = this.instanceMap.get(id);
+      if (!current) {
+        this.selectedId = null;
+        throw new Error(`Instance removed during select: ${id}`);
+      }
       const prev = this.selectedId;
       this.selectedId = id;
       if (prev !== id) {
-        this.deps.onInstanceChanged?.(inst);
+        this.deps.onInstanceChanged?.(current);
       }
     } finally {
       this.draining = false;

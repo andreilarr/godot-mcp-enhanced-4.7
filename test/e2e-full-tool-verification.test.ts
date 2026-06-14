@@ -25,6 +25,17 @@ const GODOT_PATH = process.env.GODOT_PATH || 'D:\\godot\\Godot_v4.6.3-stable_win
 const hasGodot = existsSync(GODOT_PATH);
 const hasProject = existsSync(TEST_PROJECT) && existsSync(resolve(TEST_PROJECT, 'project.godot'));
 
+// E2E 盲区告警:GODOT_PATH 默认指向开发机路径,CI 上通常不存在 → 依赖真实 Godot 的
+// E2E 测试被 describe.skipIf 静默跳过。用 process.stderr.write 而非 console.warn ——
+// vitest 会捕获 console.* 不透传,直接写 stderr 才能在 CI 日志/终端可见。
+if (!hasGodot) {
+  process.stderr.write(
+    `[E2E-SKIP] 未找到 GODOT_PATH (${GODOT_PATH})。\n` +
+    `  依赖真实 Godot 子进程的 E2E 测试(execute_gdscript/create_3d_node/Godot-dependent)将被跳过。\n` +
+    `  设置 GODOT_PATH 环境变量以启用真实集成测试。注意:未设置时 CI 的"全部通过"不含任何真实 Godot 调用验证。\n`,
+  );
+}
+
 const MAIN_SCENE = resolve(TEST_PROJECT, 'scenes', 'main.tscn');
 const NEW_SCENE_PATH = resolve(TEST_PROJECT, 'scenes', 'e2e_verify_test.tscn');
 const NEW_SCRIPT_PATH = resolve(TEST_PROJECT, 'scripts', 'e2e_verify_test.gd');

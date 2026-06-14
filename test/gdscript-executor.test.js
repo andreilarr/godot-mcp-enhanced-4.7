@@ -221,6 +221,33 @@ describe('scanGdscriptSandbox', () => {
     expect(warnings.length).toBe(2);
   });
 
+  it('should detect OS singleton aliasing bypass (C-SEC-4: var s = OS)', () => {
+    delete process.env.GODOT_MCP_SANDBOX;
+    // C-SEC-4 绕过:把 OS 单例赋值给变量,再通过变量调用 execute,
+    // 避开 /OS\.execute/ 字面量匹配。沙箱应拦截单例别名赋值(纵深防御,
+    // 文件头已声明此为已知限制类目,本模式提高常见绕过的拦截成本)。
+    const code = 'var s = OS\ns.execute("calc")';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings.some(w => w.includes('alias') || w.includes('bypass'))).toBe(true);
+  });
+
+  it('should NOT false-positive on OS method call assignment (C-SEC-4 precision)', () => {
+    delete process.env.GODOT_MCP_SANDBOX;
+    // 精度保证:= OS.get_xxx() 是合法方法调用赋值,负向预查须排除,
+    // 不可被单例别名模式误报。
+    const warnings = scanGdscriptSandbox('var name = OS.get_name()');
+    expect(warnings).toEqual([]);
+  });
+
+  it('should NOT false-positive on OS equality comparison (C-SEC-4 review I-1)', () => {
+    delete process.env.GODOT_MCP_SANDBOX;
+    // lookbehind (?<![=!<>]) 排除 == / != / <= / >= 比较操作符的第二 =,
+    // 避免误报 if current_os == OS: 这类合法比较表达式。
+    const warnings = scanGdscriptSandbox('if current_os == OS: pass');
+    expect(warnings).toEqual([]);
+  });
+
   it('should still scan when GODOT_MCP_SANDBOX is set to other values', () => {
     process.env.GODOT_MCP_SANDBOX = 'warn';
     const warnings = scanGdscriptSandbox('OS.execute("rm", ["-rf", "/"])');

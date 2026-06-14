@@ -64,6 +64,18 @@ export function killProcess(proc: ChildProcess): Promise<void> {
 // through the getter/setter functions below. This avoids class instantiation
 // overhead while still providing encapsulation — consumers never touch these
 // variables directly. Use resetState() for test isolation.
+//
+// ⚠️ CONCURRENCY / MULTI-INSTANCE LIMITATION (CR-3): This singleton state is
+// shared across all callers within one MCP server process. In the default
+// single-instance mode, acquireProcessSlot (serialized via enqueueAsync) plus
+// the long-running lock implicitly bound cross-talk — a second run_project fails
+// while the slot is busy, and short ops (query_scene_tree) are capped by
+// acquireShortRunningSlot. setProjectDir / setRunningProcess are intentionally
+// NOT enqueued: making them async would break all synchronous callers
+// (ToolDispatcher, e2e tests). Residual risk is confined to:
+//   (a) GODOT_MCP_MULTI_INSTANCE=true mixing local headless + remote instances,
+//   (b) the window between long-lock release and the next setProjectDir.
+// For true per-project isolation, run a separate MCP server process per project.
 let _runningProcess: ChildProcess | null = null;
 let _outputBuffer: string[] = [];
 let _processStartTime = 0;

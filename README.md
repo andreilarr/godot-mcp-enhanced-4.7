@@ -186,6 +186,8 @@ setup_project_rules(project_path="你的项目路径")
 
 > **注意：** 项目路径有 30 秒缓存。切换项目后等待 30 秒或重启 MCP server 使新路径生效。
 
+> **测试提示：** 仓库的 E2E 测试（`test/e2e-*.test.ts`）依赖真实 Godot 二进制。设置 `GODOT_PATH` 指向本地 Godot 以运行它们；未设置时这些测试被静默跳过（控制台打印 `[E2E-SKIP]` 告警），**CI 默认不验证真实 Godot 集成**——`npm test` 的"全部通过"仅覆盖 TS/GDScript 逻辑，不含真实 Godot 子进程行为。
+
 ### 多版本 Godot 支持
 
 如果你使用 [godots](https://github.com/MakovWait/Godots) 等版本管理器管理多个 Godot 版本，可以为每个项目单独指定 Godot 二进制路径。

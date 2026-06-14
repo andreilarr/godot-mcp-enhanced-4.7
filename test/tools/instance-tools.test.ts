@@ -124,5 +124,25 @@ describe('instance-tools', () => {
       const parsed = JSON.parse(text);
       expect(parsed.success).toBe(false);
     });
+
+    it('godot_select_instance syncs router instanceMap before select (IM-2)', async () => {
+      // IM-2: handleSelectInstance 调 loadFromRegistry 刷新 manager,但 router 的
+      // instanceMap 不同步 → "列表看得见但选不中"。修复后须在 selectInstance 前
+      // 把 manager 的最新实例同步到 router。
+      const manager = makeManager([testInstance]);
+      const router = makeRouter(null);
+      setInstanceManager(manager);
+      setInstanceRouter(router);
+
+      const result = await handleTool('godot_select_instance', { instance_id: 'uuid-1' }, mockCtx);
+      const parsed = JSON.parse((result?.content?.[0] as any)?.text);
+
+      expect(router.updateInstances).toHaveBeenCalledWith([testInstance]);
+      expect(router.selectInstance).toHaveBeenCalledWith('uuid-1');
+      // M-2: 验证同步顺序——updateInstances 必须在 selectInstance 之前调用,
+      // 否则 selectInstance 用的是过期 instanceMap,修复失效。
+      expect(router.updateInstances).toHaveBeenCalledBefore(router.selectInstance);
+      expect(parsed.success).toBe(true);
+    });
   });
 });

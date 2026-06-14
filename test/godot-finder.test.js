@@ -18,6 +18,7 @@ import {
   clearGodotPathCache,
   getCachedGodotPath,
   findGodot,
+  validateGodotBinary,
 } from '../src/core/godot-finder.js';
 
 const execFileMock = vi.mocked(execFile);
@@ -342,5 +343,53 @@ describe('findGodot with projectPath', () => {
     mockExecFileError();
 
     await expect(findGodot()).rejects.not.toThrow('mcp-godot.json');
+  });
+});
+
+// ─── validateGodotBinary (C-SEC-2: 收紧弱校验防 RCE) ─────────────────────────
+
+describe('validateGodotBinary', () => {
+  // C-SEC-2: 旧校验 stdout.includes('godot') || /^\d+\.\d+/ 过于宽松——
+  // 任何打印 "4.6" 的二进制即通过,经 godot_path override 被 spawn 执行(RCE)。
+  // 收紧后:裸两段版本号(无 godot 关键字、无三段、无状态后缀)必须被拒绝。
+
+  it('rejects bare two-part version (C-SEC-2 attack payload)', async () => {
+    mockExecFileSuccess('4.6');
+    expect(await validateGodotBinary('/fake/godot-evil.exe')).toBe(false);
+  });
+
+  it('rejects arbitrary output with no godot signature', async () => {
+    mockExecFileSuccess('some-other-binary 1.0');
+    expect(await validateGodotBinary('/fake/godot-evil.exe')).toBe(false);
+  });
+
+  it('rejects bare godot keyword without version number', async () => {
+    mockExecFileSuccess('godot');
+    expect(await validateGodotBinary('/fake/godot.exe')).toBe(false);
+  });
+
+  it('accepts Godot keyword + major.minor version', async () => {
+    mockExecFileSuccess('Godot v4.3');
+    expect(await validateGodotBinary('/real/godot.exe')).toBe(true);
+  });
+
+  it('accepts bare version + Godot status suffix (4.3.stable)', async () => {
+    mockExecFileSuccess('4.3.stable');
+    expect(await validateGodotBinary('/real/godot.exe')).toBe(true);
+  });
+
+  it('accepts full Godot stable output', async () => {
+    mockExecFileSuccess('Godot Engine v4.2.1.stable.official');
+    expect(await validateGodotBinary('/real/godot.exe')).toBe(true);
+  });
+
+  it('accepts three-part semantic version', async () => {
+    mockExecFileSuccess('4.6.3');
+    expect(await validateGodotBinary('/real/godot.exe')).toBe(true);
+  });
+
+  it('returns false on exec error', async () => {
+    mockExecFileError();
+    expect(await validateGodotBinary('/fake/godot.exe')).toBe(false);
   });
 });

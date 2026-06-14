@@ -1,6 +1,11 @@
 /**
  * Path security — sanitizePath for GDScript paths (res://, user://)
  *
+ * ⚠️ UNWIRED (I-SEC-6): sanitizePath 已实现并有单元测试,但生产代码当前**未调用** ——
+ * GDScript 路径安全的实际防护由 path-utils.ts 的 resolveWithinRoot 承担。此函数保留
+ * 作为 specs/2026-06-08 Phase 2b 多实例设计的预留原语。调用方不应假设它已被自动应用;
+ * 若需启用,在 GDScript 路径入口(script/sprite 等工具)显式接入。
+ *
  * Validates path strings before they reach GDScript execution:
  * - URL-decodes before checking (prevents %2e%2e bypass)
  * - Normalizes separators (backslash → forward slash)

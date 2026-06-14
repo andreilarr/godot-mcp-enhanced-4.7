@@ -40,11 +40,36 @@ const POSIX_CANDIDATES = [
 const GLOBAL_KEY = '__global__';
 const _pathCache = new Map<string, string>();
 
+/**
+ * 判定 `godot --version` 输出是否为可信的 Godot 版本签名。
+ *
+ * C-SEC-2 安全考量:旧的宽松校验 includes('godot') || /^\d+\.\d+/ 会被任何
+ * 打印 "4.6" 的二进制绕过——经 godot_path 工具参数覆盖后该二进制被 spawn 执行
+ * (任意代码执行)。收紧后接受任一:
+ *   1. 输出含 "godot" 关键字(大小写不敏感)且带至少 major.minor 版本号;或
+ *   2. 完整三段语义版本号 major.minor.patch(如 4.6.3);或
+ *   3. 两段版本号 + Godot 状态/构建后缀(如 4.3.stable / 4.6.rc / 4.0.dev)。
+ *
+ * 这把伪造成本从"打印 4.6"提高到"伪造形如 Godot 版本签名的输出"。
+ * 注:无法防御会完整伪造 --version 输出的攻击者——完整防御需路径白名单
+ * (GODOT_MCP_ALLOWED_GODOT_PATHS)或二进制签名校验。
+ * 另:状态后缀列表(stable|rc|dev|...)非穷举(review M-4);自定义构建若被误拒,
+ * 用户应通过 GODOT_PATH 环境变量显式指定(该分支亦走本校验)。
+ */
+function isGodotVersionSignature(stdout: string): boolean {
+  const v = stdout.trim();
+  const hasGodotWord = /godot/i.test(v);
+  const hasMajorMinor = /\d+\.\d+/.test(v);
+  const hasThreePartVersion = /\d+\.\d+\.\d+/.test(v);
+  const hasVersionStatus = /\d+\.\d+\.(stable|rc|dev|beta|alpha|custom|mono|official|gentoo|flathub|homebrew|llvm)/i.test(v);
+  return (hasGodotWord && hasMajorMinor) || hasThreePartVersion || hasVersionStatus;
+}
+
 /** Validate a candidate binary by running --version and checking for Godot signature. */
 export async function validateGodotBinary(candidatePath: string): Promise<boolean> {
   try {
     const { stdout } = await execFileAsync(candidatePath, ['--version'], { encoding: 'utf-8', timeout: 5000 });
-    return stdout.trim().toLowerCase().includes('godot') || /^\d+\.\d+/.test(stdout.trim());
+    return isGodotVersionSignature(stdout);
   } catch (err) {
     getLogger().debug('godot-finder', `validateGodotBinary failed for ${candidatePath}: ${err instanceof Error ? err.message : err}`);
     return false;
@@ -256,8 +281,7 @@ export async function findGodot(projectPath?: string): Promise<string> {
   // 4. Try `godot` on PATH via a quick async spawn
   try {
     const { stdout } = await execFileAsync('godot', ['--version'], { encoding: 'utf-8', timeout: 5000 });
-    const out = stdout.trim();
-    if (out.includes('Godot') || /^\d+\.\d+/.test(out)) {
+    if (isGodotVersionSignature(stdout)) {
       _pathCache.set(cacheKey, 'godot');
       return 'godot';
     }

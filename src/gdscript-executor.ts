@@ -48,6 +48,10 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /OS\.(execute|shell_open|kill|set_restart_on_exit|crash|create_process)\b/, label: 'OS system command' },
   // C-SEC-3: OS["execute"] 等索引访问把句点换成方括号,绕过上面的 OS.execute 正则
   { pattern: /\bOS\s*\[/, label: 'OS singleton indexed access (sandbox bypass)' },
+  // C-SEC-4: OS 单例别名赋值绕过 —— var s = OS; s.execute("calc") 避开 /OS\.execute/ 字面量。
+  // lookbehind (?<![=!<>]) 排除 == / != / <= / >= 比较操作符的第二 =(review I-1:避免误报 x == OS);
+  // 负向预查 (?!\s*\.) 排除合法的 = OS.get_xxx() 方法调用赋值,仅抓裸单例别名。
+  { pattern: /(?<![=!<>])=\s*OS\b(?!\s*\.)/, label: 'OS singleton aliasing (sandbox bypass)' },
   { pattern: /DirAccess\.(remove_absolute|remove)\b/, label: 'Directory removal' },
   // C-03: Allow FileAccess.READ, only flag write modes (WRITE / READ_WRITE / READ_WRITE_APPEND)
   // Use [^;]* to match to statement boundary — avoids truncation on ')' in file paths

@@ -24,6 +24,16 @@ const E2E_DIR = resolve(__dirname, 'e2e-scene');
 const GODOT_PATH = process.env.GODOT_PATH || 'D:\\godot\\Godot_v4.6.3-stable_win64_console.exe';
 const hasGodot = existsSync(GODOT_PATH);
 
+// E2E 盲区告警(同 e2e-full-tool-verification):无 GODOT_PATH 时静默跳过真实 Godot 测试。
+// 用 process.stderr.write 而非 console.warn —— vitest 会捕获 console.* 不透传,
+// 直接写 stderr 才能在 CI 日志/终端可见。
+if (!hasGodot) {
+  process.stderr.write(
+    `[E2E-SKIP] 未找到 GODOT_PATH (${GODOT_PATH}) — 依赖真实 Godot 的 P3/P4/P5 测试将被跳过。\n` +
+    `  设置 GODOT_PATH 环境变量以启用。未设置时 CI 的"全部通过"不含真实 Godot 调用验证。\n`,
+  );
+}
+
 const SCENE_3D = resolve(E2E_DIR, 'scenes', 'test_3d.tscn');
 const SCENE_2D = resolve(E2E_DIR, 'scenes', 'test_2d.tscn');
 const SCREENSHOT_2D = resolve(E2E_DIR, 'test_2d_screenshot.png');

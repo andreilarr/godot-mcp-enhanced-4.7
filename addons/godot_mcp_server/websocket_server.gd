@@ -259,6 +259,19 @@ func _send_session_sync(peer: WebSocketPeer) -> void:
 		open_scenes = ei.get_open_scenes()
 	peer.send_text(JSON.stringify({"method": "session_resync", "params": {"open_scenes": open_scenes}}))
 
+func send_mcp_notification(method: String, params: Dictionary) -> void:
+	# G-C-03 fix: command_handler.send_notification 经 has_method 守卫转发到此;
+	# 此前方法不存在 → sync 的 node_added/node_removed 通知被静默丢弃。
+	# 广播 JSON-RPC notification 给所有已认证且 OPEN 的 peer。
+	var msg := JSON.stringify({"jsonrpc": "2.0", "method": method, "params": params})
+	for peer in _peers:
+		if peer.get_ready_state() == WebSocketPeer.STATE_OPEN and _authenticated_peers.has(peer.get_instance_id()):
+			# M-3: 检查返回值,单 peer 发送失败不中断广播循环
+			var _send_err := peer.send_text(msg)
+			if _send_err != OK:
+				push_warning("[MCP] send_mcp_notification send_text failed (err=%d)" % _send_err)
+
+
 func _on_heartbeat_timeout(peer_id: int) -> void:
 	push_warning("[MCP] Heartbeat timeout (peer_id: %d)" % peer_id)
 	_update_panel("MCP: Connection timeout!")

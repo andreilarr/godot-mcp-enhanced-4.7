@@ -69,7 +69,9 @@ func handle_export_build(params: Dictionary) -> Dictionary:
 		return {"error": {"code": -32002, "message": "Export preset not found: " + preset_name}}
 	# Export build requires EditorExportPlatform API (not fully scriptable in GDScript)
 	# This is a stub — validates preset exists but does not trigger actual build
-	return {"result": {"status": "not_implemented", "preset": preset_name, "message": "Export build is a stub. EditorExportPlatform API is limited. Use editor GUI for now."}}
+	# G-I-08: 返回 error(非 result)避免 AI 误判导出已触发。原 stub 走 success 路径,
+	# 客户端看顶层 success 可能以为导出成功,实际未触发任何构建。
+	return {"error": {"code": -32001, "message": "Export build not implemented (stub). EditorExportPlatform API is limited, use editor GUI. Preset validated: " + preset_name}}
 
 func _is_sensitive_key(key: String) -> bool:
 	var sensitive_patterns = ["keystore", "certificate", "codesign", "identity", "provisioning", "password", "secret", "token", "api_key"]

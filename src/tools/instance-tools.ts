@@ -124,6 +124,9 @@ async function handleSelectInstance(args: Record<string, unknown>): Promise<Tool
   }
 
   try {
+    // IM-2: loadFromRegistry 刷新了 manager,但 router 的 instanceMap 不同步。
+    // 同步 router 的实例列表,避免"列表看得见但选不中"。
+    _router.updateInstances(_manager.getAllInstances());
     await _router.selectInstance(targetId);
     const instance = _manager.getInstance(targetId)!;
     return textResult(JSON.stringify(opsSuccess({
