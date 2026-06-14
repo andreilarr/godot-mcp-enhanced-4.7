@@ -267,19 +267,33 @@ function parseDictContent(inner: string, maxDepth: number, budget: ParseBudget):
 }
 
 function parseTypedValue(raw: string, budget: ParseBudget): NodeProperty {
+  // CRITICAL-1 fix: Godot 4.x node multi-line properties use `key = value`
+  // (equals sign, no colon). The parser entry guard at parseTscn:452
+  // (`trimmed.includes('=')`) guarantees every line reaching here contains `=`.
+  // Prefer `=` as the key/value separator; fall back to `:` only for the rare
+  // legacy `key: Type value` form (which no Godot 4.x file emits).
+  const eqIdx = raw.indexOf('=');
+  if (eqIdx !== -1) {
+    // `name` may contain `/` (e.g. theme_override_styles/panel) — preserve verbatim.
+    const name = raw.slice(0, eqIdx).trim();
+    const rest = raw.slice(eqIdx + 1).trim();
+    // Godot 4.x values are bare (Vector2(1,2), ExtResource("1"), 3, "text").
+    // Do NOT try to split "Type value" — it misreads `Vector2(100, 200)` as
+    // type=Vector2 + value=(100, 200). parseValue() resolves the real type.
+    return { name, type: 'unknown', value: parseValue(rest, 20, budget) };
+  }
+
+  // Legacy `key: Type value` form (Godot 3.x / hand-written). Defensive only.
   const colonIdx = raw.indexOf(':');
   if (colonIdx === -1) {
     return { name: raw.trim(), type: 'unknown', value: raw.trim() };
   }
   const name = raw.slice(0, colonIdx).trim();
   const rest = raw.slice(colonIdx + 1).trim();
-
-  // Type is before the value if there's a space after a type name
   const typeMatch = rest.match(/^(\w+)\s+(.+)$/s);
   if (typeMatch) {
     return { name, type: typeMatch[1]!, value: parseValue(typeMatch[2]!, 20, budget) };
   }
-
   return { name, type: 'unknown', value: parseValue(rest, 20, budget) };
 }
 
@@ -315,16 +329,21 @@ export function parseTscn(content: string): ParsedScene {
     if (!trimmed || trimmed.startsWith(';')) continue;
 
     // Section headers
-    if (trimmed.startsWith('gd_scene')) {
+    // CRITICAL-2 fix: header is `[gd_scene ...]` (with bracket) — matches the
+    // form used by every other section below. Was `startsWith('gd_scene')`
+    // which never matched, leaving header permanently `{}`.
+    if (trimmed.startsWith('[gd_scene')) {
       currentSection = 'header';
-      const parts = trimmed.split(/\s+/);
-      for (const part of parts) {
-        const eqIdx = part.indexOf('=');
-        if (eqIdx !== -1) {
-          const key = part.slice(0, eqIdx);
-          const val = part.slice(eqIdx + 1);
+      const headerMatch = trimmed.match(/\[gd_scene\s+([^\]]*)\]/);
+      const attrs = headerMatch ? headerMatch[1]! : '';
+      const pairs = attrs.match(/(\w+)=(?:"([^"]*)"|((?:(?!\s+\w+=).)+))/g);
+      if (pairs) {
+        for (const pair of pairs) {
+          const eqIdx = pair.indexOf('=');
+          const key = pair.slice(0, eqIdx);
+          const val = pair.slice(eqIdx + 1).replace(/^"|"$/g, '').replace(/""/g, '"');
           const num = Number(val);
-          result.header[key] = isNaN(num) ? val : num;
+          result.header[key] = isNaN(num) || val === '' ? val : num;
         }
       }
       continue;

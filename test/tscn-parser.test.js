@@ -45,6 +45,29 @@ texture = ExtResource("1")
     expect(result.nodes[0].parent).toBe('');
   });
 
+  // CRITICAL-2 regression guard: header `[gd_scene ...]` must parse format/load_steps/uid.
+  it('parses [gd_scene] header attributes (CRITICAL-2)', () => {
+    const content = `[gd_scene load_steps=4 format=3 uid="uid://abc123xyz"]
+
+[node name="Root" type="Node"]
+`;
+    const result = parseTscn(content);
+    expect(result.header.format).toBe(3);
+    expect(result.header.load_steps).toBe(4);
+    expect(result.header.uid).toBe('uid://abc123xyz');
+  });
+
+  it('handles header without uid', () => {
+    const content = `[gd_scene load_steps=1 format=2]
+
+[node name="Root" type="Node"]
+`;
+    const result = parseTscn(content);
+    expect(result.header.format).toBe(2);
+    expect(result.header.load_steps).toBe(1);
+    expect(result.header.uid).toBeUndefined();
+  });
+
   it('handles empty scene gracefully', () => {
     const content = `[gd_scene load_steps=1 format=3]
 `;
@@ -100,6 +123,71 @@ texture = ExtResource("1")
     const result = parseTscn(content);
     expect(result.nodes[0].instance).toBe(1);
     expect(result.nodes[0].instance_of).toBe('res://player.tscn');
+  });
+
+  // CRITICAL-1 regression guards: node multi-line properties use `key = value`.
+  // parseTypedValue previously searched for ':' and never split on '=', so every
+  // property value was stored verbatim as the name AND value. These checks pin
+  // the correct ExtResource / Vector2 / Color / NodePath / number / string paths.
+  it('parses ExtResource multi-line property (CRITICAL-1)', () => {
+    const content = `[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://main.gd" id="1"]
+
+[node name="Player" type="CharacterBody2D"]
+script = ExtResource("1")
+`;
+    const result = parseTscn(content);
+    const prop = result.nodes[0].properties.find(p => p.name === 'script');
+    expect(prop).toBeTruthy();
+    expect(prop.value).toEqual({ __type: 'ExtResource', id: 1 });
+  });
+
+  it('parses Vector2 / Color / number / string properties (CRITICAL-1)', () => {
+    const content = `[gd_scene load_steps=1 format=3]
+
+[node name="Player" type="Node2D"]
+position = Vector2(100, 200)
+modulate = Color(1, 0.5, 0, 1)
+frame = 3
+label_text = "Hello World"
+`;
+    const result = parseTscn(content);
+    const props = result.nodes[0].properties;
+    expect(props.find(p => p.name === 'position')?.value)
+      .toEqual({ __type: 'Vector2', value: '100, 200' });
+    expect(props.find(p => p.name === 'modulate')?.value)
+      .toEqual({ __type: 'Color', value: '1, 0.5, 0, 1' });
+    expect(props.find(p => p.name === 'frame')?.value).toBe(3);
+    expect(props.find(p => p.name === 'label_text')?.value).toBe('Hello World');
+  });
+
+  it('preserves slash in property name (theme_override_styles/panel)', () => {
+    const content = `[gd_scene load_steps=1 format=3]
+
+[ext_resource type="StyleBox" path="res://style.tres" id="1"]
+
+[node name="Panel" type="Panel"]
+theme_override_styles/panel = ExtResource("1")
+`;
+    const result = parseTscn(content);
+    const prop = result.nodes[0].properties.find(p => p.name === 'theme_override_styles/panel');
+    expect(prop).toBeTruthy();
+    expect(prop.value).toEqual({ __type: 'ExtResource', id: 1 });
+  });
+
+  it('parses SubResource reference in node property', () => {
+    const content = `[gd_scene load_steps=1 format=3]
+
+[sub_resource type="AnimationNode" id="anim_1"]
+
+[node name="Player" type="AnimationTree"]
+tree_root = SubResource("anim_1")
+`;
+    const result = parseTscn(content);
+    const prop = result.nodes[0].properties.find(p => p.name === 'tree_root');
+    expect(prop).toBeTruthy();
+    expect(prop.value).toEqual({ __type: 'SubResource', id: 'anim_1' });
   });
 
   it('handles connections', () => {

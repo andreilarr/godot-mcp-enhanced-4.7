@@ -11,7 +11,10 @@ exports[`parseTscn > handles connections > scene-with-connections 1`] = `
     },
   ],
   "extResources": [],
-  "header": {},
+  "header": {
+    "format": 3,
+    "load_steps": 1,
+  },
   "nodeMap": {
     "Root": {
       "children": [],
@@ -44,7 +47,10 @@ exports[`parseTscn > parses a minimal scene with one node > minimal-scene 1`] = 
       "type": "Script",
     },
   ],
-  "header": {},
+  "header": {
+    "format": 3,
+    "load_steps": 2,
+  },
   "nodeMap": {
     "Player": {
       "children": [
@@ -54,9 +60,12 @@ exports[`parseTscn > parses a minimal scene with one node > minimal-scene 1`] = 
           "parent": ".",
           "properties": [
             {
-              "name": "texture = ExtResource("1")",
+              "name": "texture",
               "type": "unknown",
-              "value": "texture = ExtResource("1")",
+              "value": {
+                "__type": "ExtResource",
+                "id": 1,
+              },
             },
           ],
           "type": "Sprite2D",
@@ -66,9 +75,12 @@ exports[`parseTscn > parses a minimal scene with one node > minimal-scene 1`] = 
       "parent": "",
       "properties": [
         {
-          "name": "script = ExtResource("1")",
+          "name": "script",
           "type": "unknown",
-          "value": "script = ExtResource("1")",
+          "value": {
+            "__type": "ExtResource",
+            "id": 1,
+          },
         },
       ],
       "type": "CharacterBody2D",
@@ -79,9 +91,12 @@ exports[`parseTscn > parses a minimal scene with one node > minimal-scene 1`] = 
       "parent": ".",
       "properties": [
         {
-          "name": "texture = ExtResource("1")",
+          "name": "texture",
           "type": "unknown",
-          "value": "texture = ExtResource("1")",
+          "value": {
+            "__type": "ExtResource",
+            "id": 1,
+          },
         },
       ],
       "type": "Sprite2D",
@@ -96,9 +111,12 @@ exports[`parseTscn > parses a minimal scene with one node > minimal-scene 1`] = 
           "parent": ".",
           "properties": [
             {
-              "name": "texture = ExtResource("1")",
+              "name": "texture",
               "type": "unknown",
-              "value": "texture = ExtResource("1")",
+              "value": {
+                "__type": "ExtResource",
+                "id": 1,
+              },
             },
           ],
           "type": "Sprite2D",
@@ -108,9 +126,12 @@ exports[`parseTscn > parses a minimal scene with one node > minimal-scene 1`] = 
       "parent": "",
       "properties": [
         {
-          "name": "script = ExtResource("1")",
+          "name": "script",
           "type": "unknown",
-          "value": "script = ExtResource("1")",
+          "value": {
+            "__type": "ExtResource",
+            "id": 1,
+          },
         },
       ],
       "type": "CharacterBody2D",
@@ -121,9 +142,12 @@ exports[`parseTscn > parses a minimal scene with one node > minimal-scene 1`] = 
       "parent": ".",
       "properties": [
         {
-          "name": "texture = ExtResource("1")",
+          "name": "texture",
           "type": "unknown",
-          "value": "texture = ExtResource("1")",
+          "value": {
+            "__type": "ExtResource",
+            "id": 1,
+          },
         },
       ],
       "type": "Sprite2D",
@@ -155,7 +179,10 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
       "type": "Texture2D",
     },
   ],
-  "header": {},
+  "header": {
+    "format": 3,
+    "load_steps": 2,
+  },
   "nodeMap": {
     "Root": {
       "children": [
@@ -167,9 +194,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
               "parent": "Player",
               "properties": [
                 {
-                  "name": "texture = ExtResource("2")",
+                  "name": "texture",
                   "type": "unknown",
-                  "value": "texture = ExtResource("2")",
+                  "value": {
+                    "__type": "ExtResource",
+                    "id": 2,
+                  },
                 },
               ],
               "type": "Sprite2D",
@@ -180,9 +210,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
               "parent": "Player",
               "properties": [
                 {
-                  "name": "zoom = Vector2(2, 2)",
+                  "name": "zoom",
                   "type": "unknown",
-                  "value": "zoom = Vector2(2, 2)",
+                  "value": {
+                    "__type": "Vector2",
+                    "value": "2, 2",
+                  },
                 },
               ],
               "type": "Camera2D",
@@ -192,9 +225,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
           "parent": ".",
           "properties": [
             {
-              "name": "position = Vector2(100, 200)",
+              "name": "position",
               "type": "unknown",
-              "value": "position = Vector2(100, 200)",
+              "value": {
+                "__type": "Vector2",
+                "value": "100, 200",
+              },
             },
           ],
           "type": "CharacterBody2D",
@@ -207,9 +243,9 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
               "parent": "UI",
               "properties": [
                 {
-                  "name": "layout_mode = 3",
+                  "name": "layout_mode",
                   "type": "unknown",
-                  "value": "layout_mode = 3",
+                  "value": 3,
                 },
               ],
               "type": "Control",
@@ -234,9 +270,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
           "parent": "Player",
           "properties": [
             {
-              "name": "texture = ExtResource("2")",
+              "name": "texture",
               "type": "unknown",
-              "value": "texture = ExtResource("2")",
+              "value": {
+                "__type": "ExtResource",
+                "id": 2,
+              },
             },
           ],
           "type": "Sprite2D",
@@ -247,9 +286,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
           "parent": "Player",
           "properties": [
             {
-              "name": "zoom = Vector2(2, 2)",
+              "name": "zoom",
               "type": "unknown",
-              "value": "zoom = Vector2(2, 2)",
+              "value": {
+                "__type": "Vector2",
+                "value": "2, 2",
+              },
             },
           ],
           "type": "Camera2D",
@@ -259,9 +301,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
       "parent": ".",
       "properties": [
         {
-          "name": "position = Vector2(100, 200)",
+          "name": "position",
           "type": "unknown",
-          "value": "position = Vector2(100, 200)",
+          "value": {
+            "__type": "Vector2",
+            "value": "100, 200",
+          },
         },
       ],
       "type": "CharacterBody2D",
@@ -272,9 +317,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
       "parent": "Player",
       "properties": [
         {
-          "name": "zoom = Vector2(2, 2)",
+          "name": "zoom",
           "type": "unknown",
-          "value": "zoom = Vector2(2, 2)",
+          "value": {
+            "__type": "Vector2",
+            "value": "2, 2",
+          },
         },
       ],
       "type": "Camera2D",
@@ -285,9 +333,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
       "parent": "Player",
       "properties": [
         {
-          "name": "texture = ExtResource("2")",
+          "name": "texture",
           "type": "unknown",
-          "value": "texture = ExtResource("2")",
+          "value": {
+            "__type": "ExtResource",
+            "id": 2,
+          },
         },
       ],
       "type": "Sprite2D",
@@ -300,9 +351,9 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
           "parent": "UI",
           "properties": [
             {
-              "name": "layout_mode = 3",
+              "name": "layout_mode",
               "type": "unknown",
-              "value": "layout_mode = 3",
+              "value": 3,
             },
           ],
           "type": "Control",
@@ -319,9 +370,9 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
       "parent": "UI",
       "properties": [
         {
-          "name": "layout_mode = 3",
+          "name": "layout_mode",
           "type": "unknown",
-          "value": "layout_mode = 3",
+          "value": 3,
         },
       ],
       "type": "Control",
@@ -338,9 +389,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
               "parent": "Player",
               "properties": [
                 {
-                  "name": "texture = ExtResource("2")",
+                  "name": "texture",
                   "type": "unknown",
-                  "value": "texture = ExtResource("2")",
+                  "value": {
+                    "__type": "ExtResource",
+                    "id": 2,
+                  },
                 },
               ],
               "type": "Sprite2D",
@@ -351,9 +405,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
               "parent": "Player",
               "properties": [
                 {
-                  "name": "zoom = Vector2(2, 2)",
+                  "name": "zoom",
                   "type": "unknown",
-                  "value": "zoom = Vector2(2, 2)",
+                  "value": {
+                    "__type": "Vector2",
+                    "value": "2, 2",
+                  },
                 },
               ],
               "type": "Camera2D",
@@ -363,9 +420,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
           "parent": ".",
           "properties": [
             {
-              "name": "position = Vector2(100, 200)",
+              "name": "position",
               "type": "unknown",
-              "value": "position = Vector2(100, 200)",
+              "value": {
+                "__type": "Vector2",
+                "value": "100, 200",
+              },
             },
           ],
           "type": "CharacterBody2D",
@@ -378,9 +438,9 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
               "parent": "UI",
               "properties": [
                 {
-                  "name": "layout_mode = 3",
+                  "name": "layout_mode",
                   "type": "unknown",
-                  "value": "layout_mode = 3",
+                  "value": 3,
                 },
               ],
               "type": "Control",
@@ -405,9 +465,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
           "parent": "Player",
           "properties": [
             {
-              "name": "texture = ExtResource("2")",
+              "name": "texture",
               "type": "unknown",
-              "value": "texture = ExtResource("2")",
+              "value": {
+                "__type": "ExtResource",
+                "id": 2,
+              },
             },
           ],
           "type": "Sprite2D",
@@ -418,9 +481,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
           "parent": "Player",
           "properties": [
             {
-              "name": "zoom = Vector2(2, 2)",
+              "name": "zoom",
               "type": "unknown",
-              "value": "zoom = Vector2(2, 2)",
+              "value": {
+                "__type": "Vector2",
+                "value": "2, 2",
+              },
             },
           ],
           "type": "Camera2D",
@@ -430,9 +496,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
       "parent": ".",
       "properties": [
         {
-          "name": "position = Vector2(100, 200)",
+          "name": "position",
           "type": "unknown",
-          "value": "position = Vector2(100, 200)",
+          "value": {
+            "__type": "Vector2",
+            "value": "100, 200",
+          },
         },
       ],
       "type": "CharacterBody2D",
@@ -443,9 +512,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
       "parent": "Player",
       "properties": [
         {
-          "name": "texture = ExtResource("2")",
+          "name": "texture",
           "type": "unknown",
-          "value": "texture = ExtResource("2")",
+          "value": {
+            "__type": "ExtResource",
+            "id": 2,
+          },
         },
       ],
       "type": "Sprite2D",
@@ -456,9 +528,12 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
       "parent": "Player",
       "properties": [
         {
-          "name": "zoom = Vector2(2, 2)",
+          "name": "zoom",
           "type": "unknown",
-          "value": "zoom = Vector2(2, 2)",
+          "value": {
+            "__type": "Vector2",
+            "value": "2, 2",
+          },
         },
       ],
       "type": "Camera2D",
@@ -471,9 +546,9 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
           "parent": "UI",
           "properties": [
             {
-              "name": "layout_mode = 3",
+              "name": "layout_mode",
               "type": "unknown",
-              "value": "layout_mode = 3",
+              "value": 3,
             },
           ],
           "type": "Control",
@@ -490,9 +565,9 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
       "parent": "UI",
       "properties": [
         {
-          "name": "layout_mode = 3",
+          "name": "layout_mode",
           "type": "unknown",
-          "value": "layout_mode = 3",
+          "value": 3,
         },
       ],
       "type": "Control",
@@ -504,6 +579,7 @@ exports[`parseTscn snapshots > snapshots complex nested scene > complex-nested-s
 
 exports[`parseTscnSummary > returns human-readable summary > scene-summary 1`] = `
 "=== Scene Summary ===
+Format: 3, Steps: 2
 
 External Resources: 0
 Sub Resources: 0

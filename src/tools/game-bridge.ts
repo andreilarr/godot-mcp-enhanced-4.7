@@ -354,7 +354,8 @@ export function getToolDefinitions(): Tool[] {
             type: 'object',
             description: '方法参数。game_query: 因方法而异。game_write: set_node_property {path, property, value}, call_method {path, method, args}。game_input: send_key {key, pressed}, send_mouse_click {x, y, button, pressed}, send_mouse_move {x, y}, send_text {text}。game_wait: wait_for_node {path}, wait_for_property {path, property, value}',
           },
-          timeout: { type: 'number', description: 'game_query/game_write/game_input/game_wait: 超时时间（毫秒，默认 10000）' },
+          timeout: { type: 'number', description: 'game_query/game_write/game_input/game_wait: 超时时间（毫秒，默认 10000）。game_wait 的 timeout 用作整个轮询窗口的总预算（在窗口内反复探测直到条件成立）' },
+          interval_ms: { type: 'number', description: 'game_wait 专用：轮询探测间隔（毫秒，默认 200，范围 50-2000）。仅 wait_for_node/wait_for_property 生效', default: 200 },
           node_path: { type: 'string', description: 'monitor_start: 要监控的节点路径（如 root/Player）' },
           properties: { type: 'array', items: { type: 'string' }, description: 'monitor_start: 要监控的属性名列表（如 ["position", "health"]）' },
           interval_frames: { type: 'number', description: 'monitor_start: 采样间隔帧数（默认 10，最小 1，最大 300）' },
@@ -398,6 +399,68 @@ const INPUT_METHODS = new Set([
 const WAIT_METHODS = new Set([
   'wait_for_node', 'wait_for_property',
 ]);
+
+/**
+ * CRITICAL-3 fix: poll a Bridge wait condition until it holds or the budget
+ * runs out. Bridge (`mcp_bridge.gd` `_cmd_wait_for_node`/`_cmd_wait_for_property`)
+ * is a single synchronous snapshot, so "waiting" must be implemented by the
+ * caller polling within a time window.
+ *
+ * `probe` is parameterized so tests can inject a mock without touching the
+ * real socket. Each probe call should return the BridgeResponse from a single
+ * `wait_for_node`/`wait_for_property` snapshot.
+ *
+ * Condition resolution:
+ *   - `wait_for_node`   → holds when result.exists === true
+ *   - `wait_for_property` → holds when result.match === true
+ *   - any result.error  → abort immediately, surface the error
+ *
+ * The returned object spreads the last Bridge result and augments it with
+ * `wait_completed` / `elapsed_ms` / `timed_out`, so existing fields stay
+ * backward compatible.
+ */
+export async function pollWaitCondition(
+  method: 'wait_for_node' | 'wait_for_property',
+  probe: () => Promise<BridgeResponse>,
+  totalMs: number,
+  intervalMs: number,
+  sleep: (ms: number) => Promise<void> = defaultSleep,
+): Promise<Record<string, unknown>> {
+  const startedAt = Date.now();
+  const isNode = method === 'wait_for_node';
+
+  let last: BridgeResponse;
+  for (;;) {
+    last = await probe();
+
+    // Hard errors abort immediately — never swallow a real failure as "not yet".
+    if (last.error) {
+      return {
+        ...(last.result as Record<string, unknown> | undefined),
+        error: last.error,
+        wait_completed: false,
+        elapsed_ms: Date.now() - startedAt,
+      };
+    }
+
+    const result = (last.result ?? {}) as Record<string, unknown>;
+    const satisfied = isNode ? result.exists === true : result.match === true;
+    if (satisfied) {
+      return { ...result, wait_completed: true, elapsed_ms: Date.now() - startedAt };
+    }
+
+    const elapsed = Date.now() - startedAt;
+    if (elapsed >= totalMs) {
+      return { ...result, wait_completed: false, timed_out: true, elapsed_ms: elapsed };
+    }
+
+    // Sleep the interval, but never past the remaining budget.
+    const remaining = totalMs - elapsed;
+    await sleep(Math.min(intervalMs, remaining));
+  }
+}
+
+const defaultSleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
 
 /** 确保项目目录已设置：优先用 ctx.projectDir，回退到 args.project_path */
 function ensureProjectDir(ctx: ToolContext, args: Record<string, unknown>): void {
@@ -503,15 +566,13 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
 
       case 'game_query':
       case 'game_write':
-      case 'game_input':
-      case 'game_wait': {
+      case 'game_input': {
         // Always update project dir so switching projects between calls works
         ensureProjectDir(ctx, args);
         const methodSets: Record<string, Set<string>> = {
           game_query: QUERY_METHODS,
           game_write: WRITE_METHODS,
           game_input: INPUT_METHODS,
-          game_wait: WAIT_METHODS,
         };
         const allowed = methodSets[action]!;
         const method = args.method as string;
@@ -534,6 +595,38 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
           return textResult(`Bridge error (${response.error.code}): ${response.error.message}`);
         }
         return textResult(JSON.stringify(response.result, null, 2));
+      }
+
+      case 'game_wait': {
+        // CRITICAL-3 fix: Bridge wait_for_* is a single snapshot; poll within
+        // the timeout window so "wait" actually waits for the condition.
+        ensureProjectDir(ctx, args);
+        const method = args.method as string;
+        if (!WAIT_METHODS.has(method)) {
+          return textResult(`Error: Unknown method "${method}". Supported: ${[...WAIT_METHODS].join(', ')}`);
+        }
+        const rawParams = args.params;
+        const params = (rawParams && typeof rawParams === 'object' && !Array.isArray(rawParams))
+          ? rawParams as Record<string, unknown>
+          : {};
+        const totalMs = clampTimeoutMs(args.timeout);
+        const intervalMs = clampTimeoutMs(args.interval_ms, 50, 2000, 200);
+
+        const result = await pollWaitCondition(
+          method as 'wait_for_node' | 'wait_for_property',
+          () => sendToBridge(method, params, Math.min(intervalMs * 2, totalMs)),
+          totalMs,
+          intervalMs,
+        );
+
+        if (result.error) {
+          const code = (result.error as { code?: number }).code;
+          if (code === -32001 || code === -32002) {
+            _cachedSecret = null;
+          }
+          return textResult(`Bridge error (${code}): ${(result.error as { message?: string }).message ?? 'wait failed'}`);
+        }
+        return textResult(JSON.stringify(result, null, 2));
       }
 
       case 'monitor_start': {
