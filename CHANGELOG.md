@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-06-14
+
+### Fixed — 3 个阻塞性 CRITICAL（功能验证审查发现并修复）
+
+经实际 MCP 工具调用验证（在 godot-test-project 端到端测试），修复了 3 个导致核心功能不可用的 CRITICAL 缺陷：
+
+1. **parseTscn 节点属性解析**（`src/tscn-parser.ts`）：`parseTypedValue` 原用冒号 `:` 查找类型分隔符，但 Godot 4.x 节点多行属性格式为 `key = value`（等号），导致 `position`/`script`/`color`/`texture` 等所有多行属性被整行塞进 `name`/`value`，`ExtResource`/`Color`/`Vector2`/`Vector3`/`NodePath`/数组/字典的类型解析逻辑从未触发。改为优先用 `=` 分隔，`value` 经 `parseValue` 正确解析为结构化对象。**实测**：`read_scene` 现在返回 `{name:"script", value:{__type:"ExtResource", id:"1_dodge"}}` 而非整行字符串；`color = Color(0,0,0,1)` 解析为 `{__type:"Color", value:"0, 0, 0, 1"}`；含 `/` 的属性名（如 `theme_override_font_sizes/font_size`）保留完整路径。
+
+2. **parseTscn 头部解析**（`src/tscn-parser.ts`）：`startsWith('gd_scene')` 漏了方括号，实际行是 `[gd_scene ...]`，导致 `header` 恒返回 `{}`，`format`/`load_steps`/`uid` 全部丢失。改为 `startsWith('[gd_scene')` + 正则提取方括号内属性。
+
+3. **wait_for_node / wait_for_property 真正等待**（`src/tools/game-bridge.ts`）：Bridge 端（`mcp_bridge.gd`）的 `_cmd_wait_for_*` 是单次同步快照，工具命名与文档却暗示异步等待，导致所有依赖"等待条件成立"的自动化流程静默失败。新增 `pollWaitCondition`：在 `timeout` 窗口内按 `interval_ms`（默认 200ms，范围 50-2000）反复探测，条件成立立即返回，超时返回 `timed_out`，error 立即中止。返回值新增 `wait_completed`/`elapsed_ms`/`timed_out`，向后兼容。
+
+### 验证
+
+- 全量测试：**2597 passed / 0 failed**（+20 新测试覆盖修复，0 回归）
+- 新增测试：`test/tscn-parser.test.js`（属性/头部解析各类型）、`test/game-bridge-wait.test.ts`（轮询/超时/error 中止/向后兼容）
+- 端到端实测：`read_scene` 在 dodge/pong/main 三场景确认属性与头部正确解析（ExtResource/Color/数字/字符串/负数/浮点/含 `/` 的属性名）
+
 ## [0.18.0] - 2026-06-10
 
 ### Breaking Changes — 工具合并（39 → 27 MCP 工具）

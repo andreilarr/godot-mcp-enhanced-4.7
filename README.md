@@ -285,7 +285,7 @@ npm install && npm run build
 
 | 工具 | 说明 |
 |------|------|
-| `read_scene` | 解析 .tscn 为节点树 JSON |
+| `read_scene` | 解析 .tscn 为节点树 JSON，含属性类型解析（ExtResource/Color/Vector2/Vector3/NodePath/数组/字典/数字/字符串） |
 | `create_scene` | 创建新场景 |
 | `add_node` | 向场景添加节点 |
 | `batch_add_nodes` | 一次调用添加多个节点（比重复 `add_node` 快得多） |
@@ -383,7 +383,7 @@ npm install && npm run build
 | `game_bridge_uninstall` | 卸载 MCP Bridge autoload |
 | `game_query` | 查询运行中游戏状态（场景树/节点属性/性能/视口） |
 | `game_input` | 向运行中游戏发送输入事件（键盘/鼠标/文本） |
-| `game_wait` | 等待特定游戏状态条件（节点出现/属性值变化） |
+| `game_wait` | 在 timeout 窗口内轮询等待游戏状态条件（节点出现/属性值变化），支持 `interval_ms` 探测间隔。条件成立立即返回，超时返回 `timed_out` |
 
 ### 工作流工具
 
@@ -620,6 +620,8 @@ MIT
 
 | 版本 | 日期 | 要点 |
 |------|------|------|
+| **v0.18.1** | 2026-06-14 | 功能验证审查 3 CRITICAL 修复 — parseTscn 属性/头部解析（read_scene 现正确返回结构化属性）+ game_wait 轮询等待（pollWaitCondition），2597 测试 |
+| **v0.18.0** | 2026-06-10 | 工具合并（39→27 MCP 工具）+ LEGACY 兼容模式 + manage_tools 迁移 + notifyToolsChanged |
 | **v0.17.1** | 2026-06-08 | 五维审查 P0+P1 全量修复 — tscn 死代码删除 527 行 + core/tools 解耦 + animation-ops +38 测试 + EditorExecutor +16 测试 + 安全加固，2252 测试 |
 | **v0.17.0** | 2026-06-07 | 审查修复 9 项（4C+5I/A）— tscn 编辑正确性 + 确认令牌截断保护 + 字符串 UID + 安全加固，2023 测试 |
 | **v0.16.0** | 2026-05-31 | 审查驱动质量提升 — ToolDispatcher 提取 + 87 次提交 + merge_scene + 项目脚手架 + 智能类型转换 + 1638 测试 |
