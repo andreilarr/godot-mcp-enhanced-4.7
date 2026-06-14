@@ -57,10 +57,18 @@ export function mergeTscn(ours: string, theirs: string): string {
   const theirsExt = parseExt(theirs);
   const seenPaths = new Set(oursExt.map(e => e.path));
   const mergedExt = [...oursExt];
+  // C-BUG-2: 记录按 path 去重时被丢弃的 theirs ext originalId → ours 同 path ext originalId,
+  // 后续把节点体 ExtResource("被丢弃id") 重写到 ours 的 id,避免悬空引用致场景损坏。
+  const discardedExtByOurs: Record<string, string> = {};
   for (const ext of theirsExt) {
     if (!seenPaths.has(ext.path)) {
       mergedExt.push(ext);
       seenPaths.add(ext.path);
+    } else if (ext.originalId) {
+      const oursSamePath = oursExt.find(o => o.path === ext.path);
+      if (oursSamePath?.originalId && oursSamePath.originalId !== ext.originalId) {
+        discardedExtByOurs[ext.originalId] = oursSamePath.originalId;
+      }
     }
   }
 
@@ -70,9 +78,17 @@ export function mergeTscn(ours: string, theirs: string): string {
   const subSignature = (s: SubRes) => `${s.type}::${s.body}`;
   const seenSubSigs = new Set(oursSub.map(s => subSignature(s)));
   const mergedSub = [...oursSub];
+  // C-BUG-2: 同 ext,记录按 signature 去重时被丢弃的 theirs sub originalId → ours 同 signature originalId
+  const discardedSubByOurs: Record<string, string> = {};
   for (const sub of theirsSub) {
     if (!seenSubSigs.has(subSignature(sub))) {
       mergedSub.push(sub);
+      seenSubSigs.add(subSignature(sub));
+    } else if (sub.originalId) {
+      const oursSameSig = oursSub.find(o => subSignature(o) === subSignature(sub));
+      if (oursSameSig?.originalId && oursSameSig.originalId !== sub.originalId) {
+        discardedSubByOurs[sub.originalId] = oursSameSig.originalId;
+      }
     }
   }
 
@@ -110,6 +126,10 @@ export function mergeTscn(ours: string, theirs: string): string {
     if (ext.originalId && ext.originalId !== newId) extIdMap[ext.originalId] = newId;
     reindexedExt.push(`[ext_resource type="${ext.type}" path="${ext.path}" id="${newId}"]`);
   });
+  // C-BUG-2: 被丢弃的 theirs ext id 映射到 ours 同 path 资源的最终 id(经 extIdMap 解析碰撞后的 id)
+  for (const [discardedId, oursOrigId] of Object.entries(discardedExtByOurs)) {
+    extIdMap[discardedId] = extIdMap[oursOrigId] ?? oursOrigId;
+  }
 
   const subIdMap: Record<string, string> = {};
   const reindexedSub: string[] = [];
@@ -119,6 +139,10 @@ export function mergeTscn(ours: string, theirs: string): string {
     if (sub.originalId && sub.originalId !== newId) subIdMap[sub.originalId] = newId;
     reindexedSub.push(`[sub_resource type="${sub.type}" id="${newId}"]\n${sub.body}`);
   });
+  // C-BUG-2: 被丢弃的 theirs sub id 映射到 ours 同 signature 资源的最终 id
+  for (const [discardedId, oursOrigId] of Object.entries(discardedSubByOurs)) {
+    subIdMap[discardedId] = subIdMap[oursOrigId] ?? oursOrigId;
+  }
 
   const oursNodes = parseNodes(ours);
   const theirsNodes = parseNodes(theirs);

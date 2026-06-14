@@ -1,0 +1,19 @@
+; Engine configuration file.
+; Minimal E2E fixture — 无 autoload,避免 Godot headless 加载时编译外部 RPG demo
+; 的 autoload 链(详见 e2e-full-tool-verification.test.ts 注释)。
+config_version=5
+
+[application]
+
+config/name="MCP E2E Test Fixture"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.6")
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"

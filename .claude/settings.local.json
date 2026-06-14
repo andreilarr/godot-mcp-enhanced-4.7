@@ -1,7 +1,6 @@
 {
   "permissions": {
     "allow": [
-      "mcp__plugin_everything-claude-code_sequential-thinking__sequentialthinking",
       "Skill(review)",
       "Skill(review:*)"
     ]

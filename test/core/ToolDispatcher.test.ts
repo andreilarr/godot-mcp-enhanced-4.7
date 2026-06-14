@@ -20,6 +20,7 @@ const {
   mockIsPathInAllowedRoots,
   mockIsToolAllowed,
   mockSetActiveGroups,
+  mockValidateGodotBinary,
 } = vi.hoisted(() => ({
   mockGetAllToolDefinitions: vi.fn<() => Tool[]>(),
   mockGetModuleForTool: vi.fn(),
@@ -31,6 +32,7 @@ const {
   mockIsPathInAllowedRoots: vi.fn().mockReturnValue(true),
   mockIsToolAllowed: vi.fn().mockReturnValue(true),
   mockSetActiveGroups: vi.fn(),
+  mockValidateGodotBinary: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock('../../src/core/tool-registry.js', () => ({
@@ -79,6 +81,11 @@ vi.mock('../../src/core/process-state.js', () => ({
   setProcessStartTime: vi.fn(),
   getProjectDir: vi.fn().mockReturnValue(''),
   setProjectDir: vi.fn(),
+}));
+
+// M-1: mock godot-finder 的 validateGodotBinary(resolveFindGodotOverride 动态 import 调用)
+vi.mock('../../src/core/godot-finder.js', () => ({
+  validateGodotBinary: mockValidateGodotBinary,
 }));
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -930,6 +937,111 @@ describe('ToolDispatcher: default project_path injection', () => {
     expect(text).toContain('project_path');
 
     // Reset mock
+    (skipProjectPath as ReturnType<typeof vi.fn>).mockReturnValue(false);
+  });
+});
+
+// ── findGodot override (CR-1 / CR-2 regression coverage) ─────────────────────
+//
+// 这些用例覆盖 C-CONC-1 重构引入的两个 CRITICAL 回归:
+//   CR-1: 普通调用路径漏传 findGodotOverride → godot_path 参数失效
+//   CR-2: confirm_and_execute 路径基于错误 args 计算 override
+// 断言核心:传入工具模块的 ctx.findGodot(第 3 个参数)必须是 override 实现,
+// 而非默认的 this.ctx.findGodot。
+
+describe('ToolDispatcher: findGodot override propagation (CR-1/CR-2)', () => {
+  function makeDispatcher(overrides?: Partial<DispatcherOptions>) {
+    return new ToolDispatcher(createOptions(overrides));
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetAllToolDefinitions.mockReturnValue([...FIXTURE_TOOLS]);
+    mockRequiresConfirmation.mockReturnValue(false);
+    mockValidateGodotBinary.mockResolvedValue(true);
+    (_mockResolveProjectPath as ReturnType<typeof vi.fn>).mockReturnValue('/default/project');
+  });
+
+  // [FG1] CR-1: 普通调用 + godot_path → ctx.findGodot 应返回 override 值
+  it('CR-1: propagates godot_path override to tool ctx in normal headless dispatch', async () => {
+    const guard = createMockGuard(false);
+    const mockModule = { handleTool: vi.fn().mockResolvedValue(mockToolResult) };
+    mockGetModuleForTool.mockReturnValue(mockModule);
+    const dispatcher = makeDispatcher({ readOnlyGuard: guard });
+
+    await dispatcher.handleCall({
+      params: { name: 'scene', arguments: { godot_path: '/custom/godot.exe' } },
+    });
+
+    expect(mockModule.handleTool).toHaveBeenCalled();
+    const ctx = mockModule.handleTool.mock.calls[0][2] as { findGodot: (p?: string) => Promise<string> };
+    const resolved = await ctx.findGodot();
+    expect(resolved).toBe('/custom/godot.exe');
+  });
+
+  // [FG2] CR-1: 普通调用 + project_path(无 godot_path) → findGodot 应以该 project_path 调用
+  it('CR-1: passes explicit project_path to findGodot when no godot_path', async () => {
+    const guard = createMockGuard(false);
+    const mockModule = { handleTool: vi.fn().mockResolvedValue(mockToolResult) };
+    mockGetModuleForTool.mockReturnValue(mockModule);
+    const findGodotSpy = vi.fn().mockResolvedValue('/found/godot');
+    const dispatcher = makeDispatcher({ readOnlyGuard: guard, findGodot: findGodotSpy });
+
+    await dispatcher.handleCall({
+      params: { name: 'scene', arguments: { project_path: '/explicit/project' } },
+    });
+
+    expect(mockModule.handleTool).toHaveBeenCalled();
+    const ctx = mockModule.handleTool.mock.calls[0][2] as { findGodot: (p?: string) => Promise<string> };
+    await ctx.findGodot();
+    // findGodot 应以显式 project_path 调用,而非 undefined
+    expect(findGodotSpy).toHaveBeenCalledWith('/explicit/project');
+  });
+
+  // [FG3] CR-2: confirm_and_execute 应基于 pending.args(原始工具 args)的 godot_path 计算 override
+  it('CR-2: confirm_and_execute uses pending.args godot_path for findGodot override', async () => {
+    const guard = createMockGuard(false);
+    const mockModule = { handleTool: vi.fn().mockResolvedValue(mockToolResult) };
+    mockGetModuleForTool.mockReturnValue(mockModule);
+    // pending.args 携带原始调用的 godot_path(confirm_and_execute 自身 args 只有 token)
+    mockConsumeToken.mockReturnValue({
+      toolName: 'scene',
+      args: { action: 'remove_node', godot_path: '/pending/godot.exe' },
+    });
+    const dispatcher = makeDispatcher({ readOnlyGuard: guard, connectionMode: 'headless' });
+
+    await dispatcher.handleCall({
+      params: { name: 'confirm_and_execute', arguments: { token: 'valid-token' } },
+    });
+
+    expect(mockModule.handleTool).toHaveBeenCalled();
+    const ctx = mockModule.handleTool.mock.calls[0][2] as { findGodot: (p?: string) => Promise<string> };
+    const resolved = await ctx.findGodot();
+    // 必须是 pending.args 的 godot_path,而非默认 findGodot 或 confirm_and_execute 的 args
+    expect(resolved).toBe('/pending/godot.exe');
+  });
+
+  // [FG4] 无 godot_path 无 project_path → findGodot 以 undefined 调用(回退默认查找逻辑)
+  it('falls back to default findGodot(undefined) when no godot_path and no project_path', async () => {
+    const guard = createMockGuard(false);
+    const mockModule = { handleTool: vi.fn().mockResolvedValue(mockToolResult) };
+    mockGetModuleForTool.mockReturnValue(mockModule);
+    // skipProjectPath 模拟,使 project_path 不被注入
+    const { skipProjectPath } = await import('../../src/core/tool-registry.js');
+    (skipProjectPath as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    const findGodotSpy = vi.fn().mockResolvedValue('/default/godot');
+    const dispatcher = makeDispatcher({ readOnlyGuard: guard, findGodot: findGodotSpy });
+
+    await dispatcher.handleCall({
+      params: { name: 'docs', arguments: { action: 'search_classes', query: 'Node3D' } },
+    });
+
+    expect(mockModule.handleTool).toHaveBeenCalled();
+    const ctx = mockModule.handleTool.mock.calls[0][2] as { findGodot: (p?: string) => Promise<string> };
+    await ctx.findGodot();
+    // 无 project_path 时应以 undefined 调用
+    expect(findGodotSpy).toHaveBeenCalledWith(undefined);
+
     (skipProjectPath as ReturnType<typeof vi.fn>).mockReturnValue(false);
   });
 });

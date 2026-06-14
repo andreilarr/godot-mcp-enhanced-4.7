@@ -262,4 +262,34 @@ size = Vector3(3, 3, 3)
     expect(result).not.toContain('[connection');
     expect(result).toContain('name="Root"');
   });
+
+  it('C-BUG-2: 同 path 不同 id 的 ext_resource 合并不产生悬空引用', () => {
+    // ours 与 theirs 都引用 res://shared.gd,但 id 不同(theirs id="5")。
+    // theirs 资源按 path 去重时被丢弃,其节点 ExtResource("5") 必须重写到 ours 的 id,
+    // 否则 merged 场景引用了不存在的 id="5" → Godot 加载报悬空 ExtResource。
+    const ours = `[gd_scene format=3]
+[ext_resource type="Script" path="res://shared.gd" id="1"]
+[node name="Root" type="Node3D"]
+[node name="A" type="Node" parent="."]
+script = ExtResource("1")
+`;
+    const theirs = `[gd_scene format=3]
+[ext_resource type="Script" path="res://shared.gd" id="5"]
+[node name="Root" type="Node3D"]
+[node name="B" type="Node" parent="."]
+script = ExtResource("5")
+`;
+    const result = mergeTscn(ours, theirs);
+    expect(result).toContain('name="B"');
+    expect(result).toContain('id="1"]');          // ours 的 shared.gd 保留
+    expect(result).not.toContain('ExtResource("5")'); // 悬空引用须被重写
+    // 所有 ExtResource 引用都应有对应定义
+    const defIds = new Set((result.match(/\[ext_resource[^[]*id="([^"]+)"/g) || [])
+      .map(m => m.match(/id="([^"]+)"/)![1]));
+    const refIds = (result.match(/ExtResource\("([^"]+)"\)/g) || [])
+      .map(m => m.match(/"([^"]+)"/)![1]);
+    for (const ref of refIds) {
+      expect(defIds.has(ref)).toBe(true);
+    }
+  });
 });

@@ -448,12 +448,15 @@ func _initialize():
 \t\treturn
 \tmat.shader.code = _parsed
 \tawait process_frame
+\t# C-BUG-1: get_rid().is_valid() 仅确认 shader 资源已分配,与代码能否编译无关。
+\t# Godot 4.x headless 无可靠 shader 编译验证 API(RenderingServer 不实际编译)。
+\t# compile_success 不可作为"编译通过"依据,必须经截图/Godot 错误输出人工确认。
 \tvar compile_ok = mat.shader != null and mat.shader.get_rid().is_valid()
 \tvar errors = []
 \tvar warnings = []
 \tif not compile_ok:
-\t\terrors.append({"line": 0, "message": "Shader compilation failed"})
-\t_mcp_output("compile_result", {"compile_success": compile_ok, "errors": errors, "warnings": warnings})
+\t\terrors.append({"line": 0, "message": "Shader resource allocation failed"})
+\t_mcp_output("compile_result", {"compile_success": compile_ok, "errors": errors, "warnings": warnings, "verification_note": "compile_success only confirms shader resource allocation, NOT that the code compiles. Godot 4.x headless cannot verify shader compilation — always verify via screenshot or Godot error output."})
 \t_mcp_done()
 `;
 }
@@ -554,12 +557,14 @@ func _initialize():
 \t\treturn
 \tmat.shader.code = _parsed
 \tawait process_frame
+\t# C-BUG-1: get_rid().is_valid() 仅确认 shader 资源已分配,与代码能否编译无关。
+\t# Godot 4.x headless 无可靠 shader 编译验证 API。compile_success 不可作为编译通过依据。
 \tvar compile_ok = mat.shader != null and mat.shader.get_rid().is_valid()
 \tvar errors = []
 \tvar warnings = []
 \tif not compile_ok:
-\t\terrors.append({"line": 0, "message": "Shader compilation failed"})
-\t_mcp_output("template_applied", {"template": "${gdEscape(templateName)}", "compile_success": compile_ok, "errors": errors, "warnings": warnings})
+\t\terrors.append({"line": 0, "message": "Shader resource allocation failed"})
+\t_mcp_output("template_applied", {"template": "${gdEscape(templateName)}", "compile_success": compile_ok, "errors": errors, "warnings": warnings, "verification_note": "compile_success only confirms shader resource allocation, NOT that the code compiles. Verify via screenshot or Godot error output."})
 \t_mcp_done()
 `;
 }

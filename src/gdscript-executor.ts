@@ -8,9 +8,11 @@
  * - Marked output protocol for reliable parsing
  *
  * SECURITY WARNING: GDScript has full system access (FileAccess, DirAccess,
- * OS.execute). There is NO sandbox or code audit layer. This is acceptable for
- * local MCP usage (editor on the same machine), but MUST NOT be exposed to
- * untrusted remote connections without an external sandbox.
+ * OS.execute = arbitrary shell). scanGdscriptSandbox provides a blacklist to catch
+ * accidental misuse, NOT a security boundary — GDScript is Turing-complete so regex
+ * cannot exhaustively block indirect/reflection bypasses (variable first-arg to
+ * .call(), StringName(), etc.). Acceptable for local single-user MCP; for multi-user
+ * or untrusted input use container/VM isolation + GODOT_MCP_ALLOW_UNSAFE=false.
  */
 
 import { spawn } from 'child_process';
@@ -44,6 +46,8 @@ import { needsImport, runImport } from './tools/import-check.js';
 const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   // F-1: create_process 与 execute 功能等价(均可启动任意可执行文件),必须同等拦截
   { pattern: /OS\.(execute|shell_open|kill|set_restart_on_exit|crash|create_process)\b/, label: 'OS system command' },
+  // C-SEC-3: OS["execute"] 等索引访问把句点换成方括号,绕过上面的 OS.execute 正则
+  { pattern: /\bOS\s*\[/, label: 'OS singleton indexed access (sandbox bypass)' },
   { pattern: /DirAccess\.(remove_absolute|remove)\b/, label: 'Directory removal' },
   // C-03: Allow FileAccess.READ, only flag write modes (WRITE / READ_WRITE / READ_WRITE_APPEND)
   // Use [^;]* to match to statement boundary — avoids truncation on ')' in file paths

@@ -18,7 +18,9 @@ import * as ps from '../src/core/process-state.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // I-05: 支持环境变量回退，其他开发者可直接运行
-const TEST_PROJECT = process.env.GODOT_TEST_PROJECT || 'D:/workspace/projects/godot-test-project';
+// 默认指向 repo 内极简 fixture(无 autoload,避免外部 RPG demo 的 autoload 编译失败);
+// 设 GODOT_TEST_PROJECT 可覆盖指向完整项目
+const TEST_PROJECT = process.env.GODOT_TEST_PROJECT || resolve(__dirname, 'fixtures', 'e2e-project');
 const GODOT_PATH = process.env.GODOT_PATH || 'D:\\godot\\Godot_v4.6.3-stable_win64_console.exe';
 const hasGodot = existsSync(GODOT_PATH);
 const hasProject = existsSync(TEST_PROJECT) && existsSync(resolve(TEST_PROJECT, 'project.godot'));

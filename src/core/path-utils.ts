@@ -4,7 +4,7 @@
  * Path traversal protection, symlink resolution, allowed roots validation.
  */
 
-import { isAbsolute, resolve, relative, sep, basename, dirname } from 'path';
+import { isAbsolute, resolve, relative, sep, basename, dirname, normalize } from 'path';
 import { existsSync, realpathSync } from 'fs';
 import { join } from 'path';
 import { getLogger } from './logger.js';
@@ -228,6 +228,11 @@ export function isPathInAllowedRoots(requestedPath: string): boolean {
     getLogger().debug('security', `UNRESTRICTED path access: ${requestedPath}`);
     return true;
   }
+  // C-SEC-1: 必须在比较前归一化以消除 ".." 段。resolvePath 对绝对路径原样返回(不 normalize),
+  // 导致 "root\..\..\Windows\..." 经 startsWith(ensureSep(root)) 前缀匹配被错误放行。
+  // normalize 消除 ".." 与混合分隔符后,该路径落回 root 之外 → 拒绝。
+  // 注:normalize 不解析符号链接;符号链接攻击由下游 resolveWithinRoot 的 realpath 检查纵深防御。
+  const requested = normalize(resolvePath(requestedPath));
   const allowed = getAllowedProjectPaths();
   if (allowed.length === 0) {
     // C-07: deny-by-default — restrict to cwd when no explicit allowlist configured.
@@ -240,12 +245,13 @@ export function isPathInAllowedRoots(requestedPath: string): boolean {
         'or GODOT_MCP_UNRESTRICTED=true to disable restrictions.');
       _pathAllowLogged.add('cwd-fallback');
     }
-    const cwd = resolvePath('.');
-    const resolved = resolvePath(requestedPath);
-    return resolved === cwd || resolved.startsWith(ensureSep(cwd));
+    const cwd = normalize(resolvePath('.'));
+    return requested === cwd || requested.startsWith(ensureSep(cwd));
   }
-  const resolved = resolvePath(requestedPath);
-  return allowed.some(p => resolved === p || resolved.startsWith(ensureSep(p)));
+  return allowed.some(p => {
+    const normP = normalize(p);
+    return requested === normP || requested.startsWith(ensureSep(normP));
+  });
 }
 
 /** Reset log state (test-only). */

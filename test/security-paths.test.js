@@ -3,6 +3,7 @@ import { resolve, join } from 'node:path';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolveWithinRoot } from '../src/helpers.js';
+import { isPathInAllowedRoots, _resetPathAllowWarned } from '../src/core/path-utils.js';
 import { sanitizeResPath, gdEscape } from '../src/tools/shared.js';
 
 // ─── sanitizeResPath ──────────────────────────────────────────────────────────
@@ -143,5 +144,67 @@ describe('gdEscape edge cases', () => {
     // GDScript has no \uXXXX escape sequences, so A is literal text.
     // The backslash is still escaped by the general \\ rule.
     expect(gdEscape('\\u0041')).toBe('\\\\u0041');
+  });
+});
+
+// ─── isPathInAllowedRoots — C-SEC-1 path traversal bypass ──────────────────────
+
+describe('isPathInAllowedRoots — C-SEC-1 path traversal', () => {
+  // setup.js 默认 GODOT_MCP_UNRESTRICTED=true 方便多数测试;C-SEC-1 须在 allowlist 模式下验证
+  let savedAllowed;
+  let savedUnrestricted;
+  let tmpRoots = [];
+
+  beforeEach(() => {
+    savedAllowed = process.env.ALLOWED_PROJECT_PATHS;
+    savedUnrestricted = process.env.GODOT_MCP_UNRESTRICTED;
+    delete process.env.GODOT_MCP_UNRESTRICTED;
+    _resetPathAllowWarned();
+    tmpRoots = [];
+  });
+
+  afterEach(() => {
+    if (savedAllowed === undefined) delete process.env.ALLOWED_PROJECT_PATHS;
+    else process.env.ALLOWED_PROJECT_PATHS = savedAllowed;
+    if (savedUnrestricted === undefined) delete process.env.GODOT_MCP_UNRESTRICTED;
+    else process.env.GODOT_MCP_UNRESTRICTED = savedUnrestricted;
+    _resetPathAllowWarned();
+    for (const r of tmpRoots) {
+      try { rmSync(r, { recursive: true, force: true }); } catch { /* best effort */ }
+    }
+  });
+
+  const makeRoot = () => {
+    const r = mkdtempSync(join(tmpdir(), 'mcp-allow-'));
+    tmpRoots.push(r);
+    return r;
+  };
+
+  it('rejects absolute path whose ".." escapes the allowed root (Windows backslash)', () => {
+    const root = makeRoot();
+    process.env.ALLOWED_PROJECT_PATHS = root;
+    // root\..\..\Windows\... — resolvePath 对绝对路径原样返回,startsWith(ensureSep(root)) 命中
+    // → 修复前 BUG 放行。normalize 消除 ".." 后应落回 root 之外 → 拒绝。
+    const attack = root + '\\..\\..\\Windows\\System32\\drivers\\etc\\hosts';
+    expect(isPathInAllowedRoots(attack)).toBe(false);
+  });
+
+  it('rejects forward-slash ".." escape variant', () => {
+    const root = makeRoot();
+    process.env.ALLOWED_PROJECT_PATHS = root;
+    const attack = root.replace(/\\/g, '/') + '/../../etc/passwd';
+    expect(isPathInAllowedRoots(attack)).toBe(false);
+  });
+
+  it('still accepts a legitimate path inside the allowed root', () => {
+    const root = makeRoot();
+    process.env.ALLOWED_PROJECT_PATHS = root;
+    expect(isPathInAllowedRoots(join(root, 'scenes', 'main.tscn'))).toBe(true);
+  });
+
+  it('still accepts the root itself', () => {
+    const root = makeRoot();
+    process.env.ALLOWED_PROJECT_PATHS = root;
+    expect(isPathInAllowedRoots(root)).toBe(true);
   });
 });

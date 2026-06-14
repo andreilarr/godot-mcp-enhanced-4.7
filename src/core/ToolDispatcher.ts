@@ -62,10 +62,6 @@ export class ToolDispatcher {
   private readonly ctx: ToolContext;
   private _editorFallback = false;
   private _editorFallbackWarned = false;
-  /** Per-call findGodot override. Set in executeToolCall, consumed in dispatchTool.
-   *  MCP serializes requests so no race. Stored separately from ctx to avoid
-   *  permanently mutating the shared context object (I-04 fix). */
-  private _perCallFindGodot: ((projectPath?: string) => Promise<string>) | null = null;
   private healthMonitor: HealthMonitor;
   private readonly middleware: Middleware[];
 
@@ -216,29 +212,13 @@ export class ToolDispatcher {
       }
 
       // ── 0.6. Project-aware findGodot injection ──
-      // Build a per-call findGodot and store on _perCallFindGodot field (not ctx).
-      // dispatchTool picks it up when constructing the per-call ctx copy (I-04 fix).
-      const godotOverride = typeof args.godot_path === 'string' ? args.godot_path.trim() : undefined;
-      const projectPathForGodot = typeof args.project_path === 'string' ? args.project_path : undefined;
-      if (godotOverride) {
-        // H-02: Validate godot_path is an absolute path (security — prevent relative path tricks)
-        // Absolute paths on Windows start with drive letter (C:\), on POSIX with /
-        const isAbsolute = godotOverride.startsWith('/') || /^[A-Za-z]:[\\/]/.test(godotOverride);
-        if (!isAbsolute) {
-          return opsErrorResult('INVALID_PARAMS',
-            `godot_path must be an absolute path, got: "${godotOverride}"`);
-        }
-        // H-01: Validate the binary is actually Godot before allowing override
-        const { validateGodotBinary } = await import('../core/godot-finder.js');
-        if (!(await validateGodotBinary(godotOverride))) {
-          return opsErrorResult('INVALID_PARAMS',
-            `godot_path failed validation (not a valid Godot binary): ${godotOverride}`);
-        }
-        this._perCallFindGodot = () => Promise.resolve(godotOverride);
-      } else {
-        // Project-aware findGodot — uses .godot/mcp-godot.json, project.godot [godot_mcp], etc.
-        this._perCallFindGodot = () => this.options.findGodot(projectPathForGodot);
-      }
+      // C-CONC-1: findGodot override 作为局部变量,沿调用链显式传入 dispatchTool。
+      // 不能用实例字段 — MCP SDK 经 Promise.resolve().then(handler) 异步派发多个 tools/call,
+      // 请求并发执行,实例字段会被互相覆盖(旧注释"MCP serializes so no race"为错误前提)。
+      // CR-2: confirm_and_execute 分支须基于 pending.args(原始工具 args)重算,而非
+      // confirm_and_execute 自身 args(只有 token)—— 见该分支内 resolveFindGodotOverride 调用。
+      const { override: findGodotOverride, error: findGodotErr } = await this.resolveFindGodotOverride(args);
+      if (findGodotErr) return findGodotErr;
 
       // ── 0. Common arg type validation ──
       const typeErr = this.validateCommonArgs(args);
@@ -282,6 +262,14 @@ export class ToolDispatcher {
         const confirmedPathErr = this.validatePathArgs(pending.args);
         if (confirmedPathErr) return confirmedPathErr;
 
+        // CR-2: 基于 pending.args(原始工具 args)重新计算 findGodotOverride,而非复用入口处
+        // 基于 confirm_and_execute 自身 args(只有 token)算出的 override。godot_path 校验
+        // 在产生 token 的那次调用里已执行过(第 229-234 行),token 有 3min TTL + 单次消费
+        // + 服务端生成,客户端无法伪造,故此处无需重新 validateGodotBinary。
+        const { override: confirmedFindGodotOverride, error: confirmedFindGodotErr } =
+          await this.resolveFindGodotOverride(pending.args);
+        if (confirmedFindGodotErr) return confirmedFindGodotErr;
+
         // 复用同一 editor/headless 分支逻辑
         log('[CONFIRM] Executing confirmed tool: %s', pending.toolName);
         if (currentMode === 'editor' && currentExecutor) {
@@ -298,7 +286,7 @@ export class ToolDispatcher {
             : [...editorResult.content, { type: 'text' as const, text: `_duration_ms: ${duration}` }];
           return this.attachFallbackWarning({ ...editorResult, content });
         }
-        return this.attachFallbackWarning(await this.dispatchTool(pending.toolName, pending.args, startTime));
+        return this.attachFallbackWarning(await this.dispatchTool(pending.toolName, pending.args, startTime, confirmedFindGodotOverride));
       }
 
       // ── 3. 确认令牌检查 ──
@@ -335,13 +323,13 @@ export class ToolDispatcher {
       }
 
       // ── 5. headless dispatch ──
-      return this.attachFallbackWarning(await this.dispatchTool(name, args, startTime));
+      // CR-1: 必须传入 findGodotOverride,否则 perCallCtx 回退到 this.ctx.findGodot,
+      // 导致 godot_path 参数和项目感知 findGodot 在最常用路径失效。
+      return this.attachFallbackWarning(await this.dispatchTool(name, args, startTime, findGodotOverride));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log('Tool error:', name, msg);
       return opsErrorResult('TOOL_ERROR', msg);
-    } finally {
-      this._perCallFindGodot = null;
     }
   }
 
@@ -471,7 +459,43 @@ export class ToolDispatcher {
     return null;
   }
 
-  private async dispatchTool(toolName: string, args: Record<string, unknown>, startTime: number): Promise<ToolResult> {
+  /**
+   * CR-1/CR-2: 基于 args 计算本次调用的 findGodot override。
+   * - 有 godot_path → 校验绝对路径 + Godot 二进制后返回固定值
+   * - 无 godot_path → 返回项目感知 findGodot(基于 project_path)
+   * 抽取为独立方法以便 executeToolCall 入口和 confirm_and_execute 分支
+   * (后者须基于 pending.args 而非 confirm_and_execute 自身 args)各自调用。
+   */
+  private async resolveFindGodotOverride(
+    args: Record<string, unknown>,
+  ): Promise<{ override: ((projectPath?: string) => Promise<string>) | undefined; error: ToolResult | null }> {
+    const godotOverride = typeof args.godot_path === 'string' ? args.godot_path.trim() : undefined;
+    const projectPathForGodot = typeof args.project_path === 'string' ? args.project_path : undefined;
+    if (godotOverride) {
+      // H-02: Validate godot_path is an absolute path (security — prevent relative path tricks)
+      // Absolute paths on Windows start with drive letter (C:\), on POSIX with /
+      const isAbsolute = godotOverride.startsWith('/') || /^[A-Za-z]:[\\/]/.test(godotOverride);
+      if (!isAbsolute) {
+        return {
+          override: undefined,
+          error: opsErrorResult('INVALID_PARAMS', `godot_path must be an absolute path, got: "${godotOverride}"`),
+        };
+      }
+      // H-01: Validate the binary is actually Godot before allowing override
+      const { validateGodotBinary } = await import('../core/godot-finder.js');
+      if (!(await validateGodotBinary(godotOverride))) {
+        return {
+          override: undefined,
+          error: opsErrorResult('INVALID_PARAMS', `godot_path failed validation (not a valid Godot binary): ${godotOverride}`),
+        };
+      }
+      return { override: () => Promise.resolve(godotOverride), error: null };
+    }
+    // Project-aware findGodot — uses .godot/mcp-godot.json, project.godot [godot_mcp], etc.
+    return { override: () => this.options.findGodot(projectPathForGodot), error: null };
+  }
+
+  private async dispatchTool(toolName: string, args: Record<string, unknown>, startTime: number, findGodotOverride?: ((projectPath?: string) => Promise<string>)): Promise<ToolResult> {
     let targetMod = getModuleForTool(toolName);
     let effectiveToolName = toolName;
     let effectiveArgs = args;
@@ -495,8 +519,8 @@ export class ToolDispatcher {
 
     let result: ToolResult | null;
     try {
-      // I-04 fix: spread per-call findGodot into a shallow ctx copy instead of mutating shared ctx
-      const perCallCtx = { ...this.ctx, findGodot: this._perCallFindGodot ?? this.ctx.findGodot };
+      // C-CONC-1: per-call findGodot 经参数传入(局部变量),避免实例字段被并发请求覆盖
+      const perCallCtx = { ...this.ctx, findGodot: findGodotOverride ?? this.ctx.findGodot };
       result = await targetMod.handleTool(effectiveToolName, effectiveArgs, perCallCtx);
     } catch (err) {
       const duration = Date.now() - startTime;

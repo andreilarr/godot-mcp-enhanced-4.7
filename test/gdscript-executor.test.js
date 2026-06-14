@@ -242,4 +242,12 @@ describe('scanGdscriptSandbox', () => {
     expect(warnings.length).toBeGreaterThan(0);
     expect(warnings.some(w => w.includes('% format string'))).toBe(true);
   });
+
+  it('should detect OS["execute"] indexed-access bypass (C-SEC-3)', () => {
+    // 索引访问把句点换成方括号,绕过 OS.execute 正则 — 须单独拦截
+    delete process.env.GODOT_MCP_SANDBOX;
+    const warnings = scanGdscriptSandbox('OS["execute"]("cmd", [], false)');
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings.some(w => w.includes('indexed access'))).toBe(true);
+  });
 });
