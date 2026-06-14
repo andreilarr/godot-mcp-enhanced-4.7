@@ -219,10 +219,11 @@ describe.skipIf(!hasProject)('E2E: script CRUD (file ops)', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 3. scene — read_scene / create_scene / add_node / edit_node / save_scene
-// I-03: scene CRUD 组有严格的前置条件检查和创建验证
+// 3. scene — read_scene(纯文件)/ create_scene·add_node·edit_node·save_scene(Godot)
+// read_scene 纯文本解析 .tscn,CI(无 Godot)可测;create_scene/save_scene 必 spawn
+// Godot,add_node/edit_node/query_scene_tree 依赖 create_scene 产物 → 无 Godot 时跳过
 // ═══════════════════════════════════════════════════════════════════════════════
-describe.skipIf(!hasProject)('E2E: scene CRUD', () => {
+describe.skipIf(!hasProject)('E2E: scene read (file ops)', () => {
   it('read_scene: reads existing scene', async () => {
     const r = await callTool('scene', {
       action: 'read_scene',
@@ -231,7 +232,9 @@ describe.skipIf(!hasProject)('E2E: scene CRUD', () => {
     expect(r.isError).toBe(false);
     expect(r.text.length).toBeGreaterThan(0);
   });
+});
 
+describe.skipIf(!hasProject || !hasGodot)('E2E: scene CRUD (Godot-dependent)', () => {
   it('create_scene: creates new scene', async () => {
     const r = await callTool('scene', {
       action: 'create_scene',

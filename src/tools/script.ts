@@ -49,6 +49,16 @@ async function validateAndRevert(
 ): Promise<string | null> {
   try {
     const valResult = await batchValidateScripts(godotPath, projectPath, [fullPath], 15000);
+    // Godot 不可用 / 验证基础设施失败 → 无法判定脚本正确性,不回滚。
+    // batchValidateScripts 在 spawn 失败、验证器超时或基础设施错误时返回
+    // [{file:'<validator>'|'<validator:spawn>'|..., errors:[...]}](file 以 '<' 开头),
+    // 这些不代表脚本本身有 GDScript parse error。若不拦截,下方 errors.length>0 会
+    // 误判并回滚正确修改(Godot 未安装时所有 edit_script 都会被静默回滚并谎报 parse error)。
+    // 只有 file 为真实脚本路径(rel)且含 Parse Error 时才回滚。
+    const infraFailure = valResult.length > 0 && valResult[0]!.file.startsWith('<');
+    if (infraFailure) {
+      return `⚠️ Validation skipped (Godot unavailable): ${valResult[0]!.errors[0] ?? 'validator did not run'}\nEdit was applied but not validated.`;
+    }
     if (valResult.length > 0 && valResult[0]!.errors.length > 0) {
       try {
         writeFileSync(fullPath, rawFile, 'utf-8');
