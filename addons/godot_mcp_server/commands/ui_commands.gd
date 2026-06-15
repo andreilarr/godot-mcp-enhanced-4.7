@@ -337,8 +337,13 @@ func handle_theme_create(params: Dictionary) -> Dictionary:
 	return {"result": {"action": action, "status": "theme_created"}}
 
 # IMP-2: 资源路径必须为 res:// 或 user:// 前缀,堵已认证用户的本地任意文件写入/读取
+# IMP-2-CONSISTENCY: 加段级 .. 阻断,与 scene_commands._has_path_traversal 防御深度对齐
 func _validate_resource_path(p: String) -> bool:
-	return p.begins_with("res://") or p.begins_with("user://")
+	if not (p.begins_with("res://") or p.begins_with("user://")):
+		return false
+	if "/../" in p or p.begins_with("../") or p.ends_with("/..") or p == "..":
+		return false
+	return true
 
 
 # ─── theme_set_property ─────────────────────────────────────────────────────

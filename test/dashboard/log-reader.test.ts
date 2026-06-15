@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { LogReader } from '../../src/dashboard/log-reader.js';
+import { LogReader, resolveRotationTarget } from '../../src/dashboard/log-reader.js';
 import { writeFileSync, mkdirSync, rmSync, appendFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const TEST_DIR = join(tmpdir(), 'godot-mcp-test-log-reader');
@@ -116,5 +116,38 @@ describe('LogReader', () => {
 
     expect(reader.getSkippedCount()).toBeGreaterThan(initialSkipped);
     reader.stop();
+  });
+});
+
+describe('resolveRotationTarget (CRITICAL-1 path-traversal guard)', () => {
+  const logDir = resolve(join(tmpdir(), 'godot-mcp-test-log-reader'));
+
+  it('rejects relative path escaping logDir', () => {
+    // 文件名符合日期白名单 —— 验证范围校验才是关键防线
+    expect(resolveRotationTarget(logDir, '../outside/2020-01-01.jsonl')).toBeNull();
+    expect(resolveRotationTarget(logDir, '../../etc/passwd')).toBeNull();
+    expect(resolveRotationTarget(logDir, '../../../2020-01-01.jsonl')).toBeNull();
+  });
+
+  it('rejects absolute path outside logDir', () => {
+    expect(resolveRotationTarget(logDir, resolve('/etc/2020-01-01.jsonl'))).toBeNull();
+    expect(resolveRotationTarget(logDir, 'C:/secret/2020-01-01.jsonl')).toBeNull();
+  });
+
+  it('rejects non-dated filename even inside logDir', () => {
+    expect(resolveRotationTarget(logDir, 'secret.jsonl')).toBeNull();
+    expect(resolveRotationTarget(logDir, 'subdir/2020-01-01.jsonl')).toBeNull();
+    expect(resolveRotationTarget(logDir, '2020-1-1.jsonl')).toBeNull();
+  });
+
+  it('accepts valid dated file inside logDir', () => {
+    expect(resolveRotationTarget(logDir, '2026-06-15.jsonl')).toBe(join(logDir, '2026-06-15.jsonl'));
+    // ./ 前缀规范化后仍在 logDir 内,应接受
+    expect(resolveRotationTarget(logDir, './2026-06-15.jsonl')).toBe(join(logDir, '2026-06-15.jsonl'));
+  });
+
+  it('rejects empty / non-string', () => {
+    expect(resolveRotationTarget(logDir, '')).toBeNull();
+    expect(resolveRotationTarget(logDir, String(undefined))).toBeNull();
   });
 });

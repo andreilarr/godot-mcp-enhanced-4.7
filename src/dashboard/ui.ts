@@ -155,8 +155,10 @@ function renderLogStream(
   const logs = state.recentLogs.toArray();
   let filtered = logs;
   if (ui.filter) {
+    // ADVISORY-3: 统一可选链 —— 损坏行/注入行经 JSON.parse 后可能缺 module/msg 字段,
+    // 与 e.tool?.includes 对齐,避免运行时 TypeError
     filtered = filtered.filter(e =>
-      e.module.includes(ui.filter) || e.tool?.includes(ui.filter) || e.msg.includes(ui.filter)
+      e.module?.includes(ui.filter) || e.tool?.includes(ui.filter) || e.msg?.includes(ui.filter)
     );
   }
   if (ui.levelFilter !== 'ALL') {

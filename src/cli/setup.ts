@@ -14,11 +14,13 @@ function detectMcpCommand(): { command: string; args: string[] } {
     return { command: 'npx', args: ['godot-mcp-enhanced'] };
   }
 
-  // 检查是否在全局 node_modules 中（npm -g install）
-  // 使用路径分段匹配而非子串包含，避免 npm link 误判
+  // IMPORTANT-7: 原路径段启发式(npm pack 解压临时目录、CI 本地 node_modules)会误判为全局安装。
+  // 改进:优先 npm_config_global 强信号;路径段匹配时排除 npm pack 的隐藏临时段(.package/.staging 等)。
   const pathSegments = entryPath.replace(/\\/g, '/').split('/');
-  const inGlobalNodeModules = pathSegments.includes('node_modules') &&
-    pathSegments.includes('godot-mcp-enhanced');
+  const hasTempSegment = pathSegments.some(seg => seg.startsWith('.') && seg !== '.');
+  const inGlobalNodeModules = (process.env.npm_config_global === 'true' ||
+      (pathSegments.includes('node_modules') && pathSegments.includes('godot-mcp-enhanced'))) &&
+    !hasTempSegment;
 
   if (inGlobalNodeModules) {
     return { command: 'npx', args: ['godot-mcp-enhanced'] };

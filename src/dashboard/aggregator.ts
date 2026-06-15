@@ -33,10 +33,12 @@ export interface DashboardState {
 const RECENT_LOGS_CAPACITY = 500;
 const TIME_SERIES_MAX_BUCKETS = 30;
 
-/** 提取分钟级 key（本地时间，避免 UTC 偏移显示错误） */
+/** 提取分钟级 key（UTC）。
+ *  IMPORTANT-4: 与 entry.ts 的 ts(toISOString,UTC)和 startTime(UTC ISO)统一为 UTC,
+ *  避免本地时区导致的桶标签与日志流时间不一致,以及夏令时切换日的桶回跳/重复。 */
 function minuteKey(ts: string): string {
   const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 }
 
 export class Aggregator {

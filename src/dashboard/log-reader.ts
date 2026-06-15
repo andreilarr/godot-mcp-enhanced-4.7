@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { watch, existsSync, statSync, openSync, closeSync, readSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve, sep, basename, dirname } from 'node:path';
 import type { LogEntry } from '../core/logger.js';
 
 export interface LogReaderOptions {
@@ -15,6 +15,28 @@ export interface LogReaderEvents {
 const DEFAULT_POLL_MS = 2000;
 const MAX_INITIAL_LINES = 500;
 const INITIAL_READ_CAP = 100 * 1024; // 初始最多读最后 100KB
+
+// CRITICAL-1: rotation 目标文件名白名单 —— 与 logger 产出的 `${today}.jsonl` 格式严格对齐
+const ROTATION_FILE_RE = /^\d{4}-\d{2}-\d{2}\.jsonl$/;
+
+/**
+ * 解析 rotation 条目指向的目标文件,做范围校验 + 日期白名单。
+ *
+ * CRITICAL-1: `meta.new_file` 来自磁盘 JSONL 行(任何能写入日志目录的进程均可构造),
+ * 必须确保 resolve 后仍落在 logDir **直接子文件**(非子目录、非外部路径),且文件名严格为
+ * `YYYY-MM-DD.jsonl`,防止路径遍历/任意文件读取。合法返回 logDir 内的绝对路径;非法返回 null。
+ */
+export function resolveRotationTarget(logDir: string, newFile: string): string | null {
+  if (typeof newFile !== 'string' || newFile.length === 0) return null;
+  const dir = resolve(logDir);
+  const target = resolve(dir, newFile);
+  // 范围校验:target 必须落在 logDir 内(等于 dir 或以 dir + 分隔符为前缀)
+  if (target !== dir && !target.startsWith(dir + sep)) return null;
+  // 必须是 logDir 的直接子文件(拒绝子目录),且文件名匹配日期白名单
+  if (dirname(target) !== dir) return null;
+  if (!ROTATION_FILE_RE.test(basename(target))) return null;
+  return target;
+}
 
 class LogReader extends EventEmitter {
   private logDir: string;
@@ -134,10 +156,13 @@ class LogReader extends EventEmitter {
 
     for (const entry of result.entries) {
       if (entry.type === 'rotation' && entry.meta?.new_file) {
-        const newFile = join(this.logDir, String(entry.meta.new_file));
-        if (existsSync(newFile)) {
-          this.currentFile = newFile;
+        // CRITICAL-1: 范围校验 + 日期白名单,拒绝逃逸 logDir 的 new_file
+        const target = resolveRotationTarget(this.logDir, String(entry.meta.new_file));
+        if (target && existsSync(target)) {
+          this.currentFile = target;
           this.byteOffset = 0;
+          // IMPORTANT-3: rotation 也清 pendingTail,与日期切换一致,避免旧文件尾部残留污染新文件
+          this.pendingTail = '';
         }
         break;
       }
