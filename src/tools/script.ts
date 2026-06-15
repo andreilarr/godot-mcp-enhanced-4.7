@@ -208,7 +208,7 @@ function normalizeIndentForMatch(text: string, targetStyle: IndentStyle): string
     const leading = leadingMatch[1]!;
     // 计算缩进级别：tab 算 1 级，空格按 4 空格推断级别
     // 已知简化：混合 tab+space 行首时忽略空格部分，GDScript 中极少见
-    let levels = 0;
+    let levels: number;
     if (leading.includes('\t')) {
       levels = leading.split('\t').length - 1;
     } else {

@@ -43,6 +43,13 @@ static func find_node(root: Node, path: String) -> Node:
 	return root.get_node_or_null(p)
 
 
+## Check for path traversal (`..` segments) in a resource path.
+## C-1 / IMP-2-CONSISTENCY: 共享段级 `..` 阻断,被 scene_commands 与 ui_commands 复用,
+## 保持防御深度一致(与 godot_operations._sanitize_res_path 对齐)。单一实现消除重复。
+static func has_path_traversal(p: String) -> bool:
+	return "/../" in p or p.begins_with("../") or p.ends_with("/..") or p == ".."
+
+
 ## Check that a property exists on an object and its value type is compatible.
 ## Replaces duplicated copies in scene_commands.gd and ui_commands.gd.
 ## C-03: Removed string wildcard pass-through — strings are only allowed when

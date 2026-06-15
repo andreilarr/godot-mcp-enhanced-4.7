@@ -341,7 +341,7 @@ func handle_theme_create(params: Dictionary) -> Dictionary:
 func _validate_resource_path(p: String) -> bool:
 	if not (p.begins_with("res://") or p.begins_with("user://")):
 		return false
-	if "/../" in p or p.begins_with("../") or p.ends_with("/..") or p == "..":
+	if CommandHelpers.has_path_traversal(p):
 		return false
 	return true
 

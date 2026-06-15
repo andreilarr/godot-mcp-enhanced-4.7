@@ -15,9 +15,9 @@ func _get_ei() -> EditorInterface:
 	return ei
 
 
-# C-1: 阻断 res:// 路径遍历(段级 .. 检查,与 godot_operations._sanitize_res_path 一致的防御深度)
+# C-1 / IMP-2-CONSISTENCY: 段级 .. 阻断复用 CommandHelpers.has_path_traversal(单一实现,与 ui_commands 对齐)
 func _has_path_traversal(p: String) -> bool:
-	return "/../" in p or p.begins_with("../") or p.ends_with("/..") or p == ".."
+	return CommandHelpers.has_path_traversal(p)
 
 
 func handle_open_scene(params: Dictionary) -> Dictionary:
