@@ -34,6 +34,7 @@ func set_panel(panel: Control) -> void:
 		panel.set_cancel_callback(cancel_current_operation)
 
 func _ready() -> void:
+	super()  # IMP-4: Godot 4.x lifecycle convention
 	_crypto = Crypto.new()
 	_heartbeat = preload("heartbeat.gd").new()
 	add_child(_heartbeat)
@@ -47,6 +48,9 @@ func _ready() -> void:
 	_start_server()
 
 func _generate_and_write_secret() -> void:
+	# I-3 SECURITY: secret 明文写入 .godot/mcp_editor.key。Godot FileAccess 无权限参数(无法设 0600)。
+	# 本地单用户开发场景可接受;多用户/共享主机需手动 chmod 0600(Linux/macOS)或 icacls 限制(Windows),
+	# 否则同机其他用户可读 secret 导致本地提权。详见 CLAUDE.md bridge 规则“多用户环境不安全”。
 	_secret = _generate_secret()
 	if _secret.length() < 32:
 		push_error("[MCP] Secret generation failed — WebSocket server will not start")
@@ -216,6 +220,10 @@ func _handle_message(text: String, peer: WebSocketPeer) -> void:
 
 	if parsed.get("method") == "operation_start":
 		var timeout = parsed.get("params", {}).get("timeout", 300)
+		# IMP-3: validate timeout — reject non-numeric, clamp to [1, 600] (heartbeat caps at 600)
+		if not (timeout is int or timeout is float):
+			timeout = 300
+		timeout = clampf(float(timeout), 1.0, 600.0)
 		_heartbeat.pause_for_operation(timeout, pid)  # C-01: pass peer_id for targeted timeout
 		_update_panel("MCP: Operation in progress...")
 		var _op_panel := _get_panel()
@@ -314,6 +322,7 @@ func _constant_time_compare(a: String, b: String) -> bool:
 	return result == 0
 
 func _exit_tree() -> void:
+	super()  # IMP-4: Godot 4.x lifecycle convention
 	set_process(false)
 	if _heartbeat:
 		_heartbeat.timeout_detected.disconnect(_on_heartbeat_timeout)

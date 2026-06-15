@@ -305,6 +305,8 @@ export class HealthMonitor {
       }
       this.scheduleNext();
     }, interval);
+    // A-1: unref so the heartbeat timer doesn't keep the process alive (consistent with EditorConnection/gdscript-executor)
+    this.heartbeatTimer?.unref();
   }
 }
 

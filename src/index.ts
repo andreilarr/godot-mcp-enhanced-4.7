@@ -84,7 +84,10 @@ export async function startMcpServer(args: string[]): Promise<void> {
 
   let shuttingDown = false;
   async function gracefulShutdown(signal: string): Promise<void> {
-    if (shuttingDown) return;
+    if (shuttingDown) {
+      // A-2: second signal forces immediate exit (first shutdown may be stuck in server.close)
+      process.exit(1);
+    }
     shuttingDown = true;
     const logger = getLogger();
     logger.info('godot-mcp', `Received ${signal}, shutting down...`);

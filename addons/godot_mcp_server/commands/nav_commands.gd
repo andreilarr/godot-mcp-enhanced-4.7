@@ -20,7 +20,7 @@ func handle_nav_create_region(params: Dictionary, request_id: int) -> Dictionary
 	nav.name = node_name
 
 	var pos = params.get("position")
-	if pos != null:
+	if pos != null and pos is Dictionary:
 		nav.position = Vector3(float(pos.get("x", 0.0)), float(pos.get("y", 0.0)), float(pos.get("z", 0.0)))
 
 	parent_node.add_child(nav)
@@ -68,7 +68,7 @@ func handle_nav_create_agent(params: Dictionary, request_id: int) -> Dictionary:
 	agent.name = node_name
 
 	var target_pos = params.get("target_position")
-	if target_pos != null:
+	if target_pos != null and target_pos is Dictionary:
 		agent.target_position = Vector3(float(target_pos.get("x", 0.0)), float(target_pos.get("y", 0.0)), float(target_pos.get("z", 0.0)))
 
 	agent.path_desired_distance = float(params.get("path_desired_distance", 0.5))
@@ -147,11 +147,11 @@ func handle_nav_create_link(params: Dictionary, request_id: int) -> Dictionary:
 	link.name = node_name
 
 	var start_pos = params.get("start_position")
-	if start_pos != null:
+	if start_pos != null and start_pos is Dictionary:
 		link.start_position = Vector3(float(start_pos.get("x", 0.0)), float(start_pos.get("y", 0.0)), float(start_pos.get("z", 0.0)))
 
 	var end_pos = params.get("end_position")
-	if end_pos != null:
+	if end_pos != null and end_pos is Dictionary:
 		link.end_position = Vector3(float(end_pos.get("x", 0.0)), float(end_pos.get("y", 0.0)), float(end_pos.get("z", 0.0)))
 
 	link.bidirectional = params.get("bidirectional", true)

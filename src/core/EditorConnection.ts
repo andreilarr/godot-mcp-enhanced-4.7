@@ -488,6 +488,10 @@ export class EditorConnection {
     }
     this.pending.clear();
     this.notificationHandlers.clear();
+    // IM-5: clear handler Sets so closures (holding GodotServer refs) can be GC'd
+    this.disconnectHandlers.clear();
+    this.reconnectHandlers.clear();
+    this.reconnectExhaustedHandlers.clear();
   }
 
   /**

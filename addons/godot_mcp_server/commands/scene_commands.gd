@@ -15,12 +15,19 @@ func _get_ei() -> EditorInterface:
 	return ei
 
 
+# C-1: 阻断 res:// 路径遍历(段级 .. 检查,与 godot_operations._sanitize_res_path 一致的防御深度)
+func _has_path_traversal(p: String) -> bool:
+	return "/../" in p or p.begins_with("../") or p.ends_with("/..") or p == ".."
+
+
 func handle_open_scene(params: Dictionary) -> Dictionary:
 	var path: String = params.get("scene_path", "")
 	if path.is_empty():
 		return {"error": {"code": -32004, "message": "scene_path is required"}}
 	if not path.begins_with("res://"):
 		return {"error": {"code": -32004, "message": "scene_path must start with res://"}}
+	if _has_path_traversal(path):
+		return {"error": {"code": -32004, "message": "scene_path must not contain '..' traversal: " + path}}
 	var ei := _get_ei()
 	if ei == null:
 		return {"error": {"code": -32000, "message": "EditorInterface not available"}}
@@ -87,6 +94,8 @@ func handle_instance_scene(params: Dictionary) -> Dictionary:
 		return {"error": {"code": -32004, "message": "scene_path and instance_path required"}}
 	if not instance_path.begins_with("res://"):
 		return {"error": {"code": -32004, "message": "instance_path must start with res://"}}
+	if _has_path_traversal(instance_path):
+		return {"error": {"code": -32004, "message": "instance_path must not contain '..' traversal: " + instance_path}}
 	if scene_path == instance_path:
 		return {"error": {"code": -32004, "message": "CIRCULAR_REFERENCE"}}
 

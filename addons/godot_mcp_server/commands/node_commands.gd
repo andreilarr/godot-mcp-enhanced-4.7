@@ -39,7 +39,7 @@ func handle_add_node(params: Dictionary, request_id: int) -> Dictionary:
 
 	var parent_node: Node = root
 	if not parent_path.is_empty():
-		parent_node = root.get_node(parent_path)
+		parent_node = root.get_node_or_null(parent_path)  # IMP-1: null-safe; get_node() pushes error on missing path
 		if not parent_node:
 			return {"error": {"code": -32002, "message": "Parent not found: %s" % parent_path}}
 

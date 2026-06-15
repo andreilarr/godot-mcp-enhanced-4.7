@@ -64,6 +64,7 @@ const ALLOWED_METHODS := [
 # ─── Lifecycle ─────────────────────────────────────────────────────────────
 
 func _ready() -> void:
+	super()  # IMP-4: Godot 4.x lifecycle convention
 	if Engine.is_editor_hint():
 		return
 	# Skip Bridge startup in headless/script mode — Bridge is for runtime game control only.
@@ -74,6 +75,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	super()  # IMP-4: Godot 4.x lifecycle convention
 	_stop_server()
 
 
@@ -272,6 +274,8 @@ func _get_project_dir() -> String:
 
 
 func _write_secret_to_file(path: String) -> bool:
+	# I-3 SECURITY: secret 明文写入,Godot FileAccess 无权限参数(无法设 0600)。
+	# 本地单用户场景可接受;多用户环境需手动 chmod 0600,否则同机其他用户可读 secret。
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f:
 		f.store_string(_secret)

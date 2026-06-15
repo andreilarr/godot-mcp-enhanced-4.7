@@ -72,7 +72,7 @@ func handle_animtree_add_state(params: Dictionary) -> Dictionary:
 	sm.add_node(state_name, anim_node)
 
 	var pos = params.get("position")
-	if pos != null:
+	if pos != null and pos is Dictionary:
 		sm.set_node_position(state_name, Vector2(float(pos.get("x", 0.0)), float(pos.get("y", 0.0))))
 
 	return {"result": {"state": state_name, "animation": animation, "status": "added"}}
