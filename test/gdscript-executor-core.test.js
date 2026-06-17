@@ -302,11 +302,31 @@ describe('scanGdscriptSandbox extended', () => {
 
   it('does not flag OS.execute inside a string literal context', () => {
     process.env.GODOT_MCP_SANDBOX = 'strict';
-    // The regex-based scanner will still flag this — documented behavior
     const code = 'var s = "OS.execute is dangerous"';
     const warnings = scanGdscriptSandbox(code);
-    // This IS flagged because the regex is simple pattern matching
+    // stripLiterals 剥去字符串内容后,Phase 1 不再误报
+    expect(warnings).toEqual([]);
+  });
+
+  it('does not flag OS.execute inside a line comment', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = '# OS.execute("ls") is just a comment';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings).toEqual([]);
+  });
+
+  it('does not flag DirAccess.remove inside a string literal', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var desc = "DirAccess.remove deletes a directory"';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings).toEqual([]);
+  });
+
+  it('still flags a real OS.execute call (regression guard)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('OS.execute("ls")');
     expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain('OS system command');
   });
 
   it('flags OS.shell_open', () => {

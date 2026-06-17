@@ -374,21 +374,34 @@ export function scanGdscriptSandbox(code: string): string[] {
   }
   const warnings: string[] = [];
 
-  // Phase 1: Direct pattern matching
+  // 骨架:剥去字符串内容与注释,仅用于 Phase 1 正则匹配,避免注释/字符串里的 API 名误报。
+  // ⚠️ 契约 P2-RAW:skeleton 绝不能传给 detectStringConcatBypass(Phase 2)!
+  const skeleton = stripLiterals(code);
+
+  // Phase 1: Direct pattern matching (on skeleton)
   for (const { pattern, label } of DANGEROUS_PATTERNS) {
-    if (pattern.test(code)) {
+    if (pattern.test(skeleton)) {
       warnings.push(`[SANDBOX] Potential dangerous operation detected: ${label}`);
     }
   }
 
-  // C-03: In strict mode, also block FileAccess.READ (all file access)
+  // 用户自定义额外危险模式 (GODOT_MCP_EXTRA_DANGEROUS_PATTERNS),同样在骨架上检测
+  for (const { pattern, label } of loadExtraDangerousPatterns()) {
+    if (pattern.test(skeleton)) {
+      warnings.push(`[SANDBOX] Potential dangerous operation detected: ${label}`);
+    }
+  }
+
+  // C-03: In strict mode, also block FileAccess.READ (all file access) — on skeleton
   if (process.env.GODOT_MCP_SANDBOX === 'strict') {
-    if (/FileAccess\.open\b/.test(code)) {
+    if (/FileAccess\.open\b/.test(skeleton)) {
       warnings.push('[SANDBOX] Potential dangerous operation detected: File access (strict mode)');
     }
   }
 
   // Phase 2: String concatenation bypass detection
+  // ⚠️ 契约 P2-RAW:detectStringConcatBypass 必须接收【原文 code】,不能是 skeleton。
+  //    它自己提取字符串字面量内容做拼接重构;喂骨架会让所有拼接绕过检测失效。
   const concatWarnings = detectStringConcatBypass(code);
   warnings.push(...concatWarnings);
 
