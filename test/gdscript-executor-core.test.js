@@ -8,6 +8,7 @@ import {
   createAutoloadLoaderScene,
   parseMcpMarkers,
   scanGdscriptSandbox,
+  stripLiterals,
 } from '../src/gdscript-executor.js';
 import { buildSafeEnv } from '../src/helpers.js';
 
@@ -454,5 +455,46 @@ describe('scanGdscriptSandbox Phase 2 — concatenation bypass', () => {
     const code = '"Class" + "DB"';
     const warnings = scanGdscriptSandbox(code);
     expect(warnings.some(w => w.includes('SANDBOX-P2') && w.includes('ClassDB'))).toBe(true);
+  });
+});
+
+// ─── stripLiterals ───────────────────────────────────────────────────────────
+
+describe('stripLiterals', () => {
+  it('strips content of double-quoted string but keeps quotes', () => {
+    expect(stripLiterals('var s = "OS.execute is dangerous"')).toBe('var s = ""');
+  });
+
+  it('strips content of single-quoted string', () => {
+    expect(stripLiterals("var s = 'OS.kill'")).toBe("var s = ''");
+  });
+
+  it('strips a full-line comment', () => {
+    expect(stripLiterals('# OS.execute("ls")')).toBe('');
+  });
+
+  it('strips trailing comment but preserves code and newline', () => {
+    expect(stripLiterals('var a = 1 # OS.execute\nvar b = 2')).toBe('var a = 1 \nvar b = 2');
+  });
+
+  it('does not treat # inside a string as a comment', () => {
+    expect(stripLiterals('var s = "a#b"')).toBe('var s = ""');
+  });
+
+  it('handles triple-quoted string', () => {
+    expect(stripLiterals('var s = """OS.execute"""')).toBe('var s = """"""');
+  });
+
+  it('handles escaped quote inside string without early close', () => {
+    // GDScript 源码: var s = "a\"b"  (JS 字符串里 \\ 代表一个反斜杠)
+    expect(stripLiterals('var s = "a\\"b"')).toBe('var s = ""');
+  });
+
+  it('preserves a real dangerous call so Phase 1 still detects it', () => {
+    expect(stripLiterals('OS.execute("ls")')).toBe('OS.execute("")');
+  });
+
+  it('preserves reflection pattern so .call("x") is still detectable', () => {
+    expect(stripLiterals('obj.call("execute")')).toBe('obj.call("")');
   });
 });

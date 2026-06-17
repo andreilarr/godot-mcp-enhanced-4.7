@@ -241,6 +241,86 @@ function detectStringConcatBypass(code: string): string[] {
  *  Do NOT use in production or multi-user environments. Any code executed while
  *  these flags are active has unrestricted access to the host filesystem,
  *  network, and process execution via OS.execute / FileAccess / DirAccess. */
+/**
+ * 剥去 GDScript 代码中的字符串字面量内容与注释，返回"骨架"。
+ * 保留引号对、换行和代码结构；仅删除字符串内容与注释文本。
+ *
+ * 用途：让 Phase 1 正则扫描在骨架上进行，避免注释/字符串里的危险 API 名导致误报。
+ *
+ * ⚠️ 契约 P2-RAW：此函数的输出【绝不能】喂给 detectStringConcatBypass（Phase 2）。
+ *    Phase 2 依赖字符串字面量内容做拼接重构，必须接收原文。见 scanGdscriptSandbox。
+ *
+ * 算法：字符级状态机，正确处理单/双/三引号字符串、转义引号、# 注释。
+ * 用 charAt 而非 code[i]，规避 noUncheckedIndexedAccess 的 string|undefined。
+ * 顺序：先识别字符串（字符串内的 # 不当注释），再识别注释。 */
+export function stripLiterals(code: string): string {
+  let result = '';
+  let i = 0;
+  const len = code.length;
+
+  while (i < len) {
+    const ch = code.charAt(i);
+
+    // 三引号字符串 """ 或 '''
+    if ((ch === '"' || ch === "'") && code.charAt(i + 1) === ch && code.charAt(i + 2) === ch) {
+      const quote = ch;
+      result += quote + quote + quote; // 保留开引号
+      i += 3;
+      while (i < len) {
+        if (code.charAt(i) === '\\' && i + 1 < len) {
+          i += 2; // 转义:跳过下一字符
+          continue;
+        }
+        if (code.charAt(i) === quote && code.charAt(i + 1) === quote && code.charAt(i + 2) === quote) {
+          result += quote + quote + quote; // 保留闭引号
+          i += 3;
+          break;
+        }
+        i++; // 字符串内容:丢弃
+      }
+      continue;
+    }
+
+    // 单/双引号字符串
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      result += quote; // 保留开引号
+      i++;
+      while (i < len) {
+        if (code.charAt(i) === '\\' && i + 1 < len) {
+          i += 2; // 转义跳过
+          continue;
+        }
+        if (code.charAt(i) === quote) {
+          result += quote; // 保留闭引号
+          i++;
+          break;
+        }
+        if (code.charAt(i) === '\n') {
+          result += '\n'; // 未闭合即换行:保留换行,退出字符串态
+          i++;
+          break;
+        }
+        i++; // 字符串内容:丢弃
+      }
+      continue;
+    }
+
+    // 行注释 # 到行尾
+    if (ch === '#') {
+      while (i < len && code.charAt(i) !== '\n') {
+        i++; // 注释内容:丢弃
+      }
+      continue; // 换行交给外层循环保留
+    }
+
+    result += ch; // 普通代码字符:保留
+    i++;
+  }
+
+  return result;
+}
+
 export function scanGdscriptSandbox(code: string): string[] {
   if (process.env.GODOT_MCP_SANDBOX === 'disabled') {
     getLogger().warn('security', '⚠️ GODOT_MCP_SANDBOX=disabled — ALL sandbox checks bypassed. Any GDScript code will execute with unrestricted host access.');
