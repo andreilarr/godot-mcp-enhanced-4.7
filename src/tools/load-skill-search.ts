@@ -32,12 +32,12 @@ function parseSkill(content: string, fallbackName: string): ParsedSkill {
   let body = content;
   const fm = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
   if (fm) {
-    const frontmatter = fm[1];
-    body = fm[2];
+    const frontmatter = fm[1] ?? '';
+    body = fm[2] ?? '';
     const nm = frontmatter.match(/^name:\s*(.+)$/m);
-    if (nm) name = nm[1].trim();
+    if (nm?.[1]) name = nm[1].trim();
     const dm = frontmatter.match(/^description:\s*(.+)$/m);
-    if (dm) description = dm[1].trim();
+    if (dm?.[1]) description = dm[1].trim();
   }
   return { name, description, body };
 }
@@ -121,7 +121,7 @@ export async function searchSkills(
           path: relative(real, filePath) || filePath,
           name,
           description,
-          score: Math.round(score * 100) / 100,
+          score,
           snippet: body.slice(0, 200).trim(),
         });
       }
