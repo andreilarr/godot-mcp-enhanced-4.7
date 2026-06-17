@@ -9,6 +9,8 @@ import {
   parseMcpMarkers,
   scanGdscriptSandbox,
   stripLiterals,
+  loadExtraDangerousPatterns,
+  _resetExtraDangerousPatternsCache,
 } from '../src/gdscript-executor.js';
 import { buildSafeEnv } from '../src/helpers.js';
 
@@ -496,5 +498,82 @@ describe('stripLiterals', () => {
 
   it('preserves reflection pattern so .call("x") is still detectable', () => {
     expect(stripLiterals('obj.call("execute")')).toBe('obj.call("")');
+  });
+});
+
+// ─── loadExtraDangerousPatterns (env-injected extra danger patterns) ────────
+
+describe('loadExtraDangerousPatterns', () => {
+  afterEach(() => {
+    delete process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS;
+    _resetExtraDangerousPatternsCache();
+  });
+
+  it('returns empty array when env is not set', () => {
+    expect(loadExtraDangerousPatterns()).toEqual([]);
+  });
+
+  it('loads valid patterns from env', () => {
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'HTTPRequest\\.request', label: 'HTTP request (project policy)' },
+    ]);
+    const patterns = loadExtraDangerousPatterns();
+    expect(patterns).toHaveLength(1);
+    expect(patterns[0].label).toBe('HTTP request (project policy)');
+    expect(patterns[0].pattern.test('HTTPRequest.request("url")')).toBe(true);
+  });
+
+  it('skips invalid regex without crashing and keeps valid ones', () => {
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: '(', label: 'bad regex' },
+      { pattern: 'ValidPattern', label: 'good' },
+    ]);
+    const patterns = loadExtraDangerousPatterns();
+    expect(patterns).toHaveLength(1);
+    expect(patterns[0].label).toBe('good');
+  });
+
+  it('ignores non-array JSON', () => {
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify({ not: 'array' });
+    expect(loadExtraDangerousPatterns()).toEqual([]);
+  });
+
+  it('ignores malformed JSON', () => {
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = 'not json {{{';
+    expect(loadExtraDangerousPatterns()).toEqual([]);
+  });
+
+  it('skips entries with missing/non-string fields', () => {
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'OK', label: 'valid' },
+      { pattern: 123, label: 'bad-type' },
+      { pattern: 'OK2' },
+      'not-an-object',
+    ]);
+    const patterns = loadExtraDangerousPatterns();
+    expect(patterns).toHaveLength(1);
+    expect(patterns[0].label).toBe('valid');
+  });
+
+  it('memoizes: same env returns same array reference', () => {
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'X', label: 'Y' },
+    ]);
+    const a = loadExtraDangerousPatterns();
+    const b = loadExtraDangerousPatterns();
+    expect(a).toBe(b);
+  });
+
+  it('re-parses when env value changes', () => {
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'A', label: 'a' },
+    ]);
+    const first = loadExtraDangerousPatterns();
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'B', label: 'b' },
+    ]);
+    const second = loadExtraDangerousPatterns();
+    expect(first).not.toBe(second);
+    expect(second[0].label).toBe('b');
   });
 });

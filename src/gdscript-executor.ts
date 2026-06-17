@@ -321,6 +321,52 @@ export function stripLiterals(code: string): string {
   return result;
 }
 
+// ─── Extra dangerous patterns (env-injected, C-SEC-02 扩展) ──────────────────
+
+let _extraPatternsCache: { raw: string; patterns: Array<{ pattern: RegExp; label: string }> } | null = null;
+
+/** @internal 测试用:重置 extra patterns 缓存 */
+export function _resetExtraDangerousPatternsCache(): void {
+  _extraPatternsCache = null;
+}
+
+/**
+ * 从环境变量 GODOT_MCP_EXTRA_DANGEROUS_PATTERNS 加载用户自定义危险正则。
+ * 格式:JSON 数组 [{"pattern": <正则源码>, "label": <人类可读标签>}, ...]
+ *
+ * memoized:以 raw 字符串为键,相同 env 不重复解析(风格同 _autoloadCache)。
+ * 坏正则/坏 JSON 降级:跳过该条或整体忽略,记录 warn,绝不抛异常。 */
+export function loadExtraDangerousPatterns(): Array<{ pattern: RegExp; label: string }> {
+  const raw = process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS;
+  if (!raw) return [];
+  if (_extraPatternsCache && _extraPatternsCache.raw === raw) {
+    return _extraPatternsCache.patterns;
+  }
+  const patterns: Array<{ pattern: RegExp; label: string }> = [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      getLogger().warn('security', 'GODOT_MCP_EXTRA_DANGEROUS_PATTERNS is not a JSON array, ignoring');
+      _extraPatternsCache = { raw, patterns };
+      return patterns;
+    }
+    for (const entry of parsed) {
+      if (!entry || typeof entry !== 'object') continue;
+      const e = entry as { pattern?: unknown; label?: unknown };
+      if (typeof e.pattern !== 'string' || typeof e.label !== 'string') continue;
+      try {
+        patterns.push({ pattern: new RegExp(e.pattern), label: e.label });
+      } catch (regexErr) {
+        getLogger().warn('security', `GODOT_MCP_EXTRA_DANGEROUS_PATTERNS: invalid regex skipped: "${e.pattern}" (${regexErr instanceof Error ? regexErr.message : regexErr})`);
+      }
+    }
+  } catch (jsonErr) {
+    getLogger().warn('security', `GODOT_MCP_EXTRA_DANGEROUS_PATTERNS: invalid JSON, ignoring (${jsonErr instanceof Error ? jsonErr.message : jsonErr})`);
+  }
+  _extraPatternsCache = { raw, patterns };
+  return patterns;
+}
+
 export function scanGdscriptSandbox(code: string): string[] {
   if (process.env.GODOT_MCP_SANDBOX === 'disabled') {
     getLogger().warn('security', '⚠️ GODOT_MCP_SANDBOX=disabled — ALL sandbox checks bypassed. Any GDScript code will execute with unrestricted host access.');
