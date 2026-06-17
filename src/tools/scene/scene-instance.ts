@@ -203,7 +203,13 @@ export function handleDetachInstance(args: Record<string, unknown>): ToolResult 
     return opsErrorResult('NOT_AN_INSTANCE', `Node "${nodeName}" (parent: "${tscnParent}") is not an instance or not found`);
   }
 
-  const sourceAbsPath = resolveWithinRoot(p, info.sourcePath.replace(/^res:\/\//, ''));
+  const sourceRel = info.sourcePath.replace(/^res:\/\//, '');
+  // I-7: 显式预校验源场景路径不含 .. (纵深防御;resolveWithinRoot 已兜底,此处的显式检查
+  // 让恶意/损坏的 .tscn ext_resource 在更早阶段被拒绝,错误信息更明确)
+  if (sourceRel.includes('..')) {
+    return textResult(`Error: Source scene path must not escape project root: ${info.sourcePath}`);
+  }
+  const sourceAbsPath = resolveWithinRoot(p, sourceRel);
   if (!existsSync(sourceAbsPath)) {
     return textResult(`Error: Source scene not found: ${info.sourcePath} (${sourceAbsPath})`);
   }

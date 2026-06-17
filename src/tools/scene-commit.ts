@@ -219,7 +219,8 @@ ${errAction}
           .map(([k, v]) => `\t\tchild${idx}.${k} = ${serializeGdValue(v)}`)
           .join('\n') + '\n'
         : '';
-      const parentPath = op.parent === '.' ? '' : gdEscape(op.parent);
+      // I-5: parent='.' 表示根节点,保留 '.' 让 get_node_or_null('.') 命中根(原代码转空串导致必失败)
+      const parentPath = op.parent === '.' ? '.' : gdEscape(op.parent);
       const name = gdEscape(op.name);
       return `
 \t# --- Op ${idx}: node_add ---
@@ -258,7 +259,12 @@ function serializeGdValue(value: unknown): string {
     if (obj._type && typeof obj._type === 'string') {
       const t = obj._type;
       if (t === 'Rect2' || t === 'Rect2i') {
-        return `${t}(${obj.x ?? 0}, ${obj.y ?? 0}, ${obj.w ?? 0}, ${obj.h ?? 0})`;
+        // I-6: 补 typeof number 守卫(与 Color/Vector 分支对齐),非数字字段降级为 0
+        const rx = typeof obj.x === 'number' ? obj.x : 0;
+        const ry = typeof obj.y === 'number' ? obj.y : 0;
+        const rw = typeof obj.w === 'number' ? obj.w : 0;
+        const rh = typeof obj.h === 'number' ? obj.h : 0;
+        return `${t}(${rx}, ${ry}, ${rw}, ${rh})`;
       }
       if (t === 'Vector3' || t === 'Vector3i') {
         return `${t}(${obj.x ?? 0}, ${obj.y ?? 0}, ${obj.z ?? 0})`;
@@ -281,8 +287,9 @@ function serializeGdValue(value: unknown): string {
       return `Color(${obj.r}, ${obj.g}, ${obj.b}, ${a})`;
     }
 
-    // Rect2: has x, y, w, h
-    if (keys.includes('w') && keys.includes('h') && keys.includes('x') && keys.includes('y') && !keys.includes('z')) {
+    // Rect2: has x, y, w, h (I-6: 补 typeof number 守卫,与 Color/Vector 分支对齐)
+    if (keys.includes('w') && keys.includes('h') && keys.includes('x') && keys.includes('y') && !keys.includes('z')
+      && typeof obj.x === 'number' && typeof obj.y === 'number' && typeof obj.w === 'number' && typeof obj.h === 'number') {
       return `Rect2(${obj.x}, ${obj.y}, ${obj.w}, ${obj.h})`;
     }
 

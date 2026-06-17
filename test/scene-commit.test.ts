@@ -67,7 +67,7 @@ describe('scene-commit: generateCommitScript', () => {
     expect(script).toContain('.name = "Coin"');
   });
 
-  it('generates node_add with root parent (empty string)', () => {
+  it('generates node_add with root parent (".")', () => {
     const script = generateCommitScript(
       'res://scenes/Level.tscn',
       [
@@ -75,8 +75,9 @@ describe('scene-commit: generateCommitScript', () => {
       ],
       true,
     );
-    // parent "." maps to empty string for get_node_or_null
-    expect(script).toContain('get_node_or_null("")');
+    // I-5: parent "." 是根,get_node_or_null(".") 命中根节点(原代码转空串导致必失败)
+    expect(script).toContain('get_node_or_null(".")');
+    expect(script).not.toContain('get_node_or_null("")');
   });
 
   it('stops on error when stop_on_error=true', () => {
