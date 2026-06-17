@@ -597,3 +597,46 @@ describe('loadExtraDangerousPatterns', () => {
     expect(second[0].label).toBe('b');
   });
 });
+
+// ─── scanGdscriptSandbox extra patterns (env-injected, end-to-end) ──────────
+
+describe('scanGdscriptSandbox extra patterns (env-injected)', () => {
+  afterEach(() => {
+    delete process.env.GODOT_MCP_SANDBOX;
+    delete process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS;
+    _resetExtraDangerousPatternsCache();
+  });
+
+  it('blocks code matching a user-defined extra pattern', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'HTTPRequest\.request', label: 'HTTP request (project policy)' },
+    ]);
+    const warnings = scanGdscriptSandbox('HTTPRequest.request("https://example.com")');
+    expect(warnings.some(w => w.includes('HTTP request (project policy)'))).toBe(true);
+  });
+
+  it('does not block when extra pattern env is unset', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('HTTPRequest.request("https://example.com")');
+    expect(warnings.filter(w => w.includes('HTTP request'))).toEqual([]);
+  });
+
+  it('extra pattern runs on skeleton: string content does not trigger', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'HTTPRequest\.request', label: 'HTTP policy' },
+    ]);
+    const warnings = scanGdscriptSandbox('var s = "HTTPRequest.request is blocked by policy"');
+    expect(warnings.filter(w => w.includes('HTTP policy'))).toEqual([]);
+  });
+
+  it('extra pattern runs on skeleton: comment content does not trigger', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'HTTPRequest\.request', label: 'HTTP policy' },
+    ]);
+    const warnings = scanGdscriptSandbox('# HTTPRequest.request mentioned in comment');
+    expect(warnings.filter(w => w.includes('HTTP policy'))).toEqual([]);
+  });
+});
