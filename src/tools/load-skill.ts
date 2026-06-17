@@ -43,7 +43,7 @@ export async function handleTool(
 ): Promise<ToolResult | null> {
   if (!(TOOL_NAMES as readonly string[]).includes(name)) return null;
 
-  const query = args.query as string;
+  const query = typeof args.query === 'string' ? args.query : '';
   if (!query || !String(query).trim()) {
     return errorResult('query is required');
   }
@@ -55,7 +55,7 @@ export async function handleTool(
     );
   }
 
-  const limit = (args.limit as number) || 10;
+  const limit = typeof args.limit === 'number' && args.limit > 0 ? Math.floor(args.limit) : 10;
 
   try {
     const { matches, missing } = await searchSkills(libraries, String(query), limit);
@@ -75,4 +75,4 @@ export async function handleTool(
 
 export const TOOL_META: Record<string, { readonly: boolean; long_running: boolean }> = {
   load_skill: { readonly: true, long_running: false },
-};
+}

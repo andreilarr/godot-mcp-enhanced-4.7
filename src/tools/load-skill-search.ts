@@ -64,6 +64,7 @@ async function* walkMd(dir: string): AsyncGenerator<string> {
   try {
     entries = await fs.readdir(dir, { withFileTypes: true });
   } catch {
+    // 子目录读取失败(权限/竞态)静默跳过;根目录缺失已由外层 realpath 兜住
     return;
   }
   for (const entry of entries) {
