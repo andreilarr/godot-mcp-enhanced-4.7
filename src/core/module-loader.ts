@@ -49,6 +49,7 @@ import * as animationTrack from '../tools/animation-track.js';
 import * as manageTools from '../tools/manage-tools.js';
 import * as instanceTools from '../tools/instance-tools.js';
 import * as advancedProxy from '../tools/advanced-proxy.js';
+import * as loadSkill from '../tools/load-skill.js';
 
 // ─── Registration ─────────────────────────────────────────────────────────────
 
@@ -60,6 +61,7 @@ const ALL_MODULES = [
   /* testFramework → validation */ animtreeOps, navigationOps, particlesOps,
   signalOps, /* batchTools → workflow */ uiOps, /* recordingOps → runtime */ editorSync,
   /* delivery → validation */ /* codeTemplates → project */ /* ikTools → animation-ops */ /* gameDesign → validation */ manageTools, instanceTools, advancedProxy,
+  loadSkill,
 ];
 
 // ─── Tag injection ─────────────────────────────────────────────────────────────
