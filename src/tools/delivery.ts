@@ -8,7 +8,7 @@ import { executeGdscript } from '../gdscript-executor.js';
 import { batchValidateScripts } from './validation.js';
 import { SCENE_TREE_HEADER, wrapAssertionCode, opsErrorResult } from './shared.js';
 import { existsSync, readFileSync, readdirSync } from 'fs';
-import { join, relative } from 'path';
+import { join, relative, isAbsolute } from 'path';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -178,7 +178,16 @@ function buildSceneContentCache(projectPath: string, cache: Map<string, string>)
 
 export function findAssociatedScenes(projectPath: string, scriptPath: string, cache?: Map<string, string>): string[] {
   const scenes: string[] = [];
-  const scriptResPath = `res://${scriptPath}`;
+  // 归一化 scriptPath 为相对项目的 res:// 引用形式。
+  // 场景文件中的脚本引用一律是相对的（如 res://scripts/player.gd），
+  // 而调用方（verify_delivery scope=script）传入的是 resolveWithinRoot 解析后的绝对路径，
+  // 若直接 `res://${absPath}` 拼成 res://D:\project\... 将与场景内容恒不匹配 → scenes 恒空
+  // → scene_tree 维度空循环 → 报告 passed:true，发版门禁静默假阴性。
+  let scriptRel = scriptPath;
+  if (scriptRel.startsWith('res://')) scriptRel = scriptRel.slice('res://'.length);
+  if (isAbsolute(scriptRel)) scriptRel = relative(projectPath, scriptRel);
+  scriptRel = scriptRel.replace(/\\/g, '/');
+  const scriptResPath = `res://${scriptRel}`;
   const sceneCache = cache ?? new Map<string, string>();
   const filled = buildSceneContentCache(projectPath, sceneCache);
   for (const [sceneRelPath, content] of filled) {

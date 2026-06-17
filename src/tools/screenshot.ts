@@ -17,7 +17,7 @@ export function getToolDefinitions(): Tool[] {
   return [
     {
       name: 'screenshot',
-      description: 'Screenshot capture and AI visual analysis. capture: capture a Godot scene screenshot in headless mode (experimental). analyze: return an image as base64 for AI visual analysis.',
+      description: 'Screenshot capture and image analysis handoff. capture: capture a Godot scene screenshot in headless mode (experimental). analyze: return the image as MCP image content (base64) for the client vision capability to examine — returns image data, NOT a text description.',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -33,6 +33,8 @@ export function getToolDefinitions(): Tool[] {
           frame_delay: { type: 'number', description: 'capture: Frames to wait before capture (default: 15)', default: 15 },
           viewport_width: { type: 'number', description: 'capture: Viewport width in pixels (default: 1280)', default: 1280 },
           viewport_height: { type: 'number', description: 'capture: Viewport height in pixels (default: 720)', default: 720 },
+          wait_node: { type: 'string', description: 'capture: 等待该节点(名或 /root/... 路径)出现在场景树再截图。对分帧构建/异步初始化场景,优先于 frame_delay 生效;超时(固定 300 帧≈5s@60fps,独立于 max_frames)后放弃等待直接截图' },
+          wait_text: { type: 'string', description: 'capture: 等待任一 Label/RichTextLabel 的 text 包含该子串再截图;超时同 wait_node(固定 300 帧≈5s@60fps,独立于 max_frames)' },
           // analyze params
           image_path: { type: 'string', description: 'analyze: Absolute path to the image file (PNG or JPG)' },
           question: { type: 'string', description: 'analyze: Question for the AI to answer about the image. Default: "Describe what you see in this game screenshot."', default: 'Describe what you see in this game screenshot. Focus on: UI elements, character positions, any visual issues or bugs.' },
@@ -72,6 +74,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       const frameDelay = (args.frame_delay as number) || 15;
       const viewportW = (args.viewport_width as number) || 1280;
       const viewportH = (args.viewport_height as number) || 720;
+      const waitNode = (args.wait_node as string | undefined)?.trim() || undefined;
+      const waitText = (args.wait_text as string | undefined)?.trim() || undefined;
       const godot = await ctx.findGodot();
 
       const result = await captureScreenshot({
@@ -82,6 +86,8 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
         frameDelay,
         viewportSize: { width: viewportW, height: viewportH },
         timeout: 30,
+        waitNode,
+        waitText,
       });
 
       if (result.success) {

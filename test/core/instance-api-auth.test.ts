@@ -98,6 +98,16 @@ describe('instance-api-auth', () => {
       // 同一 token 第二次使用应被拒绝
       expect(verifyApiToken('inst-1', token)).toBe(false);
     });
+
+    it('forged token does not pollute nonce pool (A-2: nonce recorded only after HMAC passes)', () => {
+      const token = generateApiToken('inst-1'); // 有效: nonce=N, hmac=H
+      const parts = token.split('.');
+      // 篡改 HMAC 段(保持长度)→ 伪造 token: 同 nonce=N, 错误签名
+      const forged = `${parts[0]!}.${parts[1]!}.${'0'.repeat(parts[2]!.length)}`;
+      expect(verifyApiToken('inst-1', forged)).toBe(false); // HMAC 错 → 拒绝
+      // 原有效 token 仍可用:伪造 token 未污染 nonce N(修复前此处因 nonce 被占会失败)
+      expect(verifyApiToken('inst-1', token)).toBe(true);
+    });
   });
 
   describe('buildAuthHeaders', () => {

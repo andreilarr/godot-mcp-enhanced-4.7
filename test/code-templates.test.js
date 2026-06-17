@@ -74,6 +74,22 @@ describe('renderTemplate', () => {
     expect(renderTemplate('speed = {{spd}}', { spd: '300.0' })).toBe('speed = 300.0');
     expect(renderTemplate('offset = {{off}}', { off: '-10 + 5 * 2' })).toBe('offset = -10 + 5 * 2');
   });
+
+  // 回归：换行符是 GDScript 语句分隔符，白名单不得放行（原 \s 误放行 → RCE）
+  it('rejects template variable values containing newlines (statement injection → RCE)', () => {
+    const payload = 'Vector3(0,5,10)\nOS.execute("calc")';
+    // 载荷中每个字符都"看起来无害"，唯独换行允许注入第二条语句
+    expect(() => renderTemplate('var x = {{val}}', { val: payload })).toThrow(/disallowed characters/);
+    // 回车 / 换页 / 垂直制表同样不得放行
+    expect(() => renderTemplate('var x = {{val}}', { val: 'a\rb' })).toThrow(/disallowed characters/);
+    expect(() => renderTemplate('var x = {{val}}', { val: 'a\fb' })).toThrow(/disallowed characters/);
+    expect(() => renderTemplate('var x = {{val}}', { val: 'a\vb' })).toThrow(/disallowed characters/);
+  });
+
+  it('still accepts spaces and tabs inside expressions (readability)', () => {
+    expect(renderTemplate('var x = {{val}}', { val: 'Vector3(0, 5, 10)' })).toBe('var x = Vector3(0, 5, 10)');
+    expect(renderTemplate('var x = {{val}}', { val: '1\t+ 2' })).toBe('var x = 1\t+ 2');
+  });
 });
 
 // ─── 3. CharacterBody2D 模板 (T008) ──────────────────────────────────────────
