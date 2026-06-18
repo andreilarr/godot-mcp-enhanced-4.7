@@ -9,6 +9,8 @@ Thumbs.db
 .env
 .idea/
 .vscode/
+# F2 (review): Cursor 本地 MCP 配置含开发者本地 Godot 路径,不跟踪(用 .cursor/mcp.json.example 作模板)
+.cursor/mcp.json
 *.swp
 *.swo
 

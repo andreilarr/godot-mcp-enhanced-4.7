@@ -6,7 +6,7 @@
         "godot-mcp-enhanced"
       ],
       "env": {
-        "GODOT_PATH": "D:\\godot\\Godot_v4.6.2-stable_win64.exe"
+        "GODOT_PATH": "C:\\path\\to\\Godot_v4.x.x-stable_win64.exe"
       }
     }
   }

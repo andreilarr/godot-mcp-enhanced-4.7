@@ -12,7 +12,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -27,7 +27,7 @@ function findGodotBinary() {
 
   try {
     const which = process.platform === 'win32' ? 'where' : 'which';
-    const result = execSync(`${which} godot`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    const result = execFileSync(which, ['godot'], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
     const candidates = result.split('\n').map(s => s.trim()).filter(Boolean);
     if (candidates.length > 0) return candidates[0];
   } catch {
@@ -40,7 +40,7 @@ function findGodotBinary() {
 // ── 获取 Godot 版本 ────────────────────────────────────
 function getGodotVersion(godotBin) {
   try {
-    return execSync(`"${godotBin}" --version`, { encoding: 'utf-8' }).trim();
+    return execFileSync(godotBin, ['--version'], { encoding: 'utf-8' }).trim();
   } catch (err) {
     console.warn('警告: 无法获取 Godot 版本:', err.message);
     return null;
@@ -53,7 +53,7 @@ function generateWithDoctool(godotBin) {
   console.log(`尝试用 godot --doctool 生成文档到 ${outputDir} ...`);
 
   try {
-    execSync(`"${godotBin}" --headless --doctool "${outputDir}"`, {
+    execFileSync(godotBin, ['--headless', '--doctool', outputDir], {
       encoding: 'utf-8',
       timeout: 120_000,
       stdio: 'pipe',

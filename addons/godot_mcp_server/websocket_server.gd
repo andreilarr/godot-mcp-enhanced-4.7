@@ -41,6 +41,9 @@ func _ready() -> void:
 
 	_command_handler = preload("command_handler.gd").new()
 	_command_handler.setup(_plugin)
+	# E2 (review): plugin.gd:21 用 get_node_or_null("command_handler") 按名字查找做 cleanup,
+	# 必须显式设 .name(否则 Godot 自动名不匹配 → cleanup 路径失效/死代码)。
+	_command_handler.name = "command_handler"
 	add_child(_command_handler)
 
 	_generate_and_write_secret()
