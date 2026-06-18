@@ -1,6 +1,9 @@
 # godot-mcp-enhanced 发展路线图
 
-## v0.14.0（2026-05-24）— 当前版本
+> 历史里程碑记录。**当前版本与完整变更历史以 [CHANGELOG.md](CHANGELOG.md) 和 `package.json` 为准**
+> (本文件编写于 v0.18.1)。IMPORTANT-16: 不再在此标记"当前版本",避免与 package.json 漂移。
+
+## v0.14.0（2026-05-24）
 
 7 轴全维度审查修复 + IK 框架 MVP + 测试基础设施升级。
 

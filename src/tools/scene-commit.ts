@@ -11,6 +11,23 @@ export const COMMIT_OPERATIONS = [
 
 export type CommitOp = typeof COMMIT_OPERATIONS[number];
 
+/**
+ * IMPORTANT-7 (review): 校验 operations 数组结构。每个 op 必须有合法 op 字段
+ * (对齐 COMMIT_OPERATIONS)。原 scene-commit-tool 用 as unknown as CommitOperation[] 无运行时校验,
+ * 畸形 op(op 字段缺失/非法值)会让 generateCommitScript 运行时崩溃或生成畸形 .gd。
+ * @returns null 全部合法;否则首条错误信息(含索引与合法值清单)。
+ */
+export function validateCommitOperations(operations: Array<Record<string, unknown>>): string | null {
+  const validOps = new Set<string>(COMMIT_OPERATIONS);
+  for (let i = 0; i < operations.length; i++) {
+    const opType = operations[i]?.op;
+    if (typeof opType !== 'string' || !validOps.has(opType)) {
+      return `Op ${i}: invalid op "${String(opType)}". Valid: ${COMMIT_OPERATIONS.join(', ')}`;
+    }
+  }
+  return null;
+}
+
 interface TileSetOp {
   op: 'tile_set';
   node_path: string;
@@ -240,7 +257,9 @@ ${errAction}
 
 function serializeGdValue(value: unknown): string {
   // I-03, C-01: Escape backslash, quote, newline for GDScript string safety
-  if (typeof value === 'string') return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
+  // IMPORTANT-6 (review): 补 \r \t 转义,防控制字符破坏 .gd 字符串/被解析为行结束而注入新行。
+  // (% 不转义:GDScript 字符串字面量里 % 无特殊语义,仅 % 格式化操作时才特殊,转义反而破坏正常 % 字符)
+  if (typeof value === 'string') return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')}"`;
   if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '0';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (value === null || value === undefined) return 'null';

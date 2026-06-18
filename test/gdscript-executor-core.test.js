@@ -349,6 +349,29 @@ describe('scanGdscriptSandbox extended', () => {
     expect(warnings.length).toBeGreaterThan(0);
     expect(warnings[0]).toContain('Directory removal');
   });
+
+  // IMPORTANT-2 (review): Engine["get_singleton"] 索引访问绕过 Engine.get_singleton 点访问正则。
+  // OS 已有 /\bOS\s*\[/ (:50),Engine 漏堵。举一反三覆盖 FileAccess/DirAccess/JavaScriptBridge。
+  it('flags Engine["get_singleton"] indexed access (IMPORTANT-2)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('Engine["get_singleton"]("FileAccess")');
+    expect(warnings.some(w => w.includes('indexed access'))).toBe(true);
+  });
+
+  it('flags DirAccess["remove"] indexed access (举一反三)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('DirAccess["remove"]("/tmp")');
+    expect(warnings.some(w => w.includes('indexed access'))).toBe(true);
+  });
+
+  // IMPORTANT-3 (review): Expression.execute 正则 . 不跨行,
+  // var e = Expression.new()\ne.execute() 分行写即绕过。
+  it('flags Expression.execute split across lines (IMPORTANT-3)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var e = Expression.new()\ne.execute([], [])';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.some(w => w.includes('Expression.execute'))).toBe(true);
+  });
 });
 
 // ─── Phase 2: String concatenation bypass detection ─────────────────────────
@@ -477,6 +500,15 @@ describe('scanGdscriptSandbox Phase 2 — concatenation bypass', () => {
     const code = '"Class" + "DB"';
     const warnings = scanGdscriptSandbox(code);
     expect(warnings.some(w => w.includes('SANDBOX-P2') && w.includes('ClassDB'))).toBe(true);
+  });
+
+  // IMPORTANT-1 (review): 拼接检测窗口原固定=4。无 '.' 的 token(如 str2var)只能整体匹配,
+  // 5 段拆分需窗口>4 才能拼出,故原窗口漏。扩大窗口后应检测。
+  it('Phase 2: detects str2var built from 5 string parts (IMPORTANT-1)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = '"st" + "r" + "2" + "v" + "ar"';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.some(w => w.includes('SANDBOX-P2') && w.includes('str2var'))).toBe(true);
   });
 });
 

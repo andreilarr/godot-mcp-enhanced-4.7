@@ -158,6 +158,14 @@ func instantiate_class(name_of_class: String):
 			log_error(String("Class %s is blocked for security reasons") % name_of_class)
 			return null
 	if ClassDB.class_exists(name_of_class):
+		# IMPORTANT-13 (review): 黑名单可被补全前缀绕过。补 is_parent_class("Node") 检查,
+		# 确保仅实例化 Node 子类(堵黑名单漏的非 Node 引擎类 FileAccess/Thread/OS 等)。
+		# 未改纯白名单:本函数用于 create_scene/add_node,node_type 范围含 Control 等,
+		# node_commands 的 ALLOWED_NODE_TYPES 无 Control,直接复用会致 UI 场景回归;
+		# 完整白名单范围留作产品决策 issue。
+		if not ClassDB.is_parent_class(name_of_class, "Node"):
+			log_error(String("Refused: %s is not a Node subclass") % name_of_class)
+			return null
 		if ClassDB.can_instantiate(name_of_class):
 			var result = ClassDB.instantiate(name_of_class)
 			if result == null:

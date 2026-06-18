@@ -189,3 +189,39 @@ export function createElicitationMiddleware(
     },
   };
 }
+
+// ─── Rate Limit Middleware (IMPORTANT-5) ──────────────────────────────────────
+
+/**
+ * 全局 rate limit 中间件。防 AI 失控循环调用(execute_gdscript/read_scene 等)
+ * 耗尽 CPU/IO/子进程槽。固定窗口计数:windowMs 内最多 maxPerWindow 次,超限拒绝。
+ * 属软限(防失控循环,非硬 DoS 防护——后者需容器级隔离)。默认 60 次/秒,可按部署调整。
+ */
+export function createRateLimitMiddleware(
+  maxPerWindow: number = 60,
+  windowMs: number = 1000,
+): Middleware {
+  let windowStart: number = Date.now();
+  let count: number = 0;
+  return {
+    name: 'rate-limit',
+    before: async () => {
+      const now = Date.now();
+      if (now - windowStart >= windowMs) {
+        windowStart = now;
+        count = 0;
+      }
+      count++;
+      if (count > maxPerWindow) {
+        getLogger().warn('middleware', `Rate limit exceeded: ${count}/${maxPerWindow} per ${windowMs}ms`);
+        return {
+          rejected: true,
+          error: errorResult(
+            `RATE_LIMITED: 超过 ${maxPerWindow} 次/${windowMs}ms 调用上限。AI 调用循环可能失控,请检查流程。`,
+          ),
+        };
+      }
+      return { passed: true };
+    },
+  };
+}

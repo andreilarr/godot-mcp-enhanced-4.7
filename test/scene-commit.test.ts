@@ -1,6 +1,35 @@
 // test/scene-commit.test.ts
 import { describe, it, expect } from 'vitest';
-import { generateCommitScript, COMMIT_OPERATIONS } from '../src/tools/scene-commit.js';
+import { generateCommitScript, COMMIT_OPERATIONS, validateCommitOperations } from '../src/tools/scene-commit.js';
+
+describe('validateCommitOperations (IMPORTANT-7)', () => {
+  it('returns null for all-valid operations', () => {
+    expect(validateCommitOperations([
+      { op: 'tile_set', node_path: 'G', coords: { x: 1, y: 1 }, source_id: 0, atlas: { x: 0, y: 0 } },
+      { op: 'node_property', path: 'P', property: 'x', value: 1 },
+    ])).toBeNull();
+  });
+
+  it('returns error for unknown op', () => {
+    const err = validateCommitOperations([{ op: 'evil_op', foo: 1 }]);
+    expect(err).toContain('invalid op');
+    expect(err).toContain('evil_op');
+  });
+
+  it('returns error for missing op field', () => {
+    const err = validateCommitOperations([{ foo: 1 }]);
+    expect(err).toContain('invalid op');
+    expect(err).toContain('Op 0');
+  });
+
+  it('includes the offending index', () => {
+    const err = validateCommitOperations([
+      { op: 'tile_set', node_path: 'G', coords: { x: 1, y: 1 }, source_id: 0, atlas: { x: 0, y: 0 } },
+      { op: 'bad' },
+    ]);
+    expect(err).toContain('Op 1');
+  });
+});
 
 describe('scene-commit: generateCommitScript', () => {
   it('generates valid GDScript for tile_set operation', () => {
@@ -41,6 +70,16 @@ describe('scene-commit: generateCommitScript', () => {
       true,
     );
     expect(script).not.toContain('func _fill_tiles');
+  });
+
+  it('escapes \\r and \\t in string property values (IMPORTANT-6)', () => {
+    const script = generateCommitScript(
+      'res://scenes/Level.tscn',
+      [{ op: 'node_property', path: 'Label', property: 'text', value: 'a\tb\rc' }],
+      true,
+    );
+    // 控制字符 \r \t 须转义为 GDScript 字面,不能保留原始字符(防 .gd 文本注入/破坏字符串)
+    expect(script).toContain('"a\\tb\\rc"');
   });
 
   it('generates node_property operation', () => {

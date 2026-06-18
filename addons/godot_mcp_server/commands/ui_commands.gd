@@ -8,6 +8,18 @@ const BLOCKED_PROPS: Array = ["script", "owner", "name", "parent", "children", "
 	"material", "texture", "mesh", "collision_layer", "collision_mask",
 	"collision_priority", "transform", "global_transform"]
 
+# IMPORTANT-14 (review): 严格白名单替代 is_parent_class(node_type,"Control") 兜底。
+# 原写法放行任意 Control 子类(含第三方 class_name 脚本),实例化时触发其 _init/_ready 执行任意 GDScript。
+# 与 node_commands.gd ALLOWED_NODE_TYPES(I-4)对齐;须与 TS 端 ui_create_control 的 29 种 Control 同步。
+const ALLOWED_CONTROL_TYPES: Array = [
+	"Button", "Label", "Panel", "LineEdit", "TextEdit", "RichTextLabel",
+	"LinkButton", "HSlider", "VSlider", "CheckBox", "CheckButton",
+	"OptionButton", "SpinBox", "ProgressBar", "TextureRect", "ColorPickerButton",
+	"TabContainer", "Tree", "ItemList", "MarginContainer", "HBoxContainer",
+	"VBoxContainer", "GridContainer", "CenterContainer", "ScrollContainer",
+	"PanelContainer", "HSplitContainer", "VSplitContainer", "NinePatchRect",
+]
+
 func setup(plugin: EditorPlugin) -> void:
 	_plugin = plugin
 
@@ -25,8 +37,8 @@ func handle_ui_create_control(params: Dictionary, request_id: int) -> Dictionary
 	if parent_node == null:
 		return {"error": {"code": -32002, "message": "Parent not found: " + parent_path}}
 
-	if not ClassDB.class_exists(node_type) or not ClassDB.is_parent_class(node_type, "Control"):
-		return {"error": {"code": -32004, "message": "Invalid Control type: " + node_type}}
+	if not (node_type in ALLOWED_CONTROL_TYPES):
+		return {"error": {"code": -32004, "message": "Invalid or blocked Control type: " + node_type}}
 
 	var node = ClassDB.instantiate(node_type)
 	if node == null:
@@ -270,8 +282,8 @@ func handle_ui_container_add(params: Dictionary, request_id: int) -> Dictionary:
 		return {"error": {"code": -32002, "message": "Container node not found: " + node_path}}
 
 	var child_type: String = params.get("child_type", "Label")
-	if not ClassDB.class_exists(child_type) or not ClassDB.is_parent_class(child_type, "Control"):
-		return {"error": {"code": -32004, "message": "Invalid Control type: " + child_type}}
+	if not (child_type in ALLOWED_CONTROL_TYPES):
+		return {"error": {"code": -32004, "message": "Invalid or blocked Control type: " + child_type}}
 
 	var child_name: String = params.get("child_name", "Child")
 	var child = ClassDB.instantiate(child_type)

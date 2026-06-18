@@ -4,7 +4,7 @@ import type { ChildProcess } from 'child_process';
 import type { ReadOnlyGuard } from './ReadOnlyGuard.js';
 import type { EditorToolExecutor } from './EditorToolExecutor.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { executeMiddleware } from './middleware.js';
+import { executeMiddleware, createRateLimitMiddleware } from './middleware.js';
 import { HealthMonitor } from './health-monitor.js';
 import {
   requiresConfirmation,
@@ -351,6 +351,9 @@ export class ToolDispatcher {
         return result;
       },
     });
+
+    // IMPORTANT-5: 全局 rate limit(防 AI 失控循环耗尽资源)。默认 60 次/秒软限。
+    mw.push(createRateLimitMiddleware());
 
     return mw;
   }

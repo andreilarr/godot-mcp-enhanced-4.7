@@ -59,6 +59,9 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /Engine\.(set_singleton)\b/, label: 'Engine singleton modification' },
   // C-03: Engine.get_singleton bypasses class-level restrictions (e.g. FileAccess, DirAccess)
   { pattern: /Engine\.get_singleton\b/, label: 'Engine singleton access (sandbox bypass)' },
+  // IMPORTANT-2 (review): 索引访问把句点换方括号绕过点访问正则。OS 已有 /\bOS\s*\[/ (:50),
+  // 补 Engine/FileAccess/DirAccess/JavaScriptBridge(其危险方法均靠点访问正则拦截,方括号写法同样需堵)。
+  { pattern: /\b(Engine|FileAccess|DirAccess|JavaScriptBridge)\s*\[/, label: 'Singleton indexed access (sandbox bypass)' },
   { pattern: /JavaScriptBridge\.eval\b/, label: 'JavaScript eval (web escape)' },
   { pattern: /\bstr2var\b/, label: 'str2var (arbitrary deserialization)' },
   { pattern: /\bbytes2var\b/, label: 'bytes2var (arbitrary deserialization)' },
@@ -76,7 +79,9 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\.call\s*\(\s*["']/, label: 'Indirect call via .call("string") (sandbox bypass)' },
   { pattern: /\.callv\s*\(\s*["']/, label: 'Indirect call via .callv("string") (sandbox bypass)' },
   // A-09: Expression.execute can evaluate arbitrary expressions
-  { pattern: /Expression\b.*\.execute\b/, label: 'Expression.execute (arbitrary code execution)' },
+  // IMPORTANT-3 (review): .* 不跨行,var e=Expression.new()\ne.execute() 分行即绕过。改 [\s\S]
+  // 非贪婪并限长 500 防 ReDoS(典型 Expression.new()+parse+execute 距离 <<500)。
+  { pattern: /Expression\b[\s\S]{0,500}?\.execute\b/, label: 'Expression.execute (arbitrary code execution)' },
   // S-1-review: var2str + str2var chain (arbitrary object reconstruction)
   { pattern: /\bvar2str\b/, label: 'var2str (serialization bypass)' },
   // S-1-review: get_script() reflection escape
@@ -188,8 +193,11 @@ function detectStringConcatBypass(code: string): string[] {
   // Concatenate adjacent string parts and check against dangerous tokens.
   // For "ClassName.method" tokens, also check ".method" suffix (e.g. ".execute")
   // to catch: "OS" + ".execute" → ".execute" matches suffix.
+  // IMPORTANT-1 (review): 窗口原固定 4,无 '.' 的 token(如 str2var)5+ 段可绕过。扩大到 8
+  // 覆盖更多分段;9+ 段依赖容器隔离(沙箱非对抗边界,见图灵完备声明)。O(n²):成本随窗口与字符串数增长。
+  const MAX_CONCAT_WINDOW = 8;
   for (let i = 0; i < stringContents.length; i++) {
-    for (let j = i; j < Math.min(i + 4, stringContents.length); j++) {
+    for (let j = i; j < Math.min(i + MAX_CONCAT_WINDOW, stringContents.length); j++) {
       const combined = stringContents.slice(i, j + 1).join('');
       for (const token of DANGEROUS_API_TOKENS) {
         const dotIdx = token.indexOf('.');
@@ -513,10 +521,25 @@ async function cleanupOldSessions(): Promise<void> {
   if (!baseDirPromise) return;
   const maxAge = 60 * 60 * 1000;
   const now = Date.now();
+  // IMPORTANT-11 (review): try 移入循环内,retryRm 失败不再中断整个循环(原中断致每次只清
+  // 第一个失败目录,残留累积)。EPERM/EBUSY 失败收集后聚合 1 条(降噪:原每目录 1 条)。
+  let entries: string[];
   try {
-    for (const entry of await readdir(BASE_TMP_DIR)) {
-      // I-02: Also clean up staging dirs (renamed by retryRm on Windows)
-      if (!entry.startsWith(TMP_PREFIX) && !entry.startsWith('_staging_')) continue;
+    entries = await readdir(BASE_TMP_DIR);
+  } catch (err) {
+    getLogger().debug('gdscript', `cleanup stale dirs: readdir failed: ${err}`);
+    return;
+  }
+  const lockFailures: string[] = [];
+  // IMPORTANT-11: 单次清理上限防卡——累积多时每目录 retryRm 退避(最坏 1.2s)拖慢 gdscript 执行。
+  // 超出目录下次 cleanup 兜底(1h TTL,不丢)。
+  const MAX_CLEANUP_PER_RUN = 10;
+  let processed = 0;
+  for (const entry of entries) {
+    if (processed >= MAX_CLEANUP_PER_RUN) break;
+    // I-02: Also clean up staging dirs (renamed by retryRm on Windows)
+    if (!entry.startsWith(TMP_PREFIX) && !entry.startsWith('_staging_')) continue;
+    try {
       const dirPath = join(BASE_TMP_DIR, entry);
       const stat = await lstat(dirPath);
       if (stat.isSymbolicLink()) continue;
@@ -531,16 +554,19 @@ async function cleanupOldSessions(): Promise<void> {
       if (stat.isDirectory() && dirAge > maxAge) {
         // A-07: Retry rm on EPERM/EBUSY (Windows file locking) with backoff
         await retryRm(dirPath);
+        processed++;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('EPERM') || msg.includes('EBUSY')) {
+        lockFailures.push(entry); // 聚合,不逐条打
+      } else {
+        getLogger().debug('gdscript', `cleanup stale dirs: ${msg}`);
       }
     }
-  } catch (err) {
-    // Only log at warn if some dirs actually failed to clean; debug for routine issues
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('EPERM') || msg.includes('EBUSY')) {
-      getLogger().debug('gdscript', `cleanup stale dirs (retryable): ${msg}`);
-    } else {
-      getLogger().debug('gdscript', `cleanup stale dirs: ${err}`);
-    }
+  }
+  if (lockFailures.length > 0) {
+    getLogger().debug('gdscript', `cleanup stale dirs: ${lockFailures.length} 个 staging 目录清理失败(EPERM/EBUSY,Windows 句柄占用),待下次 cleanup 兜底`);
   }
 }
 
