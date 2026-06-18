@@ -6,7 +6,7 @@ import type { ToolContext, ToolResult } from '../types.js';
 import { textResult } from '../types.js';
 import { requireProjectPath, resolveWithinRoot, normalizeUserProjectPath } from '../helpers.js';
 import { executeGdscript } from '../gdscript-executor.js';
-import { generateCommitScript, type CommitOperation } from './scene-commit.js';
+import { generateCommitScript, validateCommitOperations, type CommitOperation } from './scene-commit.js';
 import { acquireShortRunningSlot, releaseShortRunningSlot } from '../core/process-state.js';
 import { opsErrorResult } from './shared.js';
 
@@ -70,6 +70,13 @@ export async function handleCommitAction(
   }
   if (operations.length > 500) {
     return opsErrorResult('INVALID_PARAMS', `Too many operations (${operations.length}). Maximum: 500`);
+  }
+
+  // IMPORTANT-7 (review): operations 结构校验(原 as unknown as CommitOperation[] 无运行时校验,
+  // 畸形 op 致 generateCommitScript 崩溃)。用 validateCommitOperations 便于单测。
+  const validationError = validateCommitOperations(operations);
+  if (validationError) {
+    return opsErrorResult('INVALID_PARAMS', validationError);
   }
 
   // Generate GDScript

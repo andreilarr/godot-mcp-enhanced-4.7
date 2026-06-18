@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.18.2] - 2026-06-18
+
+### 安全 — 沙箱加固与防御深度
+
+全面审查修复(GDScript 沙箱绕过组 + 防御深度一致性 + 注入面收敛):
+
+- **沙箱绕过组**(`gdscript-executor.ts`):拼接窗口 4→8(MAX_CONCAT_WINDOW)、补 `Engine/FileAccess/DirAccess/JavaScriptBridge` 索引访问拦截、`Expression.execute` 正则跨行(`[\s\S]{0,500}?` 防 ReDoS)、`ResourceLoader.load` 正则去贪婪、`detectAutoloadUsage` 改 stripLiterals 骨架扫描消除注释误触
+- **stripLiterals res:// 保留 + 三引号归一**:剥字符串内容时保留 `res://` 前缀(消除 `load("res://")` 误报回归);三引号开/闭引号归一为单个(让单 `"` 正则覆盖三引号,避免负向预查回溯陷阱)
+- **HMAC 启动警告**(`GodotServer.ts`):MULTI_INSTANCE 启用时警告 verifyApiToken 是发送端 only(零生产接线)
+- **rate limit 中间件**(`middleware.ts`):createRateLimitMiddleware(全局 60 次/秒软限防 AI 失控循环)
+- **scene-commit 转义 + 校验**:serializeGdValue 补 `\r`/`\t` 转义、validateCommitOperations 结构校验(替代 as unknown as 强转)
+- **P0 命令注入收敛**:`generate-doc-db.js` execSync → execFileSync 数组参数;`.cursor/mcp.json` 本地路径 example 化 + gitignore
+
+### GDScript 插件
+
+- **bridge super() 修复**(`mcp_bridge.gd`):移除 extends Node 虚函数的 super()(Godot 4.6.2 Parse error;IMP-4 convention 仅适用自定义基类)。GUI 4.6.2 闭环验证(Listening + pong + WASD)
+- **command_handler .name**(`websocket_server.gd`):设 `.name="command_handler"`,修 plugin.gd cleanup 死代码
+- **instantiate_class Node 检查**(`godot_operations.gd`):补 is_parent_class("Node") 堵非 Node 引擎类
+- **ui_commands 白名单**:ALLOWED_CONTROL_TYPES(29 种)替代 is_parent_class 兜底
+
+### 可靠性
+
+- **cleanupOldSessions 降噪+防卡**(`gdscript-executor.ts`):try 移入循环 + EPERM 聚合 + MAX_CLEANUP_PER_RUN=10 上限(根因:190 累积 stale 目录 × retryRm 退避致 E2E 60s 超时,全量 461s→13s)
+
+### 测试与文档
+
+- **E2E CI 假绿修复**:GODOT_PATH 默认空(强制显式,避免 CI 静默 skip 假绿)
+- **deprecated TODO v0.20.0**、**ROADMAP 历史里程碑化**、**增量复审 issue 清单**(`docs/review-followup-2026-06-18.md`)
+
+### 验证
+
+- 全量 **2670+ passed / 0 failed**(155 文件)、build/lint EXIT 0、EPERM 0、E2E 13s
+- 2026-06-18 全面审查(16 IMPORTANT + 17 ADVISORY)与增量复审(Top 3 P0)已处理
+
 ## [0.18.1] - 2026-06-14
 
 ### Fixed — 3 个阻塞性 CRITICAL（功能验证审查发现并修复）

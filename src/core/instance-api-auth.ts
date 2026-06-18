@@ -9,6 +9,13 @@
  * - secret 文件权限收紧 (0600 / icacls)
  * - HMAC 签名包含 instance.id + timestamp，防重放
  * - 仅限 localhost 通信 (127.0.0.1)
+ *
+ * I-6 状态（半成品功能，MULTI_INSTANCE 默认关闭）：
+ * sendToInstance / dynamicSender 发送端完整且有测试（instance-router.test.ts /
+ * phase2-acceptance.test.ts），但 HTTP /api/<tool> 接收端在本仓库未实现——TS server
+ * 不启动 HTTP 服务端，mcp_bridge.gd 走 TCP JSON-RPC 不消费 HMAC 头。因此 verifyApiToken
+ * （接收端验证逻辑）目前零生产调用，仅被 instance-api-auth.test.ts 覆盖。未来补接收端时，
+ * 在 HTTP server 入口接线 verifyApiToken 即可。删除会破坏上述测试 + 丢失已验证逻辑，故保留并标注。
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -118,10 +125,9 @@ export function verifyApiToken(instanceId: string, token: string): boolean {
   // 检查时效性
   if (Date.now() - timestamp > TOKEN_TTL_MS) return false;
 
-  // S-3: Nonce 防重放检查
+  // S-3: Nonce 防重放检查(仅查重;记录推迟到 HMAC 验证通过后 — A-2,避免伪造 token 污染 nonce 池)
   const nonceKey = `${instanceId}:${nonce}`;
   if (_usedNonces.has(nonceKey)) return false; // 已使用的 nonce → 重放攻击
-  _usedNonces.set(nonceKey, Date.now());
   // 定期清理过期 nonce + I-01 上限保护
   const now = Date.now();
   if (now - _lastNonceCleanup > NONCE_CLEANUP_INTERVAL || _usedNonces.size > 10_000) {
@@ -142,7 +148,10 @@ export function verifyApiToken(instanceId: string, token: string): boolean {
     for (let i = 0; i < expectedHmac.length; i++) {
       mismatch |= expectedHmac.charCodeAt(i) ^ providedHmac.charCodeAt(i);
     }
-    return mismatch === 0;
+    if (mismatch !== 0) return false;
+    // A-2: HMAC 验证通过后才记录 nonce,避免伪造 token 提前污染 nonce 池(否则伪造签名可占用合法 nonce)
+    _usedNonces.set(nonceKey, Date.now());
+    return true;
   } catch {
     return false;
   }

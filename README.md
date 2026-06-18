@@ -258,7 +258,7 @@ npm install && npm run build
 |------|------|
 | `run_and_verify` | 一键 headless 运行并返回结构化错误/警告分析。支持 `capture_tree` 选项同时获取场景树快照。自动检测版本不一致和脚本语法错误。 |
 | `analyze_error` | 重新分析 Godot 输出文本，提供修复建议 |
-| `validate_scripts` | 逐文件运行 Godot 解析器验证 GDScript 语法，检测 headless 运行可能遗漏的 Parse Error |
+| `validate_scripts` | 对每个脚本执行 Godot `load()` 编译验证（触发完整编译，含跨文件依赖解析），检测 headless 运行可能遗漏的 Parse Error |
 
 ### 动态执行工具
 
@@ -587,7 +587,7 @@ Client: ReadResource("godot://script/scripts/player.gd") → GDScript 源码
   - **Hooks + Rules 体系** → `setup_project_rules` 自动生成 `.claude/settings.json`（PostToolUse hook 自动验证 GDScript）和 `CLAUDE.md`（项目编码标准）
   - **Gate-check / verify** → `verify_delivery` 端到端交付验证（场景树完整性 + 脚本健康 + 性能 + 自定义断言 + GDD 合规）
   - **Workflow pipeline** → `dev_loop` 执行→验证→截图一体化工作流，支持 `acceptance` 验收标准和 `save_state` 会话记忆
-  - **GDScript Lint** → `validate_scripts` 逐文件语法验证（L015 行级扫描 + 字符串/注释过滤），对标 CCGS 的 `validate-commit.sh`
+  - **GDScript Lint** → `validate_scripts` 内置的静态 lint 层（L015 行级扫描 + 字符串/注释过滤，独立于 load() 编译检查），对标 CCGS 的 `validate-commit.sh`
   - **GDD 标准** → `validate_gdd` 8 章节游戏设计文档结构校验，对标 CCGS 的 `design/gdd` 路径规则
   - **Chain-of-Verification** → `chain_verify` 自我质疑引擎，防止审查盲点
   - **代码模板** → `list_templates` / `apply_template` 模板系统，对标 CCGS 的 41 个文档模板

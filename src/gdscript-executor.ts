@@ -59,9 +59,15 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /Engine\.(set_singleton)\b/, label: 'Engine singleton modification' },
   // C-03: Engine.get_singleton bypasses class-level restrictions (e.g. FileAccess, DirAccess)
   { pattern: /Engine\.get_singleton\b/, label: 'Engine singleton access (sandbox bypass)' },
+  // IMPORTANT-2 (review): 索引访问把句点换方括号绕过点访问正则。OS 已有 /\bOS\s*\[/ (:50),
+  // 补 Engine/FileAccess/DirAccess/JavaScriptBridge(其危险方法均靠点访问正则拦截,方括号写法同样需堵)。
+  { pattern: /\b(Engine|FileAccess|DirAccess|JavaScriptBridge)\s*\[/, label: 'Singleton indexed access (sandbox bypass)' },
   { pattern: /JavaScriptBridge\.eval\b/, label: 'JavaScript eval (web escape)' },
   { pattern: /\bstr2var\b/, label: 'str2var (arbitrary deserialization)' },
   { pattern: /\bbytes2var\b/, label: 'bytes2var (arbitrary deserialization)' },
+  // C-RES: 单 " 即可 — stripLiterals 已把三引号开/闭引号归一化为单个(见 :271/:283),
+  // 故 load("res://") 与 load("""res://""") 骨架均为 load("res://"),单 " 正则正确放行。
+  // 注:曾试 "{1,3}" 但负向预查+可变量词会回溯到单 " 而误报,故改在骨架层归一化。
   { pattern: /load\s*\(\s*"(?!res:\/\/)/, label: 'load() with non-resource path' },
   { pattern: /Thread\.(new|start)\b/, label: 'Thread creation' },
   { pattern: /Semaphore\.new\b/, label: 'Semaphore creation' },
@@ -73,13 +79,17 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\.call\s*\(\s*["']/, label: 'Indirect call via .call("string") (sandbox bypass)' },
   { pattern: /\.callv\s*\(\s*["']/, label: 'Indirect call via .callv("string") (sandbox bypass)' },
   // A-09: Expression.execute can evaluate arbitrary expressions
-  { pattern: /Expression\b.*\.execute\b/, label: 'Expression.execute (arbitrary code execution)' },
+  // IMPORTANT-3 (review): .* 不跨行,var e=Expression.new()\ne.execute() 分行即绕过。改 [\s\S]
+  // 非贪婪并限长 500 防 ReDoS(典型 Expression.new()+parse+execute 距离 <<500)。
+  { pattern: /Expression\b[\s\S]{0,500}?\.execute\b/, label: 'Expression.execute (arbitrary code execution)' },
   // S-1-review: var2str + str2var chain (arbitrary object reconstruction)
   { pattern: /\bvar2str\b/, label: 'var2str (serialization bypass)' },
   // S-1-review: get_script() reflection escape
   { pattern: /\.get_script\b/, label: 'get_script reflection (sandbox bypass)' },
   // S-1-review: ResourceLoader.load with non-resource path
-  { pattern: /ResourceLoader\.load\s*\([^)]*["'](?!res:\/\/)/, label: 'ResourceLoader.load with non-resource path' },
+  // A-3 (advisory): 去掉 [^)]* 贪婪(原回溯到闭合 " 后检查,那里是 ')' 而非 res://,
+  // 致 ResourceLoader.load("res://a.tres") 误报)。对齐 :68 load 设计,单 ["'] 后即查 res://。
+  { pattern: /ResourceLoader\.load\s*\(\s*["'](?!res:\/\/)/, label: 'ResourceLoader.load with non-resource path' },
 ];
 
 /**
@@ -150,14 +160,15 @@ export function parseAutoloadNames(projectPath: string): string[] {
 
 /**
  * 检测代码中是否引用了 autoload 单例。
- * 简单词边界匹配，不排除注释/字符串（误触发代价低）。
+ * A-2 (advisory): 改用 stripLiterals 骨架扫描(剥注释/字符串),消除原词边界匹配的误触发。
  */
 export function detectAutoloadUsage(code: string, autoloadNames: string[]): string[] {
   if (!code || autoloadNames.length === 0) return [];
+  const skeleton = stripLiterals(code);
   const matched: string[] = [];
   for (const name of autoloadNames) {
     const pattern = new RegExp(`\\b${escapeRegExp(name)}\\b`);
-    if (pattern.test(code)) {
+    if (pattern.test(skeleton)) {
       matched.push(name);
     }
   }
@@ -181,8 +192,11 @@ function detectStringConcatBypass(code: string): string[] {
   // Concatenate adjacent string parts and check against dangerous tokens.
   // For "ClassName.method" tokens, also check ".method" suffix (e.g. ".execute")
   // to catch: "OS" + ".execute" → ".execute" matches suffix.
+  // IMPORTANT-1 (review): 窗口原固定 4,无 '.' 的 token(如 str2var)5+ 段可绕过。扩大到 8
+  // 覆盖更多分段;9+ 段依赖容器隔离(沙箱非对抗边界,见图灵完备声明)。O(n²):成本随窗口与字符串数增长。
+  const MAX_CONCAT_WINDOW = 8;
   for (let i = 0; i < stringContents.length; i++) {
-    for (let j = i; j < Math.min(i + 4, stringContents.length); j++) {
+    for (let j = i; j < Math.min(i + MAX_CONCAT_WINDOW, stringContents.length); j++) {
       const combined = stringContents.slice(i, j + 1).join('');
       for (const token of DANGEROUS_API_TOKENS) {
         const dotIdx = token.indexOf('.');
@@ -241,6 +255,144 @@ function detectStringConcatBypass(code: string): string[] {
  *  Do NOT use in production or multi-user environments. Any code executed while
  *  these flags are active has unrestricted access to the host filesystem,
  *  network, and process execution via OS.execute / FileAccess / DirAccess. */
+/**
+ * 剥去 GDScript 代码中的字符串字面量内容与注释，返回"骨架"。
+ * 保留引号对、换行和代码结构；仅删除字符串内容与注释文本。
+ *
+ * 用途：让 Phase 1 正则扫描在骨架上进行，避免注释/字符串里的危险 API 名导致误报。
+ *
+ * ⚠️ 契约 P2-RAW：此函数的输出【绝不能】喂给 detectStringConcatBypass（Phase 2）。
+ *    Phase 2 依赖字符串字面量内容做拼接重构，必须接收原文。见 scanGdscriptSandbox。
+ *
+ * 算法：字符级状态机，正确处理单/双/三引号字符串、转义引号、# 注释。
+ * 用 charAt 而非 code[i]，规避 noUncheckedIndexedAccess 的 string|undefined。
+ * 顺序：先识别字符串（字符串内的 # 不当注释），再识别注释。 */
+// C-RES: Godot 资源协议前缀。stripLiterals 剥字符串内容时保留该前缀，使
+// load("res://...") / preload("res://...") 在骨架上仍被 load() non-resource-path
+// 正则的负向预查正确放行。res:// 仅指项目内资源、非危险向量，保留前缀对其他正则无副作用。
+const RES_PROTOCOL = 'res://';
+export function stripLiterals(code: string): string {
+  let result = '';
+  let i = 0;
+  const len = code.length;
+
+  while (i < len) {
+    const ch = code.charAt(i);
+
+    // 三引号字符串 """ 或 '''
+    if ((ch === '"' || ch === "'") && code.charAt(i + 1) === ch && code.charAt(i + 2) === ch) {
+      const quote = ch;
+      result += quote; // C-RES: 三引号开引号归一化为单个(骨架等价单引号字符串,下游正则统一处理)
+      i += 3;
+      if (code.startsWith(RES_PROTOCOL, i)) {
+        result += RES_PROTOCOL; // C-RES: 保留 res:// 前缀
+        i += RES_PROTOCOL.length;
+      }
+      while (i < len) {
+        if (code.charAt(i) === '\\' && i + 1 < len) {
+          i += 2; // 转义:跳过下一字符
+          continue;
+        }
+        if (code.charAt(i) === quote && code.charAt(i + 1) === quote && code.charAt(i + 2) === quote) {
+          result += quote; // C-RES: 三引号闭引号归一化为单个(与开引号一致)
+          i += 3;
+          break;
+        }
+        i++; // 字符串内容:丢弃
+      }
+      continue;
+    }
+
+    // 单/双引号字符串
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      result += quote; // 保留开引号
+      i++;
+      if (code.startsWith(RES_PROTOCOL, i)) {
+        result += RES_PROTOCOL; // C-RES: 保留 res:// 前缀
+        i += RES_PROTOCOL.length;
+      }
+      while (i < len) {
+        if (code.charAt(i) === '\\' && i + 1 < len) {
+          i += 2; // 转义跳过
+          continue;
+        }
+        if (code.charAt(i) === quote) {
+          result += quote; // 保留闭引号
+          i++;
+          break;
+        }
+        if (code.charAt(i) === '\n') {
+          result += '\n'; // 未闭合即换行:保留换行,退出字符串态
+          i++;
+          break;
+        }
+        i++; // 字符串内容:丢弃
+      }
+      continue;
+    }
+
+    // 行注释 # 到行尾
+    if (ch === '#') {
+      while (i < len && code.charAt(i) !== '\n') {
+        i++; // 注释内容:丢弃
+      }
+      continue; // 换行交给外层循环保留
+    }
+
+    result += ch; // 普通代码字符:保留
+    i++;
+  }
+
+  return result;
+}
+
+// ─── Extra dangerous patterns (env-injected, C-SEC-02 扩展) ──────────────────
+
+let _extraPatternsCache: { raw: string; patterns: Array<{ pattern: RegExp; label: string }> } | null = null;
+
+/** @internal 测试用:重置 extra patterns 缓存 */
+export function _resetExtraDangerousPatternsCache(): void {
+  _extraPatternsCache = null;
+}
+
+/**
+ * 从环境变量 GODOT_MCP_EXTRA_DANGEROUS_PATTERNS 加载用户自定义危险正则。
+ * 格式:JSON 数组 [{"pattern": <正则源码>, "label": <人类可读标签>}, ...]
+ *
+ * memoized:以 raw 字符串为键,相同 env 不重复解析(风格同 _autoloadCache)。
+ * 坏正则/坏 JSON 降级:跳过该条或整体忽略,记录 warn,绝不抛异常。 */
+export function loadExtraDangerousPatterns(): Array<{ pattern: RegExp; label: string }> {
+  const raw = process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS;
+  if (!raw) return [];
+  if (_extraPatternsCache && _extraPatternsCache.raw === raw) {
+    return _extraPatternsCache.patterns;
+  }
+  const patterns: Array<{ pattern: RegExp; label: string }> = [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      getLogger().warn('security', 'GODOT_MCP_EXTRA_DANGEROUS_PATTERNS is not a JSON array, ignoring');
+      _extraPatternsCache = { raw, patterns };
+      return patterns;
+    }
+    for (const entry of parsed) {
+      if (!entry || typeof entry !== 'object') continue;
+      const e = entry as { pattern?: unknown; label?: unknown };
+      if (typeof e.pattern !== 'string' || typeof e.label !== 'string') continue;
+      try {
+        patterns.push({ pattern: new RegExp(e.pattern), label: e.label });
+      } catch (regexErr) {
+        getLogger().warn('security', `GODOT_MCP_EXTRA_DANGEROUS_PATTERNS: invalid regex skipped: "${e.pattern}" (${regexErr instanceof Error ? regexErr.message : regexErr})`);
+      }
+    }
+  } catch (jsonErr) {
+    getLogger().warn('security', `GODOT_MCP_EXTRA_DANGEROUS_PATTERNS: invalid JSON, ignoring (${jsonErr instanceof Error ? jsonErr.message : jsonErr})`);
+  }
+  _extraPatternsCache = { raw, patterns };
+  return patterns;
+}
+
 export function scanGdscriptSandbox(code: string): string[] {
   if (process.env.GODOT_MCP_SANDBOX === 'disabled') {
     getLogger().warn('security', '⚠️ GODOT_MCP_SANDBOX=disabled — ALL sandbox checks bypassed. Any GDScript code will execute with unrestricted host access.');
@@ -248,21 +400,34 @@ export function scanGdscriptSandbox(code: string): string[] {
   }
   const warnings: string[] = [];
 
-  // Phase 1: Direct pattern matching
+  // 骨架:剥去字符串内容与注释,仅用于 Phase 1 正则匹配,避免注释/字符串里的 API 名误报。
+  // ⚠️ 契约 P2-RAW:skeleton 绝不能传给 detectStringConcatBypass(Phase 2)!
+  const skeleton = stripLiterals(code);
+
+  // Phase 1: Direct pattern matching (on skeleton)
   for (const { pattern, label } of DANGEROUS_PATTERNS) {
-    if (pattern.test(code)) {
+    if (pattern.test(skeleton)) {
       warnings.push(`[SANDBOX] Potential dangerous operation detected: ${label}`);
     }
   }
 
-  // C-03: In strict mode, also block FileAccess.READ (all file access)
+  // 用户自定义额外危险模式 (GODOT_MCP_EXTRA_DANGEROUS_PATTERNS),同样在骨架上检测
+  for (const { pattern, label } of loadExtraDangerousPatterns()) {
+    if (pattern.test(skeleton)) {
+      warnings.push(`[SANDBOX] Potential dangerous operation detected: ${label}`);
+    }
+  }
+
+  // C-03: In strict mode, also block FileAccess.READ (all file access) — on skeleton
   if (process.env.GODOT_MCP_SANDBOX === 'strict') {
-    if (/FileAccess\.open\b/.test(code)) {
+    if (/FileAccess\.open\b/.test(skeleton)) {
       warnings.push('[SANDBOX] Potential dangerous operation detected: File access (strict mode)');
     }
   }
 
   // Phase 2: String concatenation bypass detection
+  // ⚠️ 契约 P2-RAW:detectStringConcatBypass 必须接收【原文 code】,不能是 skeleton。
+  //    它自己提取字符串字面量内容做拼接重构;喂骨架会让所有拼接绕过检测失效。
   const concatWarnings = detectStringConcatBypass(code);
   warnings.push(...concatWarnings);
 
@@ -355,10 +520,25 @@ async function cleanupOldSessions(): Promise<void> {
   if (!baseDirPromise) return;
   const maxAge = 60 * 60 * 1000;
   const now = Date.now();
+  // IMPORTANT-11 (review): try 移入循环内,retryRm 失败不再中断整个循环(原中断致每次只清
+  // 第一个失败目录,残留累积)。EPERM/EBUSY 失败收集后聚合 1 条(降噪:原每目录 1 条)。
+  let entries: string[];
   try {
-    for (const entry of await readdir(BASE_TMP_DIR)) {
-      // I-02: Also clean up staging dirs (renamed by retryRm on Windows)
-      if (!entry.startsWith(TMP_PREFIX) && !entry.startsWith('_staging_')) continue;
+    entries = await readdir(BASE_TMP_DIR);
+  } catch (err) {
+    getLogger().debug('gdscript', `cleanup stale dirs: readdir failed: ${err}`);
+    return;
+  }
+  const lockFailures: string[] = [];
+  // IMPORTANT-11: 单次清理上限防卡——累积多时每目录 retryRm 退避(最坏 1.2s)拖慢 gdscript 执行。
+  // 超出目录下次 cleanup 兜底(1h TTL,不丢)。
+  const MAX_CLEANUP_PER_RUN = 10;
+  let processed = 0;
+  for (const entry of entries) {
+    if (processed >= MAX_CLEANUP_PER_RUN) break;
+    // I-02: Also clean up staging dirs (renamed by retryRm on Windows)
+    if (!entry.startsWith(TMP_PREFIX) && !entry.startsWith('_staging_')) continue;
+    try {
       const dirPath = join(BASE_TMP_DIR, entry);
       const stat = await lstat(dirPath);
       if (stat.isSymbolicLink()) continue;
@@ -373,16 +553,19 @@ async function cleanupOldSessions(): Promise<void> {
       if (stat.isDirectory() && dirAge > maxAge) {
         // A-07: Retry rm on EPERM/EBUSY (Windows file locking) with backoff
         await retryRm(dirPath);
+        processed++;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('EPERM') || msg.includes('EBUSY')) {
+        lockFailures.push(entry); // 聚合,不逐条打
+      } else {
+        getLogger().debug('gdscript', `cleanup stale dirs: ${msg}`);
       }
     }
-  } catch (err) {
-    // Only log at warn if some dirs actually failed to clean; debug for routine issues
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('EPERM') || msg.includes('EBUSY')) {
-      getLogger().debug('gdscript', `cleanup stale dirs (retryable): ${msg}`);
-    } else {
-      getLogger().debug('gdscript', `cleanup stale dirs: ${err}`);
-    }
+  }
+  if (lockFailures.length > 0) {
+    getLogger().debug('gdscript', `cleanup stale dirs: ${lockFailures.length} 个 staging 目录清理失败(EPERM/EBUSY,Windows 句柄占用),待下次 cleanup 兜底`);
   }
 }
 
@@ -411,7 +594,10 @@ async function retryRm(dirPath: string, maxRetries = 3): Promise<void> {
       const isRetryable = err instanceof Error && 'code' in err &&
         ((err as NodeJS.ErrnoException).code === 'EPERM' || (err as NodeJS.ErrnoException).code === 'EBUSY');
       if (!isRetryable || attempt === maxRetries) throw err;
-      getLogger().debug('gdscript', `retryRm attempt ${attempt + 1} failed for ${dirPath}: ${err}`);
+      // I-LOG: 静默重试 EPERM/EBUSY（Windows 上 Godot 进程退出后短暂持有 .gd 句柄，
+      // 每次执行必现）。逐次 attempt 日志会淹没测试输出与覆盖率摘要（IMPORTANT-3）。
+      // 最终失败由调用方 catch 聚合记录；staging 目录由 cleanupOldSessions 在下次
+      // 执行时兜底清理（已有机制，1 小时 TTL）。
       await new Promise(r => setTimeout(r, 200 * (attempt + 1)));
     }
   }

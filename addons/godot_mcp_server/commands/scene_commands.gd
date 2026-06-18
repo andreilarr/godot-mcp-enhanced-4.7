@@ -15,12 +15,19 @@ func _get_ei() -> EditorInterface:
 	return ei
 
 
+# C-1 / IMP-2-CONSISTENCY: 段级 .. 阻断复用 CommandHelpers.has_path_traversal(单一实现,与 ui_commands 对齐)
+func _has_path_traversal(p: String) -> bool:
+	return CommandHelpers.has_path_traversal(p)
+
+
 func handle_open_scene(params: Dictionary) -> Dictionary:
 	var path: String = params.get("scene_path", "")
 	if path.is_empty():
 		return {"error": {"code": -32004, "message": "scene_path is required"}}
 	if not path.begins_with("res://"):
 		return {"error": {"code": -32004, "message": "scene_path must start with res://"}}
+	if _has_path_traversal(path):
+		return {"error": {"code": -32004, "message": "scene_path must not contain '..' traversal: " + path}}
 	var ei := _get_ei()
 	if ei == null:
 		return {"error": {"code": -32000, "message": "EditorInterface not available"}}
@@ -87,6 +94,8 @@ func handle_instance_scene(params: Dictionary) -> Dictionary:
 		return {"error": {"code": -32004, "message": "scene_path and instance_path required"}}
 	if not instance_path.begins_with("res://"):
 		return {"error": {"code": -32004, "message": "instance_path must start with res://"}}
+	if _has_path_traversal(instance_path):
+		return {"error": {"code": -32004, "message": "instance_path must not contain '..' traversal: " + instance_path}}
 	if scene_path == instance_path:
 		return {"error": {"code": -32004, "message": "CIRCULAR_REFERENCE"}}
 

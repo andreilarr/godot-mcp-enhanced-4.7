@@ -5,7 +5,6 @@ const MAX_PORT := 9094
 const MAX_AUTH_FAILS := 5
 const LOCKOUT_BASE_SECONDS := 30.0
 const LOCKOUT_MAX_SECONDS := 300.0
-const _LOCKOUT_KEY := "localhost"  # All connections are localhost; single global rate limit
 const MAX_PEERS := 5
 const MAX_MESSAGE_SIZE := 1048576  # 1MB
 
@@ -34,6 +33,7 @@ func set_panel(panel: Control) -> void:
 		panel.set_cancel_callback(cancel_current_operation)
 
 func _ready() -> void:
+	super()  # IMP-4: Godot 4.x lifecycle convention
 	_crypto = Crypto.new()
 	_heartbeat = preload("heartbeat.gd").new()
 	add_child(_heartbeat)
@@ -41,12 +41,18 @@ func _ready() -> void:
 
 	_command_handler = preload("command_handler.gd").new()
 	_command_handler.setup(_plugin)
+	# E2 (review): plugin.gd:21 用 get_node_or_null("command_handler") 按名字查找做 cleanup,
+	# 必须显式设 .name(否则 Godot 自动名不匹配 → cleanup 路径失效/死代码)。
+	_command_handler.name = "command_handler"
 	add_child(_command_handler)
 
 	_generate_and_write_secret()
 	_start_server()
 
 func _generate_and_write_secret() -> void:
+	# I-3 SECURITY: secret 明文写入 .godot/mcp_editor.key。Godot FileAccess 无权限参数(无法设 0600)。
+	# 本地单用户开发场景可接受;多用户/共享主机需手动 chmod 0600(Linux/macOS)或 icacls 限制(Windows),
+	# 否则同机其他用户可读 secret 导致本地提权。详见 CLAUDE.md bridge 规则“多用户环境不安全”。
 	_secret = _generate_secret()
 	if _secret.length() < 32:
 		push_error("[MCP] Secret generation failed — WebSocket server will not start")
@@ -65,9 +71,35 @@ func _generate_and_write_secret() -> void:
 	if f:
 		f.store_string(_secret)
 		f.close()
+		_restrict_secret_permissions(_secret_file)
 		print("[MCP] Auth secret written to %s" % _secret_file)
 	else:
 		push_warning("[MCP] Failed to write auth secret to %s" % _secret_file)
+
+# I-8: Godot FileAccess 无权限参数,secret 明文落盘。用 OS.execute 调系统命令收紧权限,
+# 与 TS 端 instance-api-auth.ts 的 icacls/chmod 对齐(本地单用户默认安全,此为多用户加固)。
+# I-2: TS 端用 os.userInfo().username 防环境变量伪造(C-ARC-01);Godot OS API 无等价 getUserInfo,
+#      此处退回 get_environment("USERNAME")。威胁有限:攻击者需本机代码执行权限,而本机可执行即可直读 secret。
+# I-1: OS.execute 退出码非零时 push_warning,避免权限收紧失败静默(可能 world-readable)。
+# DUPLICATE: Keep in sync with src/scripts/mcp_bridge.gd:_restrict_secret_permissions
+func _restrict_secret_permissions(path: String) -> void:
+	var os_name := OS.get_name()
+	var exit_code := 0  # I-1: 捕获 OS.execute 退出码,非零告警(避免权限收紧失败静默)
+	if os_name == "Windows":
+		var username := OS.get_environment("USERNAME")
+		if username.is_empty():
+			username = OS.get_environment("USER")
+		# 严格白名单防 ACL 注入(用户名含 ;/空格等会破坏 icacls 参数),与 TS 端一致
+		if username.is_empty() or not RegEx.create_from_string("^[A-Za-z0-9_-]+$").search(username):
+			push_warning("[MCP] Cannot restrict secret permissions: username '%s' has unexpected chars" % username)
+			return
+		exit_code = OS.execute("icacls", PackedStringArray([path, "/inheritance:r", "/grant:r", "%s:R" % username]), [])
+		if exit_code != 0:
+			push_warning("[MCP] icacls failed (exit %d), secret may keep default permissions: %s" % [exit_code, path])
+	elif os_name in ["Linux", "FreeBSD", "macOS"]:
+		exit_code = OS.execute("chmod", PackedStringArray(["600", path]), [])
+		if exit_code != 0:
+			push_warning("[MCP] chmod failed (exit %d), secret may keep default permissions: %s" % [exit_code, path])
 
 # DUPLICATE: Keep in sync with src/scripts/mcp_bridge.gd:_generate_secret
 # Cannot share because editor plugin and game autoload have separate script contexts.
@@ -164,6 +196,9 @@ func _process(delta: float) -> void:
 		var rid: int = removed_peer.get_instance_id()
 		_heartbeat.remove_peer(rid)
 		_authenticated_peers.erase(rid)
+		# I-9: 清除断开 peer 的 per-peer 锁定/失败记录,避免字典无限增长
+		_auth_fail_count.erase(rid)
+		_auth_locked_until.erase(rid)
 		_peers.remove_at(to_remove[i])
 		print("[MCP] Client disconnected")
 
@@ -181,29 +216,31 @@ func _handle_message(text: String, peer: WebSocketPeer) -> void:
 			peer.send_text(JSON.stringify({"jsonrpc": "2.0", "id": parsed.get("id"), "error": {"code": -32002, "message": "Server auth not configured; connection rejected"}}))
 			peer.close()
 			return
-		# Check lockout
-		if _auth_locked_until.has(_LOCKOUT_KEY):
-			var locked_until: float = _auth_locked_until[_LOCKOUT_KEY]
+		# I-9: per-peer lockout —— 用 pid(peer_id)隔离失败计数与锁定,而非全局 "localhost"。
+		# 原全局键导致单个失败源(错误客户端/攻击者)5 次失败后锁死所有合法客户端 300s(可用性问题)。
+		# per-peer 下失败连接自己被锁,不影响其他客户端;secret 为 256-bit 随机,暴力不可行,锁定仅减速。
+		if _auth_locked_until.has(pid):
+			var locked_until: float = _auth_locked_until[pid]
 			if Time.get_ticks_msec() / 1000.0 < locked_until:
 				peer.send_text(JSON.stringify({"jsonrpc": "2.0", "id": parsed.get("id"), "error": {"code": -32002, "message": "Too many auth failures, temporarily locked"}}))
 				peer.close()
 				return
 			else:
-				_auth_locked_until.erase(_LOCKOUT_KEY)
-				_auth_fail_count[_LOCKOUT_KEY] = 0
+				_auth_locked_until.erase(pid)
+				_auth_fail_count[pid] = 0
 		var provided: String = str(parsed.get("params", {}).get("secret", ""))
 		if _constant_time_compare(provided, _secret):
 			_authenticated_peers[pid] = true
-			_auth_fail_count.erase(_LOCKOUT_KEY)
+			_auth_fail_count.erase(pid)
 			peer.send_text(JSON.stringify({"jsonrpc": "2.0", "id": parsed.get("id"), "result": {"authenticated": true}}))
 			print("[MCP] Peer %d authenticated" % pid)
 			_send_session_sync(peer)
 		else:
-			var fails: int = int(_auth_fail_count.get(_LOCKOUT_KEY, 0)) + 1
-			_auth_fail_count[_LOCKOUT_KEY] = fails
+			var fails: int = int(_auth_fail_count.get(pid, 0)) + 1
+			_auth_fail_count[pid] = fails
 			if fails >= MAX_AUTH_FAILS:
 				var lockout_time := minf(LOCKOUT_BASE_SECONDS * pow(2.0, (float(fails) / MAX_AUTH_FAILS) - 1.0), LOCKOUT_MAX_SECONDS)
-				_auth_locked_until[_LOCKOUT_KEY] = Time.get_ticks_msec() / 1000.0 + lockout_time
+				_auth_locked_until[pid] = Time.get_ticks_msec() / 1000.0 + lockout_time
 			peer.send_text(JSON.stringify({"jsonrpc": "2.0", "id": parsed.get("id"), "error": {"code": -32001, "message": "Authentication failed"}}))
 			peer.close()
 		return
@@ -216,6 +253,10 @@ func _handle_message(text: String, peer: WebSocketPeer) -> void:
 
 	if parsed.get("method") == "operation_start":
 		var timeout = parsed.get("params", {}).get("timeout", 300)
+		# IMP-3: validate timeout — reject non-numeric, clamp to [1, 600] (heartbeat caps at 600)
+		if not (timeout is int or timeout is float):
+			timeout = 300
+		timeout = clampf(float(timeout), 1.0, 600.0)
 		_heartbeat.pause_for_operation(timeout, pid)  # C-01: pass peer_id for targeted timeout
 		_update_panel("MCP: Operation in progress...")
 		var _op_panel := _get_panel()
@@ -314,6 +355,7 @@ func _constant_time_compare(a: String, b: String) -> bool:
 	return result == 0
 
 func _exit_tree() -> void:
+	super()  # IMP-4: Godot 4.x lifecycle convention
 	set_process(false)
 	if _heartbeat:
 		_heartbeat.timeout_detected.disconnect(_on_heartbeat_timeout)

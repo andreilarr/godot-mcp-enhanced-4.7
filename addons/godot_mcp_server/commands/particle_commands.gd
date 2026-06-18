@@ -26,7 +26,7 @@ func handle_particles_create(params: Dictionary, request_id: int) -> Dictionary:
 	cls.name = node_name
 
 	var pos = params.get("position")
-	if pos != null:
+	if pos != null and pos is Dictionary:
 		if node_type == "GPUParticles3D":
 			cls.position = Vector3(float(pos.get("x", 0.0)), float(pos.get("y", 0.0)), float(pos.get("z", 0.0)))
 		else:
@@ -73,11 +73,11 @@ func handle_particles_set_emission(params: Dictionary) -> Dictionary:
 		if radius != null:
 			mat.emission_sphere_radius = float(radius)
 		var extents = params.get("emission_box_extents")
-		if extents != null:
+		if extents != null and extents is Dictionary:
 			mat.emission_box_extents = Vector3(float(extents.get("x", 1.0)), float(extents.get("y", 1.0)), float(extents.get("z", 1.0)))
 
 	var direction = params.get("direction")
-	if direction != null:
+	if direction != null and direction is Dictionary:
 		if mat == null:
 			mat = ParticleProcessMaterial.new()
 			node.process_material = mat
@@ -106,7 +106,7 @@ func handle_particles_set_process(params: Dictionary) -> Dictionary:
 
 	var mat = node.process_material
 	var gravity = params.get("gravity")
-	if gravity != null:
+	if gravity != null and gravity is Dictionary:
 		if mat == null:
 			mat = ParticleProcessMaterial.new()
 			node.process_material = mat

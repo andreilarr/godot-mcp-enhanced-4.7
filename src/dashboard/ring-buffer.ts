@@ -8,6 +8,11 @@ export class RingBuffer<T> {
   private size = 0;
 
   constructor(private capacity: number) {
+    // ADVISORY-2: capacity<=0 会导致 % 0 → NaN 索引污染状态。当前调用点用常量 30/500
+    // 不触发,但通用工具类必须有防御。
+    if (!Number.isInteger(capacity) || capacity <= 0) {
+      throw new RangeError(`RingBuffer capacity must be a positive integer, got: ${capacity}`);
+    }
     this.buffer = new Array(capacity);
   }
 

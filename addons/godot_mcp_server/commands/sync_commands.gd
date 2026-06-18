@@ -32,8 +32,8 @@ func start_sync() -> Dictionary:
 	_syncing = true
 	_node_paths.clear()
 	_cache_paths_recursive(tree.root)
-	tree.connect("node_added", _on_node_added)
-	tree.connect("node_removed", _on_node_removed)
+	tree.node_added.connect(_on_node_added)  # ADV-1: Godot 4.x signal syntax
+	tree.node_removed.connect(_on_node_removed)
 	return {"result": {"success": true}}
 
 
@@ -43,10 +43,10 @@ func stop_sync() -> Dictionary:
 	_syncing = false
 	var tree = get_tree()
 	if tree != null:
-		if tree.is_connected("node_added", _on_node_added):
-			tree.disconnect("node_added", _on_node_added)
-		if tree.is_connected("node_removed", _on_node_removed):
-			tree.disconnect("node_removed", _on_node_removed)
+		if tree.node_added.is_connected(_on_node_added):
+			tree.node_added.disconnect(_on_node_added)
+		if tree.node_removed.is_connected(_on_node_removed):
+			tree.node_removed.disconnect(_on_node_removed)
 	_node_paths.clear()
 	return {"result": {"success": true}}
 

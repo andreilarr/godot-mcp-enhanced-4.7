@@ -158,6 +158,11 @@ export class GodotServer {
   /** Phase 2b: Multi-instance initialization (async fs — C-02). */
   private async initMultiInstance(): Promise<void> {
     if (!isFeatureEnabled('MULTI_INSTANCE')) return;
+    // IMPORTANT-4 (review): MULTI_INSTANCE 的 HMAC 认证(instance-api-auth.ts)当前是发送端 only —
+    // generateApiToken 发签名,但 TS server 不启动 HTTP 接收端,verifyApiToken 零生产调用。
+    // 即发送的 HMAC 签名不被验证,任何能访问 127.0.0.1:<port> 的本地进程可调 /api/<tool>。
+    // 接线 verifyApiToken 前请勿视为端到端认证。详见 instance-api-auth.ts 注释。
+    console.warn('[MCP] MULTI_INSTANCE enabled: HMAC auth is send-side only (verifyApiToken not wired to any HTTP server). Do NOT treat as end-to-end authentication.');
     const projectDir = ps.getProjectDir();
     const manager = new InstanceManager({
       projectRegistryDir: projectDir

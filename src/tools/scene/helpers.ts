@@ -85,6 +85,10 @@ export const BLOCKED_PROPS = new Set([
   'meta', 'process_mode', 'process_priority',
   'process_input', 'process_unhandled_input', 'process_unhandled_key_input',
   'process_internal', 'physics_process_mode', 'input_event', 'ready',
+  // I-2: instance 属性可被注入 ExtResource(1),formatTscnValue 对 ExtResource\( 不加引号原样输出,
+  // Godot 会让新节点实例化该 ext_resource 指向的资源(含脚本),间接触发 _ready()。
+  // 与 script 同级危险,必须阻断。
+  'instance',
 ]);
 
 /** Atomic file write: write to temp then rename. Uses temp+rename on all platforms (NTFS same-volume rename is atomic). */

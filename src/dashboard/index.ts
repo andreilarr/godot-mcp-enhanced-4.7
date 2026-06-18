@@ -11,6 +11,15 @@ import type { LogReader } from './log-reader.js';
 import type { Aggregator } from './aggregator.js';
 import type { DashboardState } from './aggregator.js';
 
+// ADVISORY-4: crash stack 截断,与 logger.truncate 对齐,防止超大 stack 写爆磁盘/DoS
+const MAX_CRASH_LOG_BYTES = 8 * 1024;
+function truncateStack(stack: string | undefined): string {
+  if (!stack) return '';
+  return stack.length > MAX_CRASH_LOG_BYTES
+    ? stack.slice(0, MAX_CRASH_LOG_BYTES) + '\n...[truncated]'
+    : stack;
+}
+
 function parseArgs(args: string[]): { filter?: string; help: boolean } {
   let help = false;
   let filter: string | undefined;
@@ -171,7 +180,7 @@ main().catch((err: Error) => {
   // Write crash log to file for diagnostics
   try {
     const crashLog = join(tmpdir(), 'godot-mcp-dashboard-crash.log');
-    writeFileSync(crashLog, `[${new Date().toISOString()}] Dashboard crashed: ${err.message}\n${err.stack}\n`);
+    writeFileSync(crashLog, `[${new Date().toISOString()}] Dashboard crashed: ${err.message}\n${truncateStack(err.stack)}\n`);
     console.error(`Dashboard crashed! Log: ${crashLog}`);
     console.error(err.message);
   } catch { /* ignore */ }
@@ -183,7 +192,7 @@ main().catch((err: Error) => {
 process.on('uncaughtException', (err: Error) => {
   try {
     const crashLog = join(tmpdir(), 'godot-mcp-dashboard-crash.log');
-    writeFileSync(crashLog, `[${new Date().toISOString()}] Uncaught: ${err.message}\n${err.stack}\n`);
+    writeFileSync(crashLog, `[${new Date().toISOString()}] Uncaught: ${err.message}\n${truncateStack(err.stack)}\n`);
     console.error(`Dashboard crashed! Log: ${crashLog}`);
     console.error(err.message);
   } catch { /* ignore */ }

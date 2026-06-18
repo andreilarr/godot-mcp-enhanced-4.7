@@ -439,14 +439,16 @@ describe('F-3: addNode property key validation & BLOCKED_PROPS', () => {
         script: 'ExtResource("evil")',
         owner: '/root/Evil',
         name: 'Hijacked',
+        instance: 'ExtResource(1)', // I-2: instance 也应被 drop,防注入 ExtResource 让新节点挂载脚本
         visible: true,
       },
     });
     expect(result.success).toBe(true);
     // 合法属性仍写入
     expect(result.scene).toContain('visible = true');
-    // script/owner/name 不得作为属性写入(与 edit_node 黑名单一致;[node name="Safe"] 头部不匹配 /^name = /m)
+    // script/owner/name/instance 不得作为属性写入(与 edit_node 黑名单一致;[node name="Safe"] 头部不匹配 /^name = /m)
     expect(result.scene).not.toContain('ExtResource("evil")');
+    expect(result.scene).not.toMatch(/^instance = /m); // I-2: 阻断 instance = ExtResource(...) 注入
     expect(result.scene).not.toMatch(/^owner = /m);
     expect(result.scene).not.toMatch(/^name = /m);
   });

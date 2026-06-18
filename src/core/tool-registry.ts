@@ -144,7 +144,7 @@ export const TOOL_GROUPS: Record<string, ToolGroupDef> = {
   signal:     { description: '信号', tools: ['signal'], requires: [] },
   profiler:   { description: '性能分析', tools: ['profiler', 'workflow'], requires: [] },
   test:       { description: '测试（已并入 validation）', tools: [], requires: [] },
-  code:       { description: '代码工具', tools: ['docs'], requires: [] },
+  code:       { description: '代码工具', tools: ['docs', 'load_skill'], requires: [] },
   // v0.18.0 合并说明:
   // ik → animation (ik_modifier_create/get/set/list_bones)
   // recording → runtime (record_start/stop/save/load/play)
@@ -260,7 +260,7 @@ export const MINIMAL_TOOLS: Set<string> = resolveProfile('minimal');
 /** Tools that can run without an active Godot connection. */
 export const OFFLINE_TOOLS = new Set([
   'project', 'script', 'validation', 'confirm_and_execute',
-  'manage_tools', 'godot_advanced_tool',
+  'manage_tools', 'godot_advanced_tool', 'load_skill',
 ]);
 
 /** Check if a tool can run in offline mode. */
@@ -286,6 +286,7 @@ const NO_PROJECT_PATH_TOOLS = new Set([
   'godot_list_instances', // Multi-instance listing — 读注册表数据
   'godot_list_dynamic_routes', // Dynamic route discovery — 读内存注册表
   'godot_select_instance', // Multi-instance selection — 可用 instance_id 代替 project_path
+  'load_skill',          // 读用户本地知识库路径(libraries 参数),不操作 Godot 项目
 ]);
 
 /** Check if a tool should skip project_path validation. */

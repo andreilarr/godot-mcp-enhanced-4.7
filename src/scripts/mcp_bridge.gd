@@ -9,7 +9,6 @@ const PORT := 9081
 const MAX_AUTH_FAILS := 5
 const LOCKOUT_BASE_SECONDS := 30.0
 const LOCKOUT_MAX_SECONDS := 300.0
-const _LOCKOUT_KEY := "localhost"
 const MAX_MESSAGE_SIZE := 1048576  # 1MB
 const MAX_PEERS := 5
 const PROTOCOL_VERSION := "1.0"
@@ -64,6 +63,7 @@ const ALLOWED_METHODS := [
 # ─── Lifecycle ─────────────────────────────────────────────────────────────
 
 func _ready() -> void:
+	# Godot 4.6+: extends 原生类(Node)的虚函数不可调 super()(4.6.2 Parse error "hasn't been defined"),移除 IMP-4 super()。该 convention 仅适用于 extends 自定义基类。
 	if Engine.is_editor_hint():
 		return
 	# Skip Bridge startup in headless/script mode — Bridge is for runtime game control only.
@@ -74,6 +74,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	# 同 _ready():extends 原生类 Node 的 _exit_tree() 虚函数不可 super()(Godot 4.6+ Parse error)。
 	_stop_server()
 
 
@@ -138,7 +139,9 @@ func _process(_delta: float) -> void:
 		_peer_last_activity.erase(pid)
 		# C-07: cleanup per-peer monitor/watch state on disconnect
 		_cleanup_peer_state(pid)
-		# Auth fail/lockout counts persist across reconnects (all connections are localhost)
+		# I-9: 清除断开 peer 的 per-peer 锁定/失败记录(per-peer 隔离,断开即清理)
+		_auth_fail_count.erase(pid)
+		_auth_locked_until.erase(pid)
 		_peers.remove_at(i)
 
 	# ─── Property monitor sampling (C-07: per-peer) ─────────────────────────
@@ -272,12 +275,38 @@ func _get_project_dir() -> String:
 
 
 func _write_secret_to_file(path: String) -> bool:
+	# I-3/I-8 SECURITY: secret 明文写入,Godot FileAccess 无权限参数。
+	# I-8: 写完后用 OS.execute 收紧权限(与 TS 端/websocket_server.gd 对齐)。
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f:
 		f.store_string(_secret)
 		f.close()
+		_restrict_secret_permissions(path)
 		return true
 	return false
+
+# I-8: 收紧 secret 文件权限(Godot FileAccess 无 chmod 参数,用 OS.execute 绕过)。
+# I-2: TS 端用 os.userInfo().username 防环境变量伪造(C-ARC-01);Godot OS API 无等价 getUserInfo,
+#      此处退回 get_environment("USERNAME")。威胁有限:攻击者需本机代码执行权限,而本机可执行即可直读 secret。
+# I-1: OS.execute 退出码非零时 push_warning,避免权限收紧失败静默(可能 world-readable)。
+# DUPLICATE: 与 addons/godot_mcp_server/websocket_server.gd:_restrict_secret_permissions 保持同步。
+func _restrict_secret_permissions(path: String) -> void:
+	var os_name := OS.get_name()
+	var exit_code := 0  # I-1: 捕获 OS.execute 退出码,非零告警(避免权限收紧失败静默)
+	if os_name == "Windows":
+		var username := OS.get_environment("USERNAME")
+		if username.is_empty():
+			username = OS.get_environment("USER")
+		if username.is_empty() or not RegEx.create_from_string("^[A-Za-z0-9_-]+$").search(username):
+			push_warning("[MCP Bridge] Cannot restrict secret permissions: username '%s' has unexpected chars" % username)
+			return
+		exit_code = OS.execute("icacls", PackedStringArray([path, "/inheritance:r", "/grant:r", "%s:R" % username]), [])
+		if exit_code != 0:
+			push_warning("[MCP Bridge] icacls failed (exit %d), secret may keep default permissions: %s" % [exit_code, path])
+	elif os_name in ["Linux", "FreeBSD", "macOS"]:
+		exit_code = OS.execute("chmod", PackedStringArray(["600", path]), [])
+		if exit_code != 0:
+			push_warning("[MCP Bridge] chmod failed (exit %d), secret may keep default permissions: %s" % [exit_code, path])
 
 
 # ─── Instance Registry (Phase 2b) ─────────────────────────────────────────
@@ -381,31 +410,31 @@ func _process_buffer_bytes(peer: StreamPeerTCP, pid: int) -> bool:
 			return true
 		if not _authenticated_peers.has(pid):
 			
-			if _auth_locked_until.has(_LOCKOUT_KEY):
-				var locked_until: float = _auth_locked_until[_LOCKOUT_KEY]
+			if _auth_locked_until.has(pid):
+				var locked_until: float = _auth_locked_until[pid]
 				if Time.get_ticks_msec() / 1000.0 < locked_until:
 					peer.put_data((JSON.stringify({"id": null, "error": {"code": -32002, "message": "Too many auth failures, temporarily locked"}}) + "\n").to_utf8_buffer())
 					peer.disconnect_from_host()
 					_peer_buffers[key] = raw
 					return true
 				else:
-					_auth_locked_until.erase(_LOCKOUT_KEY)
-					_auth_fail_count[_LOCKOUT_KEY] = 0
+					_auth_locked_until.erase(pid)
+					_auth_fail_count[pid] = 0
 			var parsed: Variant = JSON.parse_string(line)
 			var incoming_secret: String = ""
 			if parsed is Dictionary and parsed.get("params") is Dictionary:
 				incoming_secret = str(parsed["params"].get("secret", ""))
 			if parsed is Dictionary and parsed.get("method") == "auth" and _constant_time_compare(incoming_secret, _secret):
 				_authenticated_peers[pid] = true
-				_auth_fail_count.erase(_LOCKOUT_KEY)
+				_auth_fail_count.erase(pid)
 				peer.put_data((JSON.stringify({"id": parsed.get("id"), "result": {"authenticated": true}}) + "\n").to_utf8_buffer())
 				continue
 			else:
-				var fails: int = int(_auth_fail_count.get(_LOCKOUT_KEY, 0)) + 1
-				_auth_fail_count[_LOCKOUT_KEY] = fails
+				var fails: int = int(_auth_fail_count.get(pid, 0)) + 1
+				_auth_fail_count[pid] = fails
 				if fails >= MAX_AUTH_FAILS:
 					var lockout_time := minf(LOCKOUT_BASE_SECONDS * pow(2.0, (float(fails) / MAX_AUTH_FAILS) - 1.0), LOCKOUT_MAX_SECONDS)
-					_auth_locked_until[_LOCKOUT_KEY] = Time.get_ticks_msec() / 1000.0 + lockout_time
+					_auth_locked_until[pid] = Time.get_ticks_msec() / 1000.0 + lockout_time
 				peer.put_data((JSON.stringify({"id": null, "error": {"code": -32001, "message": "Authentication required"}}) + "\n").to_utf8_buffer())
 				peer.disconnect_from_host()
 				_peer_buffers[key] = raw

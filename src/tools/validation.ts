@@ -90,6 +90,7 @@ interface ExtendedAnalysisResult extends AnalysisResult {
   version_warning?: string;
   precheck_errors?: BatchValidateResult[];
   scene_tree?: unknown;
+  sample_window?: { timed_out: boolean; duration_seconds: number; coverage: string };
 }
 
 const execFileAsync = promisify(execFile);
@@ -136,9 +137,11 @@ export function isErrorFalsePositive(line: string): boolean {
     }
   }
 
-  // 规则 2: 虚拟方法签名不匹配 — _process/_ready 等重写签名差异
+  // 规则 2: 虚拟方法 "not found in base self" 误报 — headless parser 无法解析 Node 基类虚拟方法
+  // (_ready/_process 等)。仅过滤 "not found in base self";不再过滤 "signature"
+  // (签名不匹配是真实错误,如重写 _process 时参数个数写错,必须上报)
   if (/Parse Error.*\b(_ready|_process|_physics_process|_input|_unhandled_input|_enter_tree|_exit_tree)\b/.test(trimmedLine)) {
-    if (/signature|not found in base/.test(trimmedLine)) return true;
+    if (/not found in base self/.test(trimmedLine)) return true;
   }
 
   return false;
@@ -213,6 +216,7 @@ export async function batchValidateScripts(
     '\t\tvar script_path: String = scripts[i]',
     '\t\tvar res = load(script_path)',
     '\t\tif res == null:',
+    '\t\t\tprint("MCP_LOAD_NULL: " + script_path)',
     '\t\t\tcontinue',
     '\tprint("MCP_VALIDATE_DONE")',
     '\tquit()',
@@ -245,6 +249,24 @@ export async function batchValidateScripts(
     const infraErrors = outputLines.filter(l => l.includes('MCP_VALIDATE_ERROR:'));
     if (infraErrors.length > 0) {
       results.set('<validator>', infraErrors.map(l => l.trim()));
+    }
+
+    // 兜底: load() 返回 null 但 Godot 未打印标准 Parse Error 时,仍标记该文件(防静默漏报)
+    const loadNullLines = outputLines.filter(l => l.includes('MCP_LOAD_NULL:'));
+    for (const ln of loadNullLines) {
+      const m = ln.match(/MCP_LOAD_NULL:\s*(res:\/\/.+)/);
+      if (!m) continue;
+      const nullResPath = m[1]!.trim();
+      for (const rel of scriptRels) {
+        const normalizedRel = rel.replace(/\\/g, '/');
+        if (nullResPath === 'res://' + normalizedRel) {
+          const existing = results.get(rel);
+          if (!existing || existing.length === 0) {
+            results.set(rel, ['Script failed to load (returned null) — Godot reported no Parse Error for this file. Check load-time issues (circular deps, invalid extends, missing dependency): ' + nullResPath]);
+          }
+          break;
+        }
+      }
     }
 
     const validatorCompleted = outputLines.some(l => l.includes('MCP_VALIDATE_DONE'));
@@ -550,10 +572,15 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
       if (precheckErrors.length > 0) (analysis as ExtendedAnalysisResult).precheck_errors = precheckErrors;
 
       if (result.timedOut) {
-        (analysis as ExtendedAnalysisResult).summary += '\nNote: Process timed out after ' + timeout + 's (this is normal for interactive projects)';
+        (analysis as ExtendedAnalysisResult).summary += '\nNote: Process timed out (killed) after ' + timeout + 's — normal for interactive projects. hasErrors/analysis reflect ALL stdout/stderr captured during the full [0, ' + timeout + 's] run window, not just startup.';
       } else if (result.exitCode !== 0 && result.exitCode !== null) {
-        (analysis as ExtendedAnalysisResult).summary += '\nNote: Process exited with code ' + result.exitCode;
+        (analysis as ExtendedAnalysisResult).summary += '\nNote: Process exited with code ' + result.exitCode + '. hasErrors/analysis reflect ALL stdout/stderr captured during the run.';
       }
+      (analysis as ExtendedAnalysisResult).sample_window = {
+        timed_out: result.timedOut,
+        duration_seconds: timeout,
+        coverage: 'full run window — all stdout/stderr analyzed',
+      };
 
       if (captureTree && scene) {
         try {

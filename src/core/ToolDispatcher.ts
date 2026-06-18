@@ -4,7 +4,7 @@ import type { ChildProcess } from 'child_process';
 import type { ReadOnlyGuard } from './ReadOnlyGuard.js';
 import type { EditorToolExecutor } from './EditorToolExecutor.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { executeMiddleware } from './middleware.js';
+import { executeMiddleware, createRateLimitMiddleware } from './middleware.js';
 import { HealthMonitor } from './health-monitor.js';
 import {
   requiresConfirmation,
@@ -352,6 +352,9 @@ export class ToolDispatcher {
       },
     });
 
+    // IMPORTANT-5: 全局 rate limit(防 AI 失控循环耗尽资源)。默认 60 次/秒软限。
+    mw.push(createRateLimitMiddleware());
+
     return mw;
   }
 
@@ -449,6 +452,12 @@ export class ToolDispatcher {
     return null;
   }
 
+  /**
+   * A-10 (advisory): 仅校验根级路径字段(project_path/search_dir)是否在 ALLOWED_PROJECT_PATHS。
+   * 其余路径参数(file_path/script_path/scene_path 等)语义多样(res://、项目内相对、绝对路径),
+   * 由各工具自行调 resolveWithinRoot 校验——**新增工具须确保其路径参数经过 resolveWithinRoot**,
+   * 否则绕过根限制。未做通用扩展因 file_path 等字段语义不一,通用 isPathInAllowedRoots 会误伤。
+   */
   private validatePathArgs(args: Record<string, unknown>): ToolResult | null {
     if (typeof args.project_path === 'string' && !isPathInAllowedRoots(args.project_path)) {
       return opsErrorResult('PATH_NOT_ALLOWED', `Path not in ALLOWED_PROJECT_PATHS: ${args.project_path}. Check your ALLOWED_PROJECT_PATHS setting.`);

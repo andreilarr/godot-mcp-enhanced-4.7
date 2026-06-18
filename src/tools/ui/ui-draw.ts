@@ -1,6 +1,7 @@
 // UI draw recipe operations.
 
 import { gdEscape, SCENE_TREE_HEADER } from '../shared.js';
+import { ensureNumber } from '../shared/validation.js';
 import { DRAW_OP_KINDS, colorToGd } from './types.js';
 import type { DrawOp } from './types.js';
 
@@ -32,22 +33,22 @@ function drawOpToGd(op: DrawOp): string {
     }
     case 'circle': {
       const ctr = numArr(op.center, 2);
-      const r = op.radius as number;
+      const r = ensureNumber(op.radius, 'circle.radius');
       return `\tnode.draw_circle(Vector2(${ctr[0]}, ${ctr[1]}), ${r}, ${col(op.color)})`;
     }
     case 'line': {
       const from = numArr(op.from, 2);
       const to = numArr(op.to, 2);
-      const w = op.width as number | undefined;
+      const w = op.width == null ? undefined : ensureNumber(op.width, 'line.width');
       return `\tnode.draw_line(Vector2(${from[0]}, ${from[1]}), Vector2(${to[0]}, ${to[1]}), ${col(op.color)}${w != null ? `, ${w}` : ''})`;
     }
     case 'arc': {
       const ctr = numArr(op.center, 2);
-      const r = op.radius as number;
-      const sa = op.start_angle as number;
-      const ea = op.end_angle as number;
-      const pointCount = (op.point_count as number) ?? 32;
-      const w = op.width as number | undefined;
+      const r = ensureNumber(op.radius, 'arc.radius');
+      const sa = ensureNumber(op.start_angle, 'arc.start_angle');
+      const ea = ensureNumber(op.end_angle, 'arc.end_angle');
+      const pointCount = op.point_count == null ? 32 : ensureNumber(op.point_count, 'arc.point_count');
+      const w = op.width == null ? undefined : ensureNumber(op.width, 'arc.width');
       return `\tnode.draw_arc(Vector2(${ctr[0]}, ${ctr[1]}), ${r}, ${sa}, ${ea}, ${pointCount}, ${col(op.color)}${w != null ? `, ${w}` : ''})`;
     }
     case 'polygon': {
@@ -57,19 +58,19 @@ function drawOpToGd(op: DrawOp): string {
       if (filled) {
         return `\tnode.draw_colored_polygon(PackedVector2Array([${packedPts}]), ${col(op.color)})`;
       }
-      const w = op.width as number | undefined;
+      const w = op.width == null ? undefined : ensureNumber(op.width, 'polygon.width');
       return `\tnode.draw_polyline(PackedVector2Array([${packedPts}]), ${col(op.color)}${w != null ? `, ${w}` : ''})`;
     }
     case 'polyline': {
       const pts = validatePointArray(op.points, 'polyline');
       const packedPts = pts.map(p => `Vector2(${p[0]}, ${p[1]})`).join(', ');
-      const w = op.width as number | undefined;
+      const w = op.width == null ? undefined : ensureNumber(op.width, 'polyline.width');
       return `\tnode.draw_polyline(PackedVector2Array([${packedPts}]), ${col(op.color)}${w != null ? `, ${w}` : ''})`;
     }
     case 'string': {
       const text = String(op.text ?? '');
-      const pos = op.position as number[];
-      const fs = (op.font_size as number) ?? 16;
+      const pos = numArr(op.position, 2);
+      const fs = op.font_size == null ? 16 : ensureNumber(op.font_size, 'string.font_size');
       return `\tnode.draw_string(ThemeDB.fallback_font, Vector2(${pos[0]}, ${pos[1]}), "${gdEscape(text)}", HORIZONTAL_ALIGNMENT_LEFT, -1, ${fs}, ${col(op.color)})`;
     }
     default:

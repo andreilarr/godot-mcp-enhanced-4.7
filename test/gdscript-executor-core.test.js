@@ -8,6 +8,9 @@ import {
   createAutoloadLoaderScene,
   parseMcpMarkers,
   scanGdscriptSandbox,
+  stripLiterals,
+  loadExtraDangerousPatterns,
+  _resetExtraDangerousPatternsCache,
 } from '../src/gdscript-executor.js';
 import { buildSafeEnv } from '../src/helpers.js';
 
@@ -299,11 +302,31 @@ describe('scanGdscriptSandbox extended', () => {
 
   it('does not flag OS.execute inside a string literal context', () => {
     process.env.GODOT_MCP_SANDBOX = 'strict';
-    // The regex-based scanner will still flag this — documented behavior
     const code = 'var s = "OS.execute is dangerous"';
     const warnings = scanGdscriptSandbox(code);
-    // This IS flagged because the regex is simple pattern matching
+    // stripLiterals 剥去字符串内容后,Phase 1 不再误报
+    expect(warnings).toEqual([]);
+  });
+
+  it('does not flag OS.execute inside a line comment', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = '# OS.execute("ls") is just a comment';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings).toEqual([]);
+  });
+
+  it('does not flag DirAccess.remove inside a string literal', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var desc = "DirAccess.remove deletes a directory"';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings).toEqual([]);
+  });
+
+  it('still flags a real OS.execute call (regression guard)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('OS.execute("ls")');
     expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain('OS system command');
   });
 
   it('flags OS.shell_open', () => {
@@ -325,6 +348,29 @@ describe('scanGdscriptSandbox extended', () => {
     const warnings = scanGdscriptSandbox('DirAccess.remove_absolute("/tmp/test")');
     expect(warnings.length).toBeGreaterThan(0);
     expect(warnings[0]).toContain('Directory removal');
+  });
+
+  // IMPORTANT-2 (review): Engine["get_singleton"] 索引访问绕过 Engine.get_singleton 点访问正则。
+  // OS 已有 /\bOS\s*\[/ (:50),Engine 漏堵。举一反三覆盖 FileAccess/DirAccess/JavaScriptBridge。
+  it('flags Engine["get_singleton"] indexed access (IMPORTANT-2)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('Engine["get_singleton"]("FileAccess")');
+    expect(warnings.some(w => w.includes('indexed access'))).toBe(true);
+  });
+
+  it('flags DirAccess["remove"] indexed access (举一反三)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('DirAccess["remove"]("/tmp")');
+    expect(warnings.some(w => w.includes('indexed access'))).toBe(true);
+  });
+
+  // IMPORTANT-3 (review): Expression.execute 正则 . 不跨行,
+  // var e = Expression.new()\ne.execute() 分行写即绕过。
+  it('flags Expression.execute split across lines (IMPORTANT-3)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var e = Expression.new()\ne.execute([], [])';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.some(w => w.includes('Expression.execute'))).toBe(true);
   });
 });
 
@@ -454,5 +500,237 @@ describe('scanGdscriptSandbox Phase 2 — concatenation bypass', () => {
     const code = '"Class" + "DB"';
     const warnings = scanGdscriptSandbox(code);
     expect(warnings.some(w => w.includes('SANDBOX-P2') && w.includes('ClassDB'))).toBe(true);
+  });
+
+  // IMPORTANT-1 (review): 拼接检测窗口原固定=4。无 '.' 的 token(如 str2var)只能整体匹配,
+  // 5 段拆分需窗口>4 才能拼出,故原窗口漏。扩大窗口后应检测。
+  it('Phase 2: detects str2var built from 5 string parts (IMPORTANT-1)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = '"st" + "r" + "2" + "v" + "ar"';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.some(w => w.includes('SANDBOX-P2') && w.includes('str2var'))).toBe(true);
+  });
+});
+
+// ─── stripLiterals ───────────────────────────────────────────────────────────
+
+describe('stripLiterals', () => {
+  it('strips content of double-quoted string but keeps quotes', () => {
+    expect(stripLiterals('var s = "OS.execute is dangerous"')).toBe('var s = ""');
+  });
+
+  it('strips content of single-quoted string', () => {
+    expect(stripLiterals("var s = 'OS.kill'")).toBe("var s = ''");
+  });
+
+  it('strips a full-line comment', () => {
+    expect(stripLiterals('# OS.execute("ls")')).toBe('');
+  });
+
+  it('strips trailing comment but preserves code and newline', () => {
+    expect(stripLiterals('var a = 1 # OS.execute\nvar b = 2')).toBe('var a = 1 \nvar b = 2');
+  });
+
+  it('does not treat # inside a string as a comment', () => {
+    expect(stripLiterals('var s = "a#b"')).toBe('var s = ""');
+  });
+
+  it('handles triple-quoted string', () => {
+    // 三引号开/闭引号归一化为单个(stripLiterals :271/:283),内容仍剥光。
+    expect(stripLiterals('var s = """OS.execute"""')).toBe('var s = ""');
+  });
+
+  it('handles escaped quote inside string without early close', () => {
+    // GDScript 源码: var s = "a\"b"  (JS 字符串里 \\ 代表一个反斜杠)
+    expect(stripLiterals('var s = "a\\"b"')).toBe('var s = ""');
+  });
+
+  it('preserves a real dangerous call so Phase 1 still detects it', () => {
+    expect(stripLiterals('OS.execute("ls")')).toBe('OS.execute("")');
+  });
+
+  it('preserves reflection pattern so .call("x") is still detectable', () => {
+    expect(stripLiterals('obj.call("execute")')).toBe('obj.call("")');
+  });
+
+  // C-RES: 保留 res:// 协议前缀,使 load("res://...") 在骨架上仍被正则放行。
+  it('preserves res:// prefix of double-quoted resource path', () => {
+    expect(stripLiterals('load("res://scripts/test_helper.gd")')).toBe('load("res://")');
+  });
+
+  it('preserves res:// prefix of single-quoted resource path', () => {
+    expect(stripLiterals("preload('res://scenes/main.tscn')")).toBe("preload('res://')");
+  });
+
+  it('preserves res:// prefix inside triple-quoted string', () => {
+    // 三引号开/闭引号归一化为单个,res:// 前缀仍保留。
+    expect(stripLiterals('var s = """res://x.gd"""')).toBe('var s = "res://"');
+  });
+
+  it('does not preserve non-res:// string content', () => {
+    expect(stripLiterals('load("user://evil.gd")')).toBe('load("")');
+  });
+});
+
+describe('scanGdscriptSandbox res:// load regression (C-RES)', () => {
+  // C-RES 回归:commit 1413a34 改用骨架扫描后,load("res://...") 被误报为
+  // "load() with non-resource path"(因骨架剥光了 res:// 内容)。必须放行。
+  it('does not flag load() with res:// literal path', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var helper = load("res://scripts/test_helper.gd")';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.filter(w => w.includes('non-resource'))).toEqual([]);
+  });
+
+  it('still flags load() with non-resource path', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var helper = load("user://evil.gd")';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.some(w => w.includes('load() with non-resource path'))).toBe(true);
+  });
+
+  // I-1 (review): load("""res://...""") 三引号端到端放行。
+  // stripLiterals 已为三引号保留 res://,但 :65 正则须用 "{1,3}" 才不在首 " 后误报。
+  it('does not flag load() with triple-quoted res:// path', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var helper = load("""res://scripts/test_helper.gd""")';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.filter(w => w.includes('non-resource'))).toEqual([]);
+  });
+
+  // M-2 (review): preload("res://...") 当前由 :199 正则正确放行,补 guard 防回归。
+  it('does not flag preload() with res:// path', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var scn = preload("res://scenes/main.tscn")';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.filter(w => w.includes('preload'))).toEqual([]);
+  });
+
+  // A-3 (advisory): ResourceLoader.load("res://...") 不再误报(原 [^)]* 贪婪致误报)。
+  it('does not flag ResourceLoader.load() with res:// path (A-3)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var t = ResourceLoader.load("res://a.tres")';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.filter(w => w.includes('ResourceLoader.load'))).toEqual([]);
+  });
+});
+
+// ─── loadExtraDangerousPatterns (env-injected extra danger patterns) ────────
+
+describe('loadExtraDangerousPatterns', () => {
+  afterEach(() => {
+    delete process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS;
+    _resetExtraDangerousPatternsCache();
+  });
+
+  it('returns empty array when env is not set', () => {
+    expect(loadExtraDangerousPatterns()).toEqual([]);
+  });
+
+  it('loads valid patterns from env', () => {
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'HTTPRequest\\.request', label: 'HTTP request (project policy)' },
+    ]);
+    const patterns = loadExtraDangerousPatterns();
+    expect(patterns).toHaveLength(1);
+    expect(patterns[0].label).toBe('HTTP request (project policy)');
+    expect(patterns[0].pattern.test('HTTPRequest.request("url")')).toBe(true);
+  });
+
+  it('skips invalid regex without crashing and keeps valid ones', () => {
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: '(', label: 'bad regex' },
+      { pattern: 'ValidPattern', label: 'good' },
+    ]);
+    const patterns = loadExtraDangerousPatterns();
+    expect(patterns).toHaveLength(1);
+    expect(patterns[0].label).toBe('good');
+  });
+
+  it('ignores non-array JSON', () => {
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify({ not: 'array' });
+    expect(loadExtraDangerousPatterns()).toEqual([]);
+  });
+
+  it('ignores malformed JSON', () => {
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = 'not json {{{';
+    expect(loadExtraDangerousPatterns()).toEqual([]);
+  });
+
+  it('skips entries with missing/non-string fields', () => {
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'OK', label: 'valid' },
+      { pattern: 123, label: 'bad-type' },
+      { pattern: 'OK2' },
+      'not-an-object',
+    ]);
+    const patterns = loadExtraDangerousPatterns();
+    expect(patterns).toHaveLength(1);
+    expect(patterns[0].label).toBe('valid');
+  });
+
+  it('memoizes: same env returns same array reference', () => {
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'X', label: 'Y' },
+    ]);
+    const a = loadExtraDangerousPatterns();
+    const b = loadExtraDangerousPatterns();
+    expect(a).toBe(b);
+  });
+
+  it('re-parses when env value changes', () => {
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'A', label: 'a' },
+    ]);
+    const first = loadExtraDangerousPatterns();
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'B', label: 'b' },
+    ]);
+    const second = loadExtraDangerousPatterns();
+    expect(first).not.toBe(second);
+    expect(second[0].label).toBe('b');
+  });
+});
+
+// ─── scanGdscriptSandbox extra patterns (env-injected, end-to-end) ──────────
+
+describe('scanGdscriptSandbox extra patterns (env-injected)', () => {
+  afterEach(() => {
+    delete process.env.GODOT_MCP_SANDBOX;
+    delete process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS;
+    _resetExtraDangerousPatternsCache();
+  });
+
+  it('blocks code matching a user-defined extra pattern', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'HTTPRequest\.request', label: 'HTTP request (project policy)' },
+    ]);
+    const warnings = scanGdscriptSandbox('HTTPRequest.request("https://example.com")');
+    expect(warnings.some(w => w.includes('HTTP request (project policy)'))).toBe(true);
+  });
+
+  it('does not block when extra pattern env is unset', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const warnings = scanGdscriptSandbox('HTTPRequest.request("https://example.com")');
+    expect(warnings.filter(w => w.includes('HTTP request'))).toEqual([]);
+  });
+
+  it('extra pattern runs on skeleton: string content does not trigger', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'HTTPRequest\.request', label: 'HTTP policy' },
+    ]);
+    const warnings = scanGdscriptSandbox('var s = "HTTPRequest.request is blocked by policy"');
+    expect(warnings.filter(w => w.includes('HTTP policy'))).toEqual([]);
+  });
+
+  it('extra pattern runs on skeleton: comment content does not trigger', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    process.env.GODOT_MCP_EXTRA_DANGEROUS_PATTERNS = JSON.stringify([
+      { pattern: 'HTTPRequest\.request', label: 'HTTP policy' },
+    ]);
+    const warnings = scanGdscriptSandbox('# HTTPRequest.request mentioned in comment');
+    expect(warnings.filter(w => w.includes('HTTP policy'))).toEqual([]);
   });
 });

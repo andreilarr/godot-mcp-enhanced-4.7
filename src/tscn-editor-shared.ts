@@ -27,16 +27,31 @@ export function findSectionEnd(lines: string[], startLine: number): number {
 /** Escape special characters in .tscn quoted attribute values */
 export function escapeTscnAttr(value: string): string {
   if (!value) return '';
+  // I-1: 与 escapeTscnValue 对齐——拒绝换行符。name/type/parent 等 [node] 头部属性若含换行,
+  // 头部会被拆成多行,第二行可能被 Godot 词法分析器识别为新节点段(注入新 [node]/[ext_resource])。
+  // 当前 add 路径白名单(^[A-Za-z0-9_]+$)与 detach 严格相等意外阻挡了换行进入,但根因(转义函数
+  // 本身不拒绝换行)是定时炸弹——任何对 findInstanceNode 的"善意"修改都会立即激活注入。此处消除根因。
+  if (/[\r\n]/.test(value)) throw new Error('Attribute value must not contain newlines');
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\]/g, '\\]');
 }
 
 /** Detect values that are Godot expressions or primitives and should NOT be quoted in .tscn. */
-const GODOT_LITERAL_RE = /^(true|false|null|-?\d+(\.\d+)?(e[+-]?\d+)?|0x[0-9a-fA-F]+|ExtResource\(|SubResource\(|NodePath\(|Vector2i?\(|Vector3i?\(|Vector4i?\(|AABB\(|Color\(|Plane\(|Projection\(|Rect2i?\(|Transform2D\(|Transform3D\(|Basis\(|Quaternion\(|Callable\(|Signal\(|StringName\(|Packed.*Array\(|Array\(|Dictionary\(|RID\(|Object\(|Resource\(|Variant\(|&")/;
+// I-3: 完整锚定 ^...$ —— 每个 Type( 必须匹配到闭合 ),防止 `Vector2(1,2) junk` 这类
+// "合法字面量前缀 + 垃圾后缀" 被当字面量不加引号输出(单行内污染属性行语义,escapeTscnValue
+// 的换行 throw 已防跨行注入新 [node] 段,此处补单行校验)。[^)]* 允许括号内任意非右括号字符
+// (含空格/逗号/引号);Packed\w*Array 限定单词字符防滥用(原 Packed.*Array 的 .* 过宽)。
+const GODOT_LITERAL_RE = /^(true|false|null|-?\d+(\.\d+)?(e[+-]?\d+)?|0x[0-9a-fA-F]+|ExtResource\([^)]*\)|SubResource\([^)]*\)|NodePath\([^)]*\)|Vector2i?\([^)]*\)|Vector3i?\([^)]*\)|Vector4i?\([^)]*\)|AABB\([^)]*\)|Color\([^)]*\)|Plane\([^)]*\)|Projection\([^)]*\)|Rect2i?\([^)]*\)|Transform2D\([^)]*\)|Transform3D\([^)]*\)|Basis\([^)]*\)|Quaternion\([^)]*\)|Callable\([^)]*\)|Signal\([^)]*\)|StringName\([^)]*\)|Packed\w*Array\([^)]*\)|Array\([^)]*\)|Dictionary\([^)]*\)|RID\([^)]*\)|Object\([^)]*\)|Resource\([^)]*\)|Variant\([^)]*\)|&"[^"]*")$/;
 
 export function formatTscnValue(value: string): string {
-  const escaped = escapeTscnValue(value);
-  if (GODOT_LITERAL_RE.test(value.trim())) return escaped;
-  return `"${escaped}"`;
+  const trimmed = value.trim();
+  if (GODOT_LITERAL_RE.test(trimmed)) {
+    // 字面量是 Godot 表达式(Vector2(1,2)、ExtResource(1)、Array([1,2,3])、NodePath("a/b") 等),
+    // 内部字符(] " 等)有语法意义,不能再 escape——否则 Array 字面量的 ] 会被转义为 \] 破坏语法。
+    // 但仍须拒绝换行,防止跨行注入新 [node] 段。
+    if (/[\r\n]/.test(value)) throw new Error('Value must not contain newlines');
+    return trimmed;
+  }
+  return `"${escapeTscnValue(value)}"`;
 }
 
 /** Escape property values for safe embedding inside quoted .tscn values (e.g. `property = "value"`).

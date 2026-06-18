@@ -41,11 +41,11 @@ export async function startMcpServer(args: string[]): Promise<void> {
     }
   }
 
-  // C-08: Warn when path restrictions are not configured (allow-by-default)
+  // C-08: Path access is deny-by-default (restricted to cwd) when ALLOWED_PROJECT_PATHS unset — see path-utils.ts isPathInAllowedRoots
   if (!process.env.ALLOWED_PROJECT_PATHS && !process.env.GODOT_MCP_UNRESTRICTED) {
     const logger = getLogger();
-    logger.warn('security', 'ALLOWED_PROJECT_PATHS is not set — all project paths are allowed by default. ' +
-      'Set ALLOWED_PROJECT_PATHS=/path1;/path2 to restrict access, or GODOT_MCP_UNRESTRICTED=true to suppress this warning.');
+    logger.info('security', 'ALLOWED_PROJECT_PATHS is not set — access restricted to the current working directory (deny-by-default). ' +
+      'Set ALLOWED_PROJECT_PATHS=/path1;/path2 for explicit multi-project access.');
   }
 
   // Feature flags info
@@ -84,7 +84,10 @@ export async function startMcpServer(args: string[]): Promise<void> {
 
   let shuttingDown = false;
   async function gracefulShutdown(signal: string): Promise<void> {
-    if (shuttingDown) return;
+    if (shuttingDown) {
+      // A-2: second signal forces immediate exit (first shutdown may be stuck in server.close)
+      process.exit(1);
+    }
     shuttingDown = true;
     const logger = getLogger();
     logger.info('godot-mcp', `Received ${signal}, shutting down...`);

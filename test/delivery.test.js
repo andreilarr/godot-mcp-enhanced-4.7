@@ -311,6 +311,35 @@ describe('delivery: scene_tree dimension', () => {
     expect(parsed.scene_tree.issues[0].message).toContain('script_path required');
   });
 
+  // 回归（CRITICAL-2）：scope=script 时 findAssociatedScenes 收到的是 resolveWithinRoot 解析后的绝对路径，
+  // 原实现直接拼成 res://<abs>，与场景中的相对引用 res://scripts/player.gd 恒不匹配 → scenes 恒空
+  // → 空循环 → 报告 passed:true（假阴性，发版门禁失效）。
+  it('scope=script: actually checks scenes referencing the script (absolute-path wiring regression)', async () => {
+    mkdirSync(join(tmpDir, 'scripts'), { recursive: true });
+    writeFileSync(join(tmpDir, 'scripts', 'player.gd'), 'extends Node2D');
+    // 场景同时引用脚本(存在)与缺失纹理(不存在)——后者是可被 checkSceneIntegrity 检出的真缺陷
+    writeFileSync(join(tmpDir, 'main.tscn'), `
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/player.gd" id="1"]
+
+[ext_resource type="Texture2D" path="res://missing_sprite.png" id="2"]
+
+[node name="Main" type="Node2D"]
+`);
+
+    const result = await handleTool('verify_delivery', {
+      project_path: tmpDir,
+      scope: 'script',
+      script_path: 'scripts/player.gd',
+      checks: { scene_tree: true, script_health: false, performance: false },
+    }, ctx);
+    const parsed = JSON.parse(result.content[0].text);
+    // 修复前恒 passed:true；修复后关联场景被找到并检查 → 缺失纹理报 error → passed:false
+    expect(parsed.scene_tree.passed).toBe(false);
+    expect(parsed.scene_tree.issues.some(i => i.message.includes('missing_sprite.png'))).toBe(true);
+  });
+
   it('scope=full: collects all .tscn files', async () => {
     writeFileSync(join(tmpDir, 'scene_a.tscn'), '[gd_scene load_steps=1 format=3]\n[node name="A" type="Node2D"]');
     mkdirSync(join(tmpDir, 'levels'), { recursive: true });
@@ -365,6 +394,22 @@ describe('delivery: scene_tree dimension', () => {
 
     const scenes = findAssociatedScenes(tmpDir, 'scripts/orphan.gd');
     expect(scenes).toHaveLength(0);
+  });
+
+  // CRITICAL-2 归一化单元测试：直接传绝对路径（模拟 resolveWithinRoot 的输出形态），
+  // 跨平台显式验证 isAbsolute→relative→正斜杠 归一化分支（端到端测试仅在 Windows 隐式覆盖反斜杠）。
+  it('findAssociatedScenes: normalizes absolute path to relative res:// reference', () => {
+    mkdirSync(join(tmpDir, 'scripts'), { recursive: true });
+    writeFileSync(join(tmpDir, 'scripts', 'player.gd'), 'extends Node2D');
+    writeFileSync(join(tmpDir, 'main.tscn'), `
+[gd_scene load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/player.gd" id="1"]
+[node name="Main" type="Node2D"]
+`);
+    // 原实现会拼成 res://<abs>，与场景中的相对 res://scripts/player.gd 恒不匹配
+    const absScriptPath = join(tmpDir, 'scripts', 'player.gd');
+    const scenes = findAssociatedScenes(tmpDir, absScriptPath);
+    expect(scenes).toContain('main.tscn');
   });
 
   it('checkSceneIntegrity: handles unreadable file gracefully', () => {

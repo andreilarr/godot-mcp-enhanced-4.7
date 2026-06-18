@@ -595,18 +595,18 @@ function replaceSessionStart(existing: ClaudeSettings, entry: SessionStartEntry)
 }
 
 function writeAtomic(filePath: string, content: string): void {
-  if (process.platform === 'win32') {
-    // Windows: renameSync fails if target is locked (VS Code, etc.)
-    // 非原子写入，低概率下进程崩溃可能留下部分写入的文件
-    writeFileSync(filePath, content, 'utf-8');
-    return;
-  }
+  // I-1: 统一走 temp+rename(NTFS 同盘 rename 原子,与 scene/helpers.ts:95 行为一致)。
+  // Windows 上若目标被 IDE/Claude Code 锁定(settings.json 等)导致 rename 失败,降级为
+  // 直接写入(非原子但保证可用);此前 Windows 无条件非原子,崩溃/断电会损坏配置文件。
   const tmp = filePath + '.mcp-tmp';
-  writeFileSync(tmp, content, 'utf-8');
   try {
+    writeFileSync(tmp, content, 'utf-8');
     renameSync(tmp, filePath);
+    return;
   } catch (e) {
-    try { unlinkSync(tmp); } catch (err) { getLogger().debug('project', `cleanup temp file: ${err instanceof Error ? err.message : err}`); }
-    throw e;
+    try { unlinkSync(tmp); } catch { /* tmp 未创建或已被 rename 消费 */ }
+    if (process.platform !== 'win32') throw e;
+    getLogger().debug('project', `atomic rename failed on Windows, falling back to direct write: ${e instanceof Error ? e.message : e}`);
+    writeFileSync(filePath, content, 'utf-8');
   }
 }

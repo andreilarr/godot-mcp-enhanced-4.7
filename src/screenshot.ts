@@ -44,6 +44,8 @@ export interface ScreenshotOptions {
   viewportSize?: { width: number; height: number }; // default 1280x720
   timeout?: number;        // seconds (default 30)
   headless?: boolean;      // force headless mode (default: auto-detect)
+  waitNode?: string;       // 等待该节点(名或 /root/... 路径)出现在场景树再截图
+  waitText?: string;       // 等待任一 Label/RichTextLabel 文本包含该子串再截图
 }
 
 /** Path to the bundled GDScript that captures screenshots. */
@@ -172,6 +174,9 @@ export async function captureScreenshot(
   const frameDelayIdx = args.length;
   args.push(String(frameDelay));
   args.push(`${viewportSize.width}x${viewportSize.height}`);
+  // 条件等待(命名参数,置于位置参数之后,不影响 GDScript 位置解析)
+  if (options.waitNode) args.push('--wait-node', options.waitNode);
+  if (options.waitText) args.push('--wait-text', options.waitText);
 
   // --- Attempt 1: primary mode (windowed or headless based on platform) ---
   const result1 = await runScreenshot(godotPath, args, timeout);

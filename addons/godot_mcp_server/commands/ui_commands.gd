@@ -8,6 +8,18 @@ const BLOCKED_PROPS: Array = ["script", "owner", "name", "parent", "children", "
 	"material", "texture", "mesh", "collision_layer", "collision_mask",
 	"collision_priority", "transform", "global_transform"]
 
+# IMPORTANT-14 (review): 严格白名单替代 is_parent_class(node_type,"Control") 兜底。
+# 原写法放行任意 Control 子类(含第三方 class_name 脚本),实例化时触发其 _init/_ready 执行任意 GDScript。
+# 与 node_commands.gd ALLOWED_NODE_TYPES(I-4)对齐;须与 TS 端 ui_create_control 的 29 种 Control 同步。
+const ALLOWED_CONTROL_TYPES: Array = [
+	"Button", "Label", "Panel", "LineEdit", "TextEdit", "RichTextLabel",
+	"LinkButton", "HSlider", "VSlider", "CheckBox", "CheckButton",
+	"OptionButton", "SpinBox", "ProgressBar", "TextureRect", "ColorPickerButton",
+	"TabContainer", "Tree", "ItemList", "MarginContainer", "HBoxContainer",
+	"VBoxContainer", "GridContainer", "CenterContainer", "ScrollContainer",
+	"PanelContainer", "HSplitContainer", "VSplitContainer", "NinePatchRect",
+]
+
 func setup(plugin: EditorPlugin) -> void:
 	_plugin = plugin
 
@@ -25,8 +37,8 @@ func handle_ui_create_control(params: Dictionary, request_id: int) -> Dictionary
 	if parent_node == null:
 		return {"error": {"code": -32002, "message": "Parent not found: " + parent_path}}
 
-	if not ClassDB.class_exists(node_type) or not ClassDB.is_parent_class(node_type, "Control"):
-		return {"error": {"code": -32004, "message": "Invalid Control type: " + node_type}}
+	if not (node_type in ALLOWED_CONTROL_TYPES):
+		return {"error": {"code": -32004, "message": "Invalid or blocked Control type: " + node_type}}
 
 	var node = ClassDB.instantiate(node_type)
 	if node == null:
@@ -237,6 +249,8 @@ func handle_ui_set_theme(params: Dictionary) -> Dictionary:
 			var save_path: String = params.get("theme_path", "")
 			if save_path == "":
 				return {"error": {"code": -32004, "message": "theme_path is required for save action"}}
+			if not _validate_resource_path(save_path):
+				return {"error": {"code": -32004, "message": "theme_path must start with res:// or user://: " + save_path}}
 			var err = ResourceSaver.save(theme, save_path)
 			if err != OK:
 				return {"error": {"code": -32000, "message": "Failed to save theme: " + str(err)}}
@@ -244,6 +258,8 @@ func handle_ui_set_theme(params: Dictionary) -> Dictionary:
 			var load_path: String = params.get("theme_path", "")
 			if load_path == "":
 				return {"error": {"code": -32004, "message": "theme_path is required for load action"}}
+			if not _validate_resource_path(load_path):
+				return {"error": {"code": -32004, "message": "theme_path must start with res:// or user://: " + load_path}}
 			var res = load(load_path)
 			if res == null:
 				return {"error": {"code": -32000, "message": "Failed to load theme from: " + load_path}}
@@ -266,8 +282,8 @@ func handle_ui_container_add(params: Dictionary, request_id: int) -> Dictionary:
 		return {"error": {"code": -32002, "message": "Container node not found: " + node_path}}
 
 	var child_type: String = params.get("child_type", "Label")
-	if not ClassDB.class_exists(child_type) or not ClassDB.is_parent_class(child_type, "Control"):
-		return {"error": {"code": -32004, "message": "Invalid Control type: " + child_type}}
+	if not (child_type in ALLOWED_CONTROL_TYPES):
+		return {"error": {"code": -32004, "message": "Invalid or blocked Control type: " + child_type}}
 
 	var child_name: String = params.get("child_name", "Child")
 	var child = ClassDB.instantiate(child_type)
@@ -324,11 +340,23 @@ func handle_theme_create(params: Dictionary) -> Dictionary:
 
 	var save_path: String = params.get("save_path", "")
 	if save_path != "":
+		if not _validate_resource_path(save_path):
+			return {"error": {"code": -32004, "message": "save_path must start with res:// or user://: " + save_path}}
 		var err = ResourceSaver.save(theme, save_path)
 		if err != OK:
 			return {"error": {"code": -32000, "message": "Failed to save theme: " + str(err)}}
 
 	return {"result": {"action": action, "status": "theme_created"}}
+
+# IMP-2: 资源路径必须为 res:// 或 user:// 前缀,堵已认证用户的本地任意文件写入/读取
+# IMP-2-CONSISTENCY: 加段级 .. 阻断,与 scene_commands._has_path_traversal 防御深度对齐
+func _validate_resource_path(p: String) -> bool:
+	if not (p.begins_with("res://") or p.begins_with("user://")):
+		return false
+	if CommandHelpers.has_path_traversal(p):
+		return false
+	return true
+
 
 # ─── theme_set_property ─────────────────────────────────────────────────────
 
@@ -356,6 +384,8 @@ func handle_theme_set_property(params: Dictionary) -> Dictionary:
 	match item_type:
 		"default_font":
 			var font_path: String = str(value)
+			if not _validate_resource_path(font_path):
+				return {"error": {"code": -32004, "message": "font path must start with res:// or user://: " + font_path}}
 			theme.set_default_font(load(font_path))
 		"color":
 			var c = value
@@ -368,6 +398,8 @@ func handle_theme_set_property(params: Dictionary) -> Dictionary:
 			theme.set_constant(prop_name, theme_type, int(value))
 		"stylebox":
 			var sb_path: String = str(value)
+			if not _validate_resource_path(sb_path):
+				return {"error": {"code": -32004, "message": "stylebox path must start with res:// or user://: " + sb_path}}
 			theme.set_stylebox(prop_name, theme_type, load(sb_path))
 		_:
 			return {"error": {"code": -32004, "message": "Invalid item_type: " + item_type + ". Must be: default_font, color, constant, stylebox"}}

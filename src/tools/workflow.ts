@@ -458,6 +458,10 @@ export async function handleTool(name: string, args: Record<string, unknown>, ct
     case 'scene_snapshot': {
       const projectPath = requireProjectPath(args);
       const scenePath = args.scene_path as string;
+      // I-3: scene_path 非空校验,避免 undefined.startsWith 抛 TypeError 返回不友好错误
+      if (!scenePath) {
+        return textResult('Error: "scene_path" is required for scene_snapshot.');
+      }
       const maxDepth = (args.max_depth as number) || 5;
       const godot = await ctx.findGodot();
 

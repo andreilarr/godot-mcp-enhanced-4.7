@@ -648,9 +648,13 @@ export function loadUserTemplates(projectPath: string): CodeTemplate[] {
   return userTemplates;
 }
 
-/** Sanitize a user template variable value to prevent GDScript injection. */
+/** Sanitize a user template variable value to prevent GDScript injection.
+ *  渲染结果直接写入 .gd 文件并经 run_project 执行，且写入路径不经过 scanGdscriptSandbox，
+ *  故白名单必须排除 GDScript 语句分隔符。换行符(\n\r\f\v)是语句分隔符，允许即等同于
+ *  允许注入新语句（如 `Vector3(0,5,10)\nOS.execute("calc")` → RCE）。
+ *  仅保留空格与制表符（表达式内可读性所需，非语句分隔符）。 */
 function sanitizeTemplateValue(value: string): string {
-  if (!/^[A-Za-z0-9_."()\s,\-+*/%:!<>#]+$/.test(value)) {
+  if (!/^[A-Za-z0-9_."() \t,\-+*/%:!<>#]+$/.test(value)) {
     throw new Error(`Template variable value contains disallowed characters: "${value.slice(0, 50)}"`);
   }
   return value;

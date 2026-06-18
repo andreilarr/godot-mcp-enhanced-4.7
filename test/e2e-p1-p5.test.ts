@@ -21,7 +21,9 @@ import { parseCommitResult } from '../src/tools/scene-commit-tool.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const E2E_DIR = resolve(__dirname, 'e2e-scene');
-const GODOT_PATH = process.env.GODOT_PATH || 'D:\\godot\\Godot_v4.6.3-stable_win64_console.exe';
+// IMPORTANT-9b (review): 默认空字符串强制显式设置 GODOT_PATH。原硬编码开发机路径,
+// CI/他人环境找不到即 describe.skipIf 静默跳过 → "全绿"不含真实 Godot 验证(CI 假绿)。
+const GODOT_PATH = process.env.GODOT_PATH || '';
 const hasGodot = existsSync(GODOT_PATH);
 
 // E2E 盲区告警(同 e2e-full-tool-verification):无 GODOT_PATH 时静默跳过真实 Godot 测试。

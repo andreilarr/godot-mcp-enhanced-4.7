@@ -27,3 +27,28 @@ jobs:
         with:
           files: ./coverage/lcov.info
           fail_ci_if_error: false
+
+  # 第3项-B: 用真实 Godot 跑 E2E,避免 describe.skipIf(!hasGodot) 静默跳过导致的"全绿幻觉"
+  e2e-godot:
+    name: E2E (real Godot)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Install Godot 4.6.3 (linux x86_64)
+        run: |
+          set -e
+          curl -L --fail -o /tmp/godot.zip \
+            https://github.com/godotengine/godot/releases/download/4.6.3-stable/Godot_v4.6.3-stable_linux.x86_64.zip
+          mkdir -p /tmp/godot-bin
+          unzip -o /tmp/godot.zip -d /tmp/godot-bin
+          chmod +x /tmp/godot-bin/Godot_v4.6.3-stable_linux.x86_64
+          echo "GODOT_PATH=/tmp/godot-bin/Godot_v4.6.3-stable_linux.x86_64" >> "$GITHUB_ENV"
+      - name: Run E2E (real Godot integration)
+        run: npx vitest run test/e2e-full-tool-verification.test.ts

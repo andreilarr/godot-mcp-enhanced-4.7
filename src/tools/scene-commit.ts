@@ -11,6 +11,23 @@ export const COMMIT_OPERATIONS = [
 
 export type CommitOp = typeof COMMIT_OPERATIONS[number];
 
+/**
+ * IMPORTANT-7 (review): 校验 operations 数组结构。每个 op 必须有合法 op 字段
+ * (对齐 COMMIT_OPERATIONS)。原 scene-commit-tool 用 as unknown as CommitOperation[] 无运行时校验,
+ * 畸形 op(op 字段缺失/非法值)会让 generateCommitScript 运行时崩溃或生成畸形 .gd。
+ * @returns null 全部合法;否则首条错误信息(含索引与合法值清单)。
+ */
+export function validateCommitOperations(operations: Array<Record<string, unknown>>): string | null {
+  const validOps = new Set<string>(COMMIT_OPERATIONS);
+  for (let i = 0; i < operations.length; i++) {
+    const opType = operations[i]?.op;
+    if (typeof opType !== 'string' || !validOps.has(opType)) {
+      return `Op ${i}: invalid op "${String(opType)}". Valid: ${COMMIT_OPERATIONS.join(', ')}`;
+    }
+  }
+  return null;
+}
+
 interface TileSetOp {
   op: 'tile_set';
   node_path: string;
@@ -219,7 +236,8 @@ ${errAction}
           .map(([k, v]) => `\t\tchild${idx}.${k} = ${serializeGdValue(v)}`)
           .join('\n') + '\n'
         : '';
-      const parentPath = op.parent === '.' ? '' : gdEscape(op.parent);
+      // I-5: parent='.' 表示根节点,保留 '.' 让 get_node_or_null('.') 命中根(原代码转空串导致必失败)
+      const parentPath = op.parent === '.' ? '.' : gdEscape(op.parent);
       const name = gdEscape(op.name);
       return `
 \t# --- Op ${idx}: node_add ---
@@ -239,7 +257,9 @@ ${errAction}
 
 function serializeGdValue(value: unknown): string {
   // I-03, C-01: Escape backslash, quote, newline for GDScript string safety
-  if (typeof value === 'string') return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
+  // IMPORTANT-6 (review): 补 \r \t 转义,防控制字符破坏 .gd 字符串/被解析为行结束而注入新行。
+  // (% 不转义:GDScript 字符串字面量里 % 无特殊语义,仅 % 格式化操作时才特殊,转义反而破坏正常 % 字符)
+  if (typeof value === 'string') return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')}"`;
   if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '0';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (value === null || value === undefined) return 'null';
@@ -258,7 +278,12 @@ function serializeGdValue(value: unknown): string {
     if (obj._type && typeof obj._type === 'string') {
       const t = obj._type;
       if (t === 'Rect2' || t === 'Rect2i') {
-        return `${t}(${obj.x ?? 0}, ${obj.y ?? 0}, ${obj.w ?? 0}, ${obj.h ?? 0})`;
+        // I-6: 补 typeof number 守卫(与 Color/Vector 分支对齐),非数字字段降级为 0
+        const rx = typeof obj.x === 'number' ? obj.x : 0;
+        const ry = typeof obj.y === 'number' ? obj.y : 0;
+        const rw = typeof obj.w === 'number' ? obj.w : 0;
+        const rh = typeof obj.h === 'number' ? obj.h : 0;
+        return `${t}(${rx}, ${ry}, ${rw}, ${rh})`;
       }
       if (t === 'Vector3' || t === 'Vector3i') {
         return `${t}(${obj.x ?? 0}, ${obj.y ?? 0}, ${obj.z ?? 0})`;
@@ -281,8 +306,9 @@ function serializeGdValue(value: unknown): string {
       return `Color(${obj.r}, ${obj.g}, ${obj.b}, ${a})`;
     }
 
-    // Rect2: has x, y, w, h
-    if (keys.includes('w') && keys.includes('h') && keys.includes('x') && keys.includes('y') && !keys.includes('z')) {
+    // Rect2: has x, y, w, h (I-6: 补 typeof number 守卫,与 Color/Vector 分支对齐)
+    if (keys.includes('w') && keys.includes('h') && keys.includes('x') && keys.includes('y') && !keys.includes('z')
+      && typeof obj.x === 'number' && typeof obj.y === 'number' && typeof obj.w === 'number' && typeof obj.h === 'number') {
       return `Rect2(${obj.x}, ${obj.y}, ${obj.w}, ${obj.h})`;
     }
 
