@@ -63,7 +63,7 @@ const ALLOWED_METHODS := [
 # ─── Lifecycle ─────────────────────────────────────────────────────────────
 
 func _ready() -> void:
-	super()  # IMP-4: Godot 4.x lifecycle convention
+	# Godot 4.6+: extends 原生类(Node)的虚函数不可调 super()(4.6.2 Parse error "hasn't been defined"),移除 IMP-4 super()。该 convention 仅适用于 extends 自定义基类。
 	if Engine.is_editor_hint():
 		return
 	# Skip Bridge startup in headless/script mode — Bridge is for runtime game control only.
@@ -74,7 +74,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	super()  # IMP-4: Godot 4.x lifecycle convention
+	# 同 _ready():extends 原生类 Node 的 _exit_tree() 虚函数不可 super()(Godot 4.6+ Parse error)。
 	_stop_server()
 
 
