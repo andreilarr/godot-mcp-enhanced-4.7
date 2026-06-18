@@ -504,7 +504,8 @@ describe('stripLiterals', () => {
   });
 
   it('handles triple-quoted string', () => {
-    expect(stripLiterals('var s = """OS.execute"""')).toBe('var s = """"""');
+    // 三引号开/闭引号归一化为单个(stripLiterals :271/:283),内容仍剥光。
+    expect(stripLiterals('var s = """OS.execute"""')).toBe('var s = ""');
   });
 
   it('handles escaped quote inside string without early close', () => {
@@ -518,6 +519,59 @@ describe('stripLiterals', () => {
 
   it('preserves reflection pattern so .call("x") is still detectable', () => {
     expect(stripLiterals('obj.call("execute")')).toBe('obj.call("")');
+  });
+
+  // C-RES: 保留 res:// 协议前缀,使 load("res://...") 在骨架上仍被正则放行。
+  it('preserves res:// prefix of double-quoted resource path', () => {
+    expect(stripLiterals('load("res://scripts/test_helper.gd")')).toBe('load("res://")');
+  });
+
+  it('preserves res:// prefix of single-quoted resource path', () => {
+    expect(stripLiterals("preload('res://scenes/main.tscn')")).toBe("preload('res://')");
+  });
+
+  it('preserves res:// prefix inside triple-quoted string', () => {
+    // 三引号开/闭引号归一化为单个,res:// 前缀仍保留。
+    expect(stripLiterals('var s = """res://x.gd"""')).toBe('var s = "res://"');
+  });
+
+  it('does not preserve non-res:// string content', () => {
+    expect(stripLiterals('load("user://evil.gd")')).toBe('load("")');
+  });
+});
+
+describe('scanGdscriptSandbox res:// load regression (C-RES)', () => {
+  // C-RES 回归:commit 1413a34 改用骨架扫描后,load("res://...") 被误报为
+  // "load() with non-resource path"(因骨架剥光了 res:// 内容)。必须放行。
+  it('does not flag load() with res:// literal path', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var helper = load("res://scripts/test_helper.gd")';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.filter(w => w.includes('non-resource'))).toEqual([]);
+  });
+
+  it('still flags load() with non-resource path', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var helper = load("user://evil.gd")';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.some(w => w.includes('load() with non-resource path'))).toBe(true);
+  });
+
+  // I-1 (review): load("""res://...""") 三引号端到端放行。
+  // stripLiterals 已为三引号保留 res://,但 :65 正则须用 "{1,3}" 才不在首 " 后误报。
+  it('does not flag load() with triple-quoted res:// path', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var helper = load("""res://scripts/test_helper.gd""")';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.filter(w => w.includes('non-resource'))).toEqual([]);
+  });
+
+  // M-2 (review): preload("res://...") 当前由 :199 正则正确放行,补 guard 防回归。
+  it('does not flag preload() with res:// path', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var scn = preload("res://scenes/main.tscn")';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.filter(w => w.includes('preload'))).toEqual([]);
   });
 });
 

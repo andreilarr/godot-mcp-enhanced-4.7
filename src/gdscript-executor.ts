@@ -62,6 +62,9 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /JavaScriptBridge\.eval\b/, label: 'JavaScript eval (web escape)' },
   { pattern: /\bstr2var\b/, label: 'str2var (arbitrary deserialization)' },
   { pattern: /\bbytes2var\b/, label: 'bytes2var (arbitrary deserialization)' },
+  // C-RES: 单 " 即可 — stripLiterals 已把三引号开/闭引号归一化为单个(见 :271/:283),
+  // 故 load("res://") 与 load("""res://""") 骨架均为 load("res://"),单 " 正则正确放行。
+  // 注:曾试 "{1,3}" 但负向预查+可变量词会回溯到单 " 而误报,故改在骨架层归一化。
   { pattern: /load\s*\(\s*"(?!res:\/\/)/, label: 'load() with non-resource path' },
   { pattern: /Thread\.(new|start)\b/, label: 'Thread creation' },
   { pattern: /Semaphore\.new\b/, label: 'Semaphore creation' },
@@ -79,6 +82,10 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   // S-1-review: get_script() reflection escape
   { pattern: /\.get_script\b/, label: 'get_script reflection (sandbox bypass)' },
   // S-1-review: ResourceLoader.load with non-resource path
+  // C-RES-NOTE (review I-2): [^)]* 贪婪会让 ResourceLoader.load("res://a.tres") 误报
+  // (回溯到闭合 " 后检查,那里是 ')' 而非 res://)。此为 1413a34 既有缺陷、与
+  // stripLiterals res:// 保留主题无关,未在 commit 787576f 修复范围。后续若修,
+  // 改 /ResourceLoader\.load\s*\(\s*["'](?!res:\/\/)/ 对齐 :65 设计。
   { pattern: /ResourceLoader\.load\s*\([^)]*["'](?!res:\/\/)/, label: 'ResourceLoader.load with non-resource path' },
 ];
 
@@ -253,6 +260,10 @@ function detectStringConcatBypass(code: string): string[] {
  * 算法：字符级状态机，正确处理单/双/三引号字符串、转义引号、# 注释。
  * 用 charAt 而非 code[i]，规避 noUncheckedIndexedAccess 的 string|undefined。
  * 顺序：先识别字符串（字符串内的 # 不当注释），再识别注释。 */
+// C-RES: Godot 资源协议前缀。stripLiterals 剥字符串内容时保留该前缀，使
+// load("res://...") / preload("res://...") 在骨架上仍被 load() non-resource-path
+// 正则的负向预查正确放行。res:// 仅指项目内资源、非危险向量，保留前缀对其他正则无副作用。
+const RES_PROTOCOL = 'res://';
 export function stripLiterals(code: string): string {
   let result = '';
   let i = 0;
@@ -264,15 +275,19 @@ export function stripLiterals(code: string): string {
     // 三引号字符串 """ 或 '''
     if ((ch === '"' || ch === "'") && code.charAt(i + 1) === ch && code.charAt(i + 2) === ch) {
       const quote = ch;
-      result += quote + quote + quote; // 保留开引号
+      result += quote; // C-RES: 三引号开引号归一化为单个(骨架等价单引号字符串,下游正则统一处理)
       i += 3;
+      if (code.startsWith(RES_PROTOCOL, i)) {
+        result += RES_PROTOCOL; // C-RES: 保留 res:// 前缀
+        i += RES_PROTOCOL.length;
+      }
       while (i < len) {
         if (code.charAt(i) === '\\' && i + 1 < len) {
           i += 2; // 转义:跳过下一字符
           continue;
         }
         if (code.charAt(i) === quote && code.charAt(i + 1) === quote && code.charAt(i + 2) === quote) {
-          result += quote + quote + quote; // 保留闭引号
+          result += quote; // C-RES: 三引号闭引号归一化为单个(与开引号一致)
           i += 3;
           break;
         }
@@ -286,6 +301,10 @@ export function stripLiterals(code: string): string {
       const quote = ch;
       result += quote; // 保留开引号
       i++;
+      if (code.startsWith(RES_PROTOCOL, i)) {
+        result += RES_PROTOCOL; // C-RES: 保留 res:// 前缀
+        i += RES_PROTOCOL.length;
+      }
       while (i < len) {
         if (code.charAt(i) === '\\' && i + 1 < len) {
           i += 2; // 转义跳过
@@ -550,7 +569,10 @@ async function retryRm(dirPath: string, maxRetries = 3): Promise<void> {
       const isRetryable = err instanceof Error && 'code' in err &&
         ((err as NodeJS.ErrnoException).code === 'EPERM' || (err as NodeJS.ErrnoException).code === 'EBUSY');
       if (!isRetryable || attempt === maxRetries) throw err;
-      getLogger().debug('gdscript', `retryRm attempt ${attempt + 1} failed for ${dirPath}: ${err}`);
+      // I-LOG: 静默重试 EPERM/EBUSY（Windows 上 Godot 进程退出后短暂持有 .gd 句柄，
+      // 每次执行必现）。逐次 attempt 日志会淹没测试输出与覆盖率摘要（IMPORTANT-3）。
+      // 最终失败由调用方 catch 聚合记录；staging 目录由 cleanupOldSessions 在下次
+      // 执行时兜底清理（已有机制，1 小时 TTL）。
       await new Promise(r => setTimeout(r, 200 * (attempt + 1)));
     }
   }
