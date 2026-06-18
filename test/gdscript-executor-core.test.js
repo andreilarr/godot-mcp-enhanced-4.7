@@ -605,6 +605,14 @@ describe('scanGdscriptSandbox res:// load regression (C-RES)', () => {
     const warnings = scanGdscriptSandbox(code);
     expect(warnings.filter(w => w.includes('preload'))).toEqual([]);
   });
+
+  // A-3 (advisory): ResourceLoader.load("res://...") 不再误报(原 [^)]* 贪婪致误报)。
+  it('does not flag ResourceLoader.load() with res:// path (A-3)', () => {
+    process.env.GODOT_MCP_SANDBOX = 'strict';
+    const code = 'var t = ResourceLoader.load("res://a.tres")';
+    const warnings = scanGdscriptSandbox(code);
+    expect(warnings.filter(w => w.includes('ResourceLoader.load'))).toEqual([]);
+  });
 });
 
 // ─── loadExtraDangerousPatterns (env-injected extra danger patterns) ────────

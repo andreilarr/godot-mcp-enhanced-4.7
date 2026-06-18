@@ -87,11 +87,9 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   // S-1-review: get_script() reflection escape
   { pattern: /\.get_script\b/, label: 'get_script reflection (sandbox bypass)' },
   // S-1-review: ResourceLoader.load with non-resource path
-  // C-RES-NOTE (review I-2): [^)]* 贪婪会让 ResourceLoader.load("res://a.tres") 误报
-  // (回溯到闭合 " 后检查,那里是 ')' 而非 res://)。此为 1413a34 既有缺陷、与
-  // stripLiterals res:// 保留主题无关,未在 commit 787576f 修复范围。后续若修,
-  // 改 /ResourceLoader\.load\s*\(\s*["'](?!res:\/\/)/ 对齐 :65 设计。
-  { pattern: /ResourceLoader\.load\s*\([^)]*["'](?!res:\/\/)/, label: 'ResourceLoader.load with non-resource path' },
+  // A-3 (advisory): 去掉 [^)]* 贪婪(原回溯到闭合 " 后检查,那里是 ')' 而非 res://,
+  // 致 ResourceLoader.load("res://a.tres") 误报)。对齐 :68 load 设计,单 ["'] 后即查 res://。
+  { pattern: /ResourceLoader\.load\s*\(\s*["'](?!res:\/\/)/, label: 'ResourceLoader.load with non-resource path' },
 ];
 
 /**
@@ -162,14 +160,15 @@ export function parseAutoloadNames(projectPath: string): string[] {
 
 /**
  * 检测代码中是否引用了 autoload 单例。
- * 简单词边界匹配，不排除注释/字符串（误触发代价低）。
+ * A-2 (advisory): 改用 stripLiterals 骨架扫描(剥注释/字符串),消除原词边界匹配的误触发。
  */
 export function detectAutoloadUsage(code: string, autoloadNames: string[]): string[] {
   if (!code || autoloadNames.length === 0) return [];
+  const skeleton = stripLiterals(code);
   const matched: string[] = [];
   for (const name of autoloadNames) {
     const pattern = new RegExp(`\\b${escapeRegExp(name)}\\b`);
-    if (pattern.test(code)) {
+    if (pattern.test(skeleton)) {
       matched.push(name);
     }
   }
